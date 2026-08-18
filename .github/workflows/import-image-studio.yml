@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Extract source
         shell: bash
         run: |
@@ -20,9 +20,9 @@ jobs:
           test -f image-studio-import.tar.gz
           mkdir -p /tmp/image-studio-source
           tar -xzf image-studio-import.tar.gz -C /tmp/image-studio-source
+          rm -rf /tmp/image-studio-source/.github/workflows
           cp -a /tmp/image-studio-source/. .
           rm -f image-studio-import.tar.gz
-          rm -f .github/workflows/import-image-studio.yml
       - name: Commit imported source
         shell: bash
         run: |
