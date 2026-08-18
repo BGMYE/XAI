@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>image-studio</title>
+    <!-- 在 React 启动前同步读 localStorage,把 dark class 抢先挂上 <html>,
+         避免 0~200ms 的「白底闪现」。读不到 / 出错都默认深色。 -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("gptcodex.theme");
+          var dark = t !== "light"; // 默认 dark;只有显式 "light" 才走浅色
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+          // 同时给 <html> 一个内联背景色,避免 CSS 加载前的 0~1 帧白屏
+          document.documentElement.style.backgroundColor = dark ? "#09090b" : "#fafafa";
+        } catch (_) {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.backgroundColor = "#09090b";
+        }
+      })();
+    </script>
+</head>
+<body>
+<div id="root"></div>
+<script src="./src/main.tsx" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+.advanced-floating-panel-body {
+  scrollbar-gutter: stable;
+}
+
+.advanced-floating-panel-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.advanced-floating-panel-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background: rgb(63 63 70 / 0.22);
+}
+
+.advanced-floating-panel-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html.dark .advanced-floating-panel-body::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14);
+}

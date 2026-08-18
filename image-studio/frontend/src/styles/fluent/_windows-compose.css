@@ -1,0 +1,173 @@
+/* Windows compose accordion. Mirrors macOS density, rendered with Fluent chrome. */
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-panel {
+  padding: 12px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-toggle {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-title {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-summary {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-state {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-toggle:hover .windows-compose-state {
+  background: var(--tool-hover-bg);
+  color: var(--text);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-body > .platform-card,
+html[data-platform="windows"][data-ui-family="fluent"] .windows-compose-body > section {
+  padding: 12px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, white 2%) 0%, color-mix(in srgb, var(--surface) 94%, transparent) 100%);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-kicker {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-summary {
+  align-items: flex-start;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
+  padding: 10px 10px 9px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-title,
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-caption {
+  line-height: 1.3;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-empty {
+  line-height: 1.6;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-action {
+  min-height: 40px;
+  justify-content: flex-start;
+  padding-inline: 10px;
+  text-align: left;
+  background: color-mix(in srgb, var(--surface) 98%, white 2%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-preset-actions > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-template-list {
+  max-height: 108px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-template-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-template-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 76%, transparent);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-toolbar {
+  align-items: stretch;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-actions {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-actions > * {
+  min-width: 0;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-actions .platform-pill {
+  width: 100%;
+  min-height: 34px;
+  justify-content: center;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-shortcut {
+  margin-left: 0;
+  justify-content: flex-end;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-prompt-shortcut span {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  padding: 5px 9px;
+}

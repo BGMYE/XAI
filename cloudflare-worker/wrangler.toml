@@ -1,0 +1,6 @@
+name = "image-studio-kernel"
+main = "src/index.js"
+compatibility_date = "2026-05-24"
+
+[vars]
+IMAGE_STUDIO_UPSTREAM_BASE_URL = ""

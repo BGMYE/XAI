@@ -1,0 +1,869 @@
+html[data-platform="android"] .app-modal-backdrop-phone:has(.android-upstream-panel) {
+  background:
+    radial-gradient(circle at 50% 8%, rgb(0 106 96 / 0.18), transparent 32%),
+    rgb(15 23 42 / 0.28);
+  backdrop-filter: blur(12px);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-upstream-panel) {
+  min-height: 88vh;
+  max-height: 94vh;
+  border: 0;
+  border-radius: 32px 32px 0 0;
+  background: linear-gradient(180deg, rgb(249 252 249 / 0.99), rgb(238 245 240 / 0.99));
+  box-shadow: 0 -20px 60px rgb(15 23 42 / 0.24);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-upstream-panel)::before {
+  content: "";
+  width: 46px;
+  height: 5px;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.16);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-upstream-panel) .app-modal-header-phone {
+  border-bottom: 0;
+  padding: 9px 20px 7px;
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-upstream-panel) .app-modal-body-phone {
+  padding: 0 14px calc(22px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-platform="android"] .android-upstream-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html[data-platform="android"] .android-upstream-header,
+html[data-platform="android"] .android-upstream-empty,
+html[data-platform="android"] .android-upstream-profiles,
+html[data-platform="android"] .android-upstream-form {
+  border: 1px solid rgb(15 23 42 / 0.06);
+  border-radius: 26px;
+  background: rgb(255 255 255 / 0.84);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 0.06);
+}
+
+html[data-platform="android"] .android-upstream-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
+  padding: 14px;
+}
+
+html[data-platform="android"] .android-upstream-header-icon,
+html[data-platform="android"] .android-upstream-empty-icon,
+html[data-platform="android"] .android-upstream-create-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 10px 22px rgb(0 106 96 / 0.18);
+}
+
+html[data-platform="android"] .android-upstream-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+}
+
+html[data-platform="android"] .android-upstream-header-copy {
+  min-width: 0;
+}
+
+html[data-platform="android"] .android-upstream-panel,
+html[data-platform="android"] .android-upstream-panel * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+html[data-platform="android"] .android-upstream-kicker {
+  overflow-wrap: anywhere;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+html[data-platform="android"] .android-upstream-header h2,
+html[data-platform="android"] .android-upstream-empty h4 {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  color: rgb(24 24 27);
+  font-size: 21px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+html[data-platform="android"] .android-upstream-header p,
+html[data-platform="android"] .android-upstream-empty p {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: rgb(82 82 91);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+html[data-platform="android"] .android-upstream-header-metrics {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html[data-platform="android"] .android-upstream-header-metrics span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.05);
+  padding: 0 11px;
+  color: rgb(82 82 91);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+html[data-platform="android"] .android-upstream-quick-import {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 106 96 / 0.12);
+  padding: 0 12px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+html[data-platform="android"] .android-upstream-header-metrics span.ready {
+  background: rgb(0 106 96 / 0.12);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-header-metrics span.missing {
+  background: rgb(239 68 68 / 0.1);
+  color: rgb(220 38 38);
+}
+
+html[data-platform="android"] .android-upstream-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px;
+}
+
+html[data-platform="android"] .android-upstream-empty-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 19px;
+}
+
+html[data-platform="android"] .android-upstream-empty-copy {
+  min-width: 0;
+}
+
+html[data-platform="android"] .android-upstream-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+html[data-platform="android"] .android-upstream-create-grid button,
+html[data-platform="android"] .android-upstream-profile-item,
+html[data-platform="android"] .android-upstream-option-grid button,
+html[data-platform="android"] .android-upstream-model-suggestions button,
+html[data-platform="android"] .android-upstream-actions button,
+html[data-platform="android"] .android-upstream-icon-actions button,
+html[data-platform="android"] .android-upstream-stepper button,
+html[data-platform="android"] .android-upstream-secret button,
+html[data-platform="android"] .android-upstream-load-models {
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    transform 80ms ease;
+}
+
+html[data-platform="android"] .android-upstream-create-grid button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 66px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgb(0 106 96 / 0.14);
+  border-radius: 20px;
+  background: rgb(248 250 249 / 0.9);
+  padding: 11px 12px;
+  color: rgb(24 24 27);
+  text-align: left;
+}
+
+html[data-platform="android"] .android-upstream-quick-import-card {
+  border-color: rgb(0 106 96 / 0.2);
+  background:
+    linear-gradient(135deg, rgb(0 106 96 / 0.08), rgb(255 255 255 / 0.96));
+}
+
+html[data-platform="android"] .android-upstream-create-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 15px;
+}
+
+html[data-platform="android"] .android-upstream-create-grid strong,
+html[data-platform="android"] .android-upstream-create-grid small,
+html[data-platform="android"] .android-upstream-profile-main strong,
+html[data-platform="android"] .android-upstream-profile-main small,
+html[data-platform="android"] .android-upstream-option-grid strong,
+html[data-platform="android"] .android-upstream-option-grid small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+html[data-platform="android"] .android-upstream-create-grid strong,
+html[data-platform="android"] .android-upstream-profile-main strong,
+html[data-platform="android"] .android-upstream-option-grid strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+html[data-platform="android"] .android-upstream-load-models {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.9);
+  padding: 11px 14px;
+  color: rgb(24 24 27);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+html[data-platform="android"] .android-upstream-load-models:disabled {
+  opacity: 0.6;
+}
+
+html[data-platform="android"] .android-upstream-quick-import-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html[data-platform="android"] .android-upstream-quick-import-sheet p {
+  margin: 0;
+  color: rgb(82 82 91);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+html[data-platform="android"] .android-upstream-quick-import-textarea {
+  min-height: 260px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.9);
+  padding: 12px 14px;
+  color: rgb(24 24 27);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+html[data-platform="android"] .android-upstream-quick-import-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid rgb(0 106 96 / 0.16);
+  border-radius: 18px;
+  background: rgb(0 106 96 / 0.08);
+  padding: 10px 12px;
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+html[data-platform="android"] .android-upstream-model-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+html[data-platform="android"] .android-upstream-model-suggestions button {
+  max-width: 100%;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.04);
+  padding: 8px 12px;
+  text-align: left;
+  color: rgb(63 63 70);
+}
+
+html[data-platform="android"] .android-upstream-model-suggestions button.active {
+  border-color: rgb(0 106 96 / 0.34);
+  background: rgb(0 106 96 / 0.12);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-create-grid small,
+html[data-platform="android"] .android-upstream-profile-main small,
+html[data-platform="android"] .android-upstream-option-grid small {
+  margin-top: 3px;
+  color: rgb(113 113 122);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+html[data-platform="android"] .android-upstream-profile-main strong,
+html[data-platform="android"] .android-upstream-profile-main small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+html[data-platform="android"] .android-upstream-profile-main strong {
+  -webkit-line-clamp: 2;
+}
+
+html[data-platform="android"] .android-upstream-profile-main small {
+  -webkit-line-clamp: 2;
+  word-break: break-all;
+}
+
+html[data-platform="android"] .android-upstream-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+html[data-platform="android"] .android-upstream-profiles,
+html[data-platform="android"] .android-upstream-form {
+  padding: 13px;
+}
+
+html[data-platform="android"] .android-upstream-section-head {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgb(82 82 91);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+html[data-platform="android"] .android-upstream-section-head > strong {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 999px;
+  background: rgb(0 106 96 / 0.12);
+  padding: 6px 10px;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+html[data-platform="android"] .android-upstream-section-head > button {
+  min-width: 0;
+  min-height: 32px;
+  border-radius: 999px;
+  background: rgb(0 106 96 / 0.1);
+  padding: 0 12px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-upstream-icon-actions {
+  display: flex;
+  gap: 7px;
+}
+
+html[data-platform="android"] .android-upstream-icon-actions button,
+html[data-platform="android"] .android-upstream-secret button,
+html[data-platform="android"] .android-upstream-stepper button {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(15 23 42 / 0.06);
+  border-radius: 16px;
+  background: rgb(248 250 249 / 0.9);
+  color: rgb(82 82 91);
+}
+
+html[data-platform="android"] .android-upstream-icon-actions button.danger {
+  color: rgb(220 38 38);
+}
+
+html[data-platform="android"] .android-upstream-icon-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+html[data-platform="android"] .android-upstream-profile-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+html[data-platform="android"] .android-upstream-profile-list::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-platform="android"] .android-upstream-profile-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 236px;
+  min-height: 64px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.86);
+  padding: 10px;
+  color: rgb(39 39 42);
+  text-align: left;
+}
+
+html[data-platform="android"] .android-upstream-profile-item.selected {
+  border-color: rgb(0 106 96 / 0.22);
+  background: rgb(0 106 96 / 0.1);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-profile-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgb(161 161 170);
+}
+
+html[data-platform="android"] .android-upstream-profile-dot.active {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgb(0 106 96 / 0.14);
+}
+
+html[data-platform="android"] .android-upstream-profile-main {
+  min-width: 0;
+}
+
+html[data-platform="android"] .android-upstream-profile-mode {
+  display: inline-flex;
+  color: rgb(113 113 122);
+}
+
+html[data-platform="android"] .android-upstream-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html[data-platform="android"] .android-upstream-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+html[data-platform="android"] .android-upstream-label {
+  color: rgb(82 82 91);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+html[data-platform="android"] .android-upstream-label em {
+  margin-left: 2px;
+  color: rgb(220 38 38);
+  font-style: normal;
+}
+
+html[data-platform="android"] .android-upstream-input {
+  min-height: 46px;
+  width: 100%;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.92);
+  padding: 0 13px;
+  color: rgb(24 24 27);
+  font-size: 13px;
+}
+
+html[data-platform="android"] .android-upstream-hint,
+html[data-platform="android"] .android-upstream-save-hint,
+html[data-platform="android"] .android-upstream-error {
+  color: rgb(113 113 122);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+html[data-platform="android"] .android-upstream-error {
+  color: rgb(220 38 38);
+}
+
+html[data-platform="android"] .android-upstream-option-grid {
+  display: grid;
+  gap: 8px;
+}
+
+html[data-platform="android"] .android-upstream-option-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-platform="android"] .android-upstream-option-grid button {
+  min-width: 0;
+  min-height: 70px;
+  border: 1px solid rgb(15 23 42 / 0.06);
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.86);
+  padding: 10px 11px;
+  color: rgb(63 63 70);
+  overflow: hidden;
+  text-align: left;
+}
+
+html[data-platform="android"] .android-upstream-option-grid strong,
+html[data-platform="android"] .android-upstream-option-grid small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+html[data-platform="android"] .android-upstream-option-grid strong {
+  -webkit-line-clamp: 1;
+}
+
+html[data-platform="android"] .android-upstream-option-grid small {
+  -webkit-line-clamp: 2;
+}
+
+html[data-platform="android"] .android-upstream-option-grid button.active {
+  border-color: rgb(0 106 96 / 0.22);
+  background: rgb(0 106 96 / 0.11);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 70px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 18px;
+  background: rgb(248 250 249 / 0.9);
+  padding: 11px 12px;
+  color: rgb(39 39 42);
+  text-align: left;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle > span {
+  min-width: 0;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle strong,
+html[data-platform="android"] .android-upstream-compat-toggle small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle strong {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle small {
+  margin-top: 4px;
+  color: rgb(113 113 122);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle > em {
+  display: inline-flex;
+  min-height: 28px;
+  min-width: 58px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.04);
+  padding: 0 10px;
+  color: rgb(113 113 122);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle.active {
+  border-color: rgb(0 106 96 / 0.22);
+  background: rgb(0 106 96 / 0.11);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-compat-toggle.active > em {
+  border-color: rgb(0 106 96 / 0.18);
+  background: rgb(0 106 96 / 0.12);
+  color: var(--accent);
+}
+
+html[data-platform="android"] .android-upstream-secret,
+html[data-platform="android"] .android-upstream-stepper {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+html[data-platform="android"] .android-upstream-secret {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+html[data-platform="android"] .android-upstream-stepper {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+html[data-platform="android"] .android-upstream-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px -3px -3px;
+  border-top: 1px solid rgb(15 23 42 / 0.06);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.82), rgb(255 255 255 / 0.96));
+  padding: 11px 3px 3px;
+}
+
+html[data-platform="android"] .android-upstream-actions button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  align-content: center;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgb(0 106 96 / 0.14);
+  border-radius: 18px;
+  background: rgb(0 106 96 / 0.08);
+  padding: 7px 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-upstream-actions button.primary {
+  background: var(--accent);
+  color: white;
+}
+
+html[data-platform="android"] .android-upstream-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+html[data-platform="android"] .android-upstream-create-grid button:active,
+html[data-platform="android"] .android-upstream-profile-item:active,
+html[data-platform="android"] .android-upstream-option-grid button:active,
+html[data-platform="android"] .android-upstream-actions button:active,
+html[data-platform="android"] .android-upstream-icon-actions button:active,
+html[data-platform="android"] .android-upstream-stepper button:active,
+html[data-platform="android"] .android-upstream-secret button:active {
+  transform: scale(0.985);
+}
+
+html[data-platform="android"] .android-upstream-create-grid button:hover,
+html[data-platform="android"] .android-upstream-create-grid button:focus-visible,
+html[data-platform="android"] .android-upstream-profile-item:hover,
+html[data-platform="android"] .android-upstream-profile-item:focus-visible,
+html[data-platform="android"] .android-upstream-option-grid button:hover,
+html[data-platform="android"] .android-upstream-option-grid button:focus-visible,
+html[data-platform="android"] .android-upstream-actions button:hover,
+html[data-platform="android"] .android-upstream-actions button:focus-visible,
+html[data-platform="android"] .android-upstream-icon-actions button:hover,
+html[data-platform="android"] .android-upstream-icon-actions button:focus-visible,
+html[data-platform="android"] .android-upstream-stepper button:hover,
+html[data-platform="android"] .android-upstream-stepper button:focus-visible,
+html[data-platform="android"] .android-upstream-secret button:hover,
+html[data-platform="android"] .android-upstream-secret button:focus-visible {
+  border-color: rgb(0 106 96 / 0.2);
+  background-color: rgb(237 248 244 / 0.95);
+  box-shadow: 0 8px 20px rgb(0 106 96 / 0.08);
+  outline: none;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-panel {
+  gap: 14px;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-header {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-header-metrics {
+  grid-column: auto;
+  justify-content: flex-end;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-workspace {
+  grid-template-columns: minmax(230px, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-profile-list {
+  max-height: min(56vh, 560px);
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-profile-item {
+  min-width: 0;
+  width: 100%;
+}
+
+html[data-platform="android"][data-target-platform="android-pad"] .android-upstream-create-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 380px) {
+  html[data-platform="android"] .android-upstream-option-grid.two,
+  html[data-platform="android"] .android-upstream-actions {
+    grid-template-columns: 1fr;
+  }
+
+  html[data-platform="android"] .android-upstream-profile-item {
+    min-width: 214px;
+  }
+}
+
+html.dark[data-platform="android"] .app-modal-card-phone:has(.android-upstream-panel) {
+  background: linear-gradient(180deg, rgb(26 30 34 / 0.98), rgb(17 24 28 / 0.98));
+}
+
+html.dark[data-platform="android"] .android-upstream-header,
+html.dark[data-platform="android"] .android-upstream-empty,
+html.dark[data-platform="android"] .android-upstream-profiles,
+html.dark[data-platform="android"] .android-upstream-form {
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.05);
+}
+
+html.dark[data-platform="android"] .android-upstream-header h2,
+html.dark[data-platform="android"] .android-upstream-empty h4,
+html.dark[data-platform="android"] .android-upstream-input {
+  color: rgb(244 244 245);
+}
+
+html.dark[data-platform="android"] .android-upstream-header p,
+html.dark[data-platform="android"] .android-upstream-empty p,
+html.dark[data-platform="android"] .android-upstream-create-grid small,
+html.dark[data-platform="android"] .android-upstream-profile-main small,
+html.dark[data-platform="android"] .android-upstream-option-grid small,
+html.dark[data-platform="android"] .android-upstream-hint,
+html.dark[data-platform="android"] .android-upstream-save-hint,
+html.dark[data-platform="android"] .android-upstream-label,
+html.dark[data-platform="android"] .android-upstream-section-head {
+  color: rgb(212 212 216 / 0.72);
+}
+
+html.dark[data-platform="android"] .android-upstream-create-grid button,
+html.dark[data-platform="android"] .android-upstream-profile-item,
+html.dark[data-platform="android"] .android-upstream-option-grid button,
+html.dark[data-platform="android"] .android-upstream-icon-actions button,
+html.dark[data-platform="android"] .android-upstream-secret button,
+html.dark[data-platform="android"] .android-upstream-stepper button,
+html.dark[data-platform="android"] .android-upstream-input {
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(244 244 245);
+}
+
+html.dark[data-platform="android"] .android-upstream-profile-item.selected,
+html.dark[data-platform="android"] .android-upstream-option-grid button.active {
+  border-color: rgb(123 218 207 / 0.22);
+  background: rgb(20 83 75 / 0.24);
+  color: rgb(153 246 228);
+}
+
+html.dark[data-platform="android"] .android-upstream-actions {
+  border-top-color: rgb(255 255 255 / 0.08);
+  background: linear-gradient(180deg, rgb(27 32 29 / 0.82), rgb(27 32 29 / 0.98));
+}
+
+html.dark[data-platform="android"] .android-upstream-actions button {
+  border-color: rgb(123 218 207 / 0.16);
+  background: rgb(123 218 207 / 0.1);
+  color: rgb(153 246 228);
+}
+
+html.dark[data-platform="android"] .android-upstream-actions button.primary {
+  background: var(--accent);
+  color: rgb(0 45 39);
+}
+
+html.dark[data-platform="android"] .android-upstream-create-grid button:hover,
+html.dark[data-platform="android"] .android-upstream-create-grid button:focus-visible,
+html.dark[data-platform="android"] .android-upstream-profile-item:hover,
+html.dark[data-platform="android"] .android-upstream-profile-item:focus-visible,
+html.dark[data-platform="android"] .android-upstream-option-grid button:hover,
+html.dark[data-platform="android"] .android-upstream-option-grid button:focus-visible,
+html.dark[data-platform="android"] .android-upstream-actions button:hover,
+html.dark[data-platform="android"] .android-upstream-actions button:focus-visible,
+html.dark[data-platform="android"] .android-upstream-icon-actions button:hover,
+html.dark[data-platform="android"] .android-upstream-icon-actions button:focus-visible,
+html.dark[data-platform="android"] .android-upstream-stepper button:hover,
+html.dark[data-platform="android"] .android-upstream-stepper button:focus-visible,
+html.dark[data-platform="android"] .android-upstream-secret button:hover,
+html.dark[data-platform="android"] .android-upstream-secret button:focus-visible {
+  border-color: rgb(123 218 207 / 0.22);
+  background-color: rgb(20 83 75 / 0.22);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.16);
+}

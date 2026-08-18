@@ -1,0 +1,28 @@
+name: Feature request
+description: 提交新的功能建议或交互改进建议
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 先描述场景和痛点，再描述功能本身
+      placeholder: 当前在什么场景下不方便，现有能力缺了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你期望的方案
+      placeholder: 希望新增什么能力，入口放在哪里，行为大致是什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你考虑过的替代方案
+      placeholder: 如果有现有绕路做法、CLI、外部工具或 UI 变通方式，可以写在这里
+    validations:
+      required: false

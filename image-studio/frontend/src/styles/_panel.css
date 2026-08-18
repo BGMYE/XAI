@@ -1,0 +1,240 @@
+/* Left-side ControlPanel: prompt, params, generate, settings collapsible. */
+
+.panel {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 18px 20px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.panel h1 {
+  font-size: 13px;
+  margin: 0 0 4px;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  font-weight: 600;
+}
+.panel section { display: flex; flex-direction: column; gap: 8px; }
+.panel label.head {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  font-weight: 500;
+}
+.panel .head-row { display: flex; align-items: center; justify-content: space-between; }
+.panel .head-link {
+  font-size: 11px; color: var(--text-muted);
+  cursor: pointer;
+}
+.panel .head-link:hover { color: var(--accent); }
+
+.panel-head { display: flex; align-items: center; justify-content: space-between; }
+
+/* Prompt input with template button below it (not floating, doesn't squeeze
+ * the textarea). The popover is anchored to .prompt-wrap so it stays inside
+ * the panel rather than escaping the window. */
+.prompt-counter { font-size: 10px; color: var(--text-dim); }
+.prompt-wrap { position: relative; }
+.prompt-wrap > .textarea { min-height: 110px; }
+.prompt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.prompt-action-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 120ms;
+}
+.prompt-action-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.prompt-action-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Aspect ratio picker (rectangles + ratio label). */
+.aspect-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.aspect-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 2px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 120ms;
+}
+.aspect-btn:hover { border-color: var(--accent); }
+.aspect-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+.aspect-icon {
+  border: 1.5px solid var(--text-muted);
+  border-radius: 2px;
+  display: block;
+}
+.aspect-btn.active .aspect-icon { border-color: var(--accent); }
+.aspect-label { font-size: 10px; color: var(--text-muted); }
+.aspect-btn.active .aspect-label { color: var(--accent); font-weight: 500; }
+
+/* Generate button at the bottom of the panel. */
+.generate-wrap {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.generate-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.generate-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* API Key inline hint shown below the input. */
+.key-hint {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.key-hint strong { color: var(--accent); }
+
+/* Settings collapsible block. */
+.settings-block { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 12px; }
+.settings-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+  background: transparent; border: 0; color: var(--text-muted);
+  font-size: 12px; cursor: pointer;
+  padding: 4px 0;
+}
+.settings-toggle:hover { color: var(--text); }
+.settings-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.settings-row { display: flex; flex-direction: column; gap: 6px; }
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 4px 8px;
+  background: var(--surface);
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+}
+.api-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.api-mode-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: all 120ms;
+  color: var(--text);
+}
+.api-mode-btn:hover { border-color: var(--accent); }
+.api-mode-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+.api-mode-title { font-size: 12px; font-weight: 600; }
+.api-mode-btn.active .api-mode-title { color: var(--accent); }
+.api-mode-sub { font-size: 10px; color: var(--text-muted); }
+.api-mode-btn.active .api-mode-sub { color: var(--accent); opacity: 0.85; }
+
+/* ControlPanel 顶部的热切换 chip(Responses ↔ Images)*/
+.api-mode-switch {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.api-mode-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 100ms;
+}
+.api-mode-chip:hover { color: var(--text); }
+.api-mode-chip.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* UpstreamConfigModal layout. Same row primitive as .settings-row but with
+ * a tighter rhythm — the modal is denser than the inline settings page. */
+.upstream-form { display: flex; flex-direction: column; gap: 14px; }
+.upstream-row { display: flex; flex-direction: column; gap: 6px; }
+.upstream-row .head { font-size: 12px; }
+.upstream-row .req { color: var(--error-text); font-weight: 600; margin-left: 2px; }
+.key-input-wrap { position: relative; display: flex; }
+.key-input-wrap .input { flex: 1; padding-right: 36px; }
+.key-toggle-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  color: var(--text-muted);
+}
+.key-toggle-btn:hover { color: var(--accent); }
+.upstream-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.upstream-actions .btn { min-width: 96px; }

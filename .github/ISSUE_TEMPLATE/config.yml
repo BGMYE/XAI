@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 提 Issue 前先看故障排查
+    url: https://github.com/RoseKhlifa/Image-Studio/blob/main/docs/troubleshooting.md
+    about: 先排查 BASE_URL、Key 权限、524/504、模型兼容性和 Android 保存行为等常见非软件问题。
+  - name: 使用问题与反馈渠道
+    url: https://github.com/RoseKhlifa/Image-Studio/blob/main/docs/feedback.md
+    about: 使用咨询、上游兼容性讨论、测试版反馈和 QQ 群入口见这里。

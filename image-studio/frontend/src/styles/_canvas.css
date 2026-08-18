@@ -1,0 +1,829 @@
+/* Middle column: canvas shell, toolbar, source strip, stage host,
+ * empty state, status bar. */
+
+/* The canvas-shell uses flex (not grid) because grid items have an implicit
+ * min-width: auto that lets their content (the Konva canvas) expand the track,
+ * which previously caused a runaway feedback loop with the ResizeObserver. */
+.canvas-shell {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+.canvas-shell > .toolbar,
+.canvas-shell > .statusbar { flex: 0 0 auto; }
+.canvas-shell > .stage-host { flex: 1 1 0; min-width: 0; min-height: 0; }
+
+/* Toolbar above the canvas. */
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.toolbar .sep { width: 1px; background: var(--border); height: 22px; margin: 0 4px; }
+.toolbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-muted); }
+.toolbar input[type=range] { width: 110px; }
+
+html[data-target-platform="macos"] .canvas-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: visible;
+}
+
+html[data-target-platform="macos"] .toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+html[data-target-platform="macos"] .toolbar-row-primary {
+  justify-content: flex-start;
+}
+
+html[data-target-platform="macos"] .toolbar-row-secondary {
+  justify-content: flex-start;
+}
+
+html[data-target-platform="macos"] .toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+html[data-target-platform="macos"] .toolbar-group-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+html[data-target-platform="macos"] .toolbar-group-with-caption {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+html[data-target-platform="macos"] .toolbar-group-caption {
+  padding-left: 2px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgb(82 82 91);
+  text-transform: none;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
+html.dark[data-target-platform="macos"] .toolbar-group-caption {
+  color: rgb(212 212 216);
+  opacity: 0.62;
+}
+
+html[data-target-platform="macos"] .toolbar-group-card {
+  align-self: stretch;
+  padding: 8px 10px;
+  border-radius: 18px;
+  border: 1px solid rgb(15 23 42 / 0.035);
+  background: rgb(255 255 255 / 0.38);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24);
+}
+
+html.dark[data-target-platform="macos"] .toolbar-group-card {
+  border-color: rgb(255 255 255 / 0.055);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+html[data-target-platform="macos"] .toolbar-group-primary {
+  padding-right: 6px;
+}
+
+html[data-target-platform="macos"] .toolbar-group-support {
+  gap: 6px;
+}
+
+html[data-target-platform="macos"] .toolbar-group-inline {
+  padding-left: 0;
+}
+
+html[data-target-platform="macos"] .toolbar-contextual {
+  flex: 1 1 320px;
+}
+
+html[data-target-platform="macos"] .toolbar-contextual-expansive {
+  flex: 1 1 320px;
+}
+
+html[data-target-platform="macos"] .toolbar-contextual-compact {
+  flex: 0 1 250px;
+}
+
+html[data-target-platform="macos"] .toolbar-transforms {
+  flex: 1 1 360px;
+}
+
+html[data-target-platform="macos"] .toolbar-transforms-balanced {
+  flex: 1 1 360px;
+}
+
+html[data-target-platform="macos"] .toolbar-transforms-primary {
+  flex: 1 1 420px;
+}
+
+html[data-target-platform="macos"] .toolbar-transforms-merged,
+html[data-target-platform="macos"] .toolbar-view-transform {
+  flex: 1 1 520px;
+}
+
+html[data-target-platform="macos"] .toolbar-view-transform .toolbar-group-body {
+  row-gap: 8px;
+}
+
+html[data-target-platform="macos"] .toolbar-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+html[data-target-platform="macos"] .toolbar-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.04);
+  color: rgb(82 82 91);
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+html[data-target-platform="macos"] .toolbar-view-transform .toolbar-note {
+  padding-inline: 12px;
+}
+
+html.dark[data-target-platform="macos"] .toolbar-note {
+  background: rgb(255 255 255 / 0.06);
+  color: rgb(212 212 216);
+}
+
+@media (max-width: 1400px) {
+  html[data-target-platform="macos"] .toolbar-row-secondary {
+    justify-content: flex-start;
+  }
+
+  html[data-target-platform="macos"] .toolbar-group-actions {
+    margin-left: 0;
+  }
+}
+
+/* Source thumbnail strip (drag-orderable reference images). */
+.source-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+
+html[data-target-platform="macos"] .source-strip {
+  display: block;
+  overflow-x: visible;
+}
+.source-strip-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.source-thumb {
+  position: relative;
+  width: 56px; height: 56px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab;
+  overflow: hidden;
+  flex: 0 0 auto;
+  user-select: none;
+  transition: border-color 120ms;
+}
+.source-thumb:active { cursor: grabbing; }
+.source-thumb.over { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+.source-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.source-thumb-idx {
+  position: absolute;
+  left: 3px; top: 2px;
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.source-thumb-del {
+  position: absolute;
+  right: 2px; top: 2px;
+  width: 18px; height: 18px;
+  background: rgba(0,0,0,0.7);
+  border: 0; color: #fff;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
+  display: flex; align-items: center; justify-content: center;
+}
+.source-thumb:hover .source-thumb-del { opacity: 1; }
+.source-thumb[data-active="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 10px 22px rgb(0 0 0 / 0.14);
+}
+.source-thumb-placeholder {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.source-thumb.add {
+  cursor: pointer;
+  border-style: dashed;
+  color: var(--text-muted);
+  font-size: 24px;
+}
+.source-thumb.add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Konva stage host —— 棋盘格底,带斜向慢漂浮动画。
+   动画原理:同时位移所有 4 个 linear-gradient 的 background-position,
+   每 30s 走完一个 tile 周期(24px)。图存在时 Konva canvas 完全覆盖此层,
+   动画不可见;空状态下提供轻微的「这界面是活的」反馈。
+   prefers-reduced-motion 时停掉。 */
+.stage-host {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  background:
+    linear-gradient(45deg, var(--canvas-tile) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--canvas-tile) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--canvas-tile) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--canvas-tile) 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, 12px 0;
+  background-color: var(--panel-2);
+  animation: checker-drift 6s linear infinite;
+  will-change: background-position;
+}
+
+.stream-preview-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.image-drag-export {
+  position: absolute;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, white);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  cursor: grab;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 0.14);
+  backdrop-filter: blur(14px);
+  user-select: none;
+  transition: transform 120ms, border-color 120ms, box-shadow 120ms, color 120ms;
+}
+
+.image-drag-export:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.18);
+  transform: translateY(-1px);
+}
+
+.image-drag-export:active {
+  cursor: grabbing;
+  transform: translateY(0);
+}
+
+.stage-drag-export {
+  right: 14px;
+  bottom: 14px;
+}
+
+.stream-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.stream-preview-badge svg {
+  width: 13px;
+  height: 13px;
+  animation: stream-preview-pulse 1.4s ease-in-out infinite;
+}
+
+.stream-preview-badge-compact {
+  min-height: 22px;
+  padding-inline: 8px;
+  font-size: 10px;
+}
+
+.stream-preview-badge-fluent {
+  border-radius: 8px;
+}
+
+html.dark .stream-preview-badge {
+  background: color-mix(in srgb, var(--accent) 22%, rgb(24 24 27));
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.26);
+}
+
+@keyframes stream-preview-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes checker-drift {
+  0% {
+    background-position: 0 0, 0 12px, 12px -12px, 12px 0;
+  }
+  100% {
+    /* 48px / 48px = 2 个 tile 周期。6s 一轮 → 8 px/s,肉眼能看到漂的速度 */
+    background-position: 48px 48px, 48px 60px, 60px 36px, 60px 48px;
+  }
+}
+/* 注:故意不加 prefers-reduced-motion 守卫 —— Win11 默认就关了系统动画,
+   带上之后这条 keyframe 全员失效。需要的话用户可以从浏览器层面手动覆盖。 */
+
+/* Minimal empty state shown when no currentImage. */
+.empty-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--canvas-bg);
+}
+.empty-stage-inner {
+  text-align: center;
+  max-width: 360px;
+  padding: 32px;
+}
+.empty-stage-icon {
+  font-size: 48px;
+  opacity: 0.5;
+  margin-bottom: 12px;
+}
+.empty-stage-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+.empty-stage-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.empty-stage-link {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.empty-stage-link:hover { border-color: var(--accent); }
+
+.batch-grid-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--canvas-bg);
+  z-index: 4;
+}
+.batch-grid-overlay.live-preview-grid {
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 10%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas-bg) 90%, var(--surface)), var(--canvas-bg));
+}
+.batch-grid-overlay.single-slot {
+  padding: 22px 24px 24px;
+  gap: 14px;
+}
+.batch-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.batch-grid-head.single-slot {
+  align-items: flex-start;
+}
+.batch-grid-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.batch-grid-close {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.batch-grid-close:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+.batch-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+.batch-grid.fill-grid {
+  align-content: stretch;
+  overflow: hidden;
+  padding-right: 0;
+}
+.batch-grid.scroll-grid {
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+.batch-grid.single-slot {
+  overflow: hidden;
+  padding-right: 0;
+  place-items: center;
+}
+.batch-grid-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.10);
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+}
+.batch-grid.fill-grid .batch-grid-tile {
+  height: 100%;
+}
+.batch-grid.scroll-grid .batch-grid-tile {
+  min-height: clamp(180px, 24vh, 260px);
+  aspect-ratio: 1 / 1;
+}
+.batch-grid-tile-button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: inherit;
+}
+.batch-grid-tile-button.single-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 16px;
+  padding: clamp(14px, 2vw, 24px);
+}
+.batch-grid-tile:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-1px);
+}
+.batch-grid-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 12px 34px rgb(0 0 0 / 0.16);
+}
+.batch-grid-tile.selected {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent), 0 12px 34px rgb(0 0 0 / 0.16);
+}
+.batch-grid-tile:disabled {
+  cursor: default;
+}
+.batch-grid-tile.selection-mode .batch-grid-drag-export {
+  display: none;
+}
+.batch-grid-tile.previewing {
+  cursor: default;
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+}
+.batch-grid-tile.previewing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.batch-grid-tile.pending {
+  display: grid;
+  place-items: center;
+  cursor: default;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 92%, var(--accent)), var(--surface));
+}
+.batch-grid-overlay.single-slot .batch-grid-tile {
+  width: min(100%, 820px);
+  height: min(100%, 1000px);
+  min-height: 0;
+  aspect-ratio: auto;
+  max-height: 100%;
+  border-radius: 20px;
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, white), color-mix(in srgb, var(--surface) 95%, var(--canvas-bg)));
+  box-shadow:
+    0 18px 48px rgb(15 23 42 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.42);
+}
+.batch-grid-overlay.single-slot .batch-grid-tile.previewing::after {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    inset 0 0 0 999px rgb(255 255 255 / 0.02);
+}
+.batch-grid-media {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 8%, transparent), transparent 38%),
+    var(--canvas-bg);
+}
+.batch-grid-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: var(--canvas-bg);
+}
+.batch-grid-overlay.single-slot .batch-grid-media {
+  min-height: 280px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+}
+.batch-grid-overlay.single-slot .batch-grid-media img {
+  max-width: 100%;
+  max-height: 100%;
+  padding: clamp(10px, 1.6vw, 16px);
+}
+.batch-grid-index,
+.batch-grid-meta,
+.batch-grid-check {
+  position: absolute;
+  top: 8px;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  backdrop-filter: blur(8px);
+}
+.batch-grid-index { left: 8px; }
+.batch-grid-meta { right: 8px; font-family: var(--mono-font); }
+.batch-grid-overlay.single-slot .batch-grid-index,
+.batch-grid-overlay.single-slot .batch-grid-meta {
+  top: 14px;
+}
+.batch-grid-overlay.single-slot .batch-grid-index {
+  left: 14px;
+}
+.batch-grid-overlay.single-slot .batch-grid-meta {
+  right: 14px;
+}
+.batch-grid-check {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+  background: color-mix(in srgb, var(--accent) 82%, black 18%);
+}
+.batch-grid-single-note {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: min(100%, 560px);
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+.batch-grid-single-note.pending-note {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+}
+.batch-grid-drag-export {
+  right: 8px;
+  bottom: 8px;
+  min-height: 24px;
+  padding-inline: 9px;
+  font-size: 10px;
+}
+.batch-grid-pending-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-top-color: var(--accent);
+  animation: stream-preview-pulse 1.2s ease-in-out infinite;
+}
+.batch-grid-pending-ring.large {
+  width: 48px;
+  height: 48px;
+  border-width: 3px;
+}
+.batch-grid-pending-label {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.batch-grid-overlay.single-pending {
+  padding: 22px 24px 24px;
+  gap: 14px;
+}
+.batch-grid-pending-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.batch-grid-pending-stage-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: min(100%, 520px);
+  min-height: min(44vh, 380px);
+  padding: 28px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 12%, transparent), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 84%, white), color-mix(in srgb, var(--surface) 96%, var(--canvas-bg)));
+  box-shadow:
+    0 18px 48px rgb(15 23 42 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.42);
+}
+.batch-grid-pending-stage-title {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.batch-grid-pending-stage-note {
+  max-width: 360px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+html.dark .batch-grid-overlay.live-preview-grid {
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 14%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas-bg) 92%, rgb(24 24 27)), var(--canvas-bg));
+}
+
+html.dark .batch-grid-overlay.single-slot .batch-grid-tile {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 90%, rgb(24 24 27)), color-mix(in srgb, var(--surface) 96%, var(--canvas-bg)));
+  box-shadow:
+    0 22px 56px rgb(0 0 0 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+html.dark .batch-grid-pending-stage-card {
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 18%, transparent), transparent 54%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 90%, rgb(24 24 27)), color-mix(in srgb, var(--surface) 96%, var(--canvas-bg)));
+  box-shadow:
+    0 22px 56px rgb(0 0 0 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+@media (max-width: 1100px) {
+  .batch-grid-overlay.single-slot {
+    padding: 18px;
+  }
+
+  .batch-grid-overlay.single-slot .batch-grid-tile {
+    width: 100%;
+  }
+
+  .batch-grid-overlay.single-pending {
+    padding: 18px;
+  }
+
+  .batch-grid-pending-stage-card {
+    width: 100%;
+    min-height: min(38vh, 320px);
+    padding: 22px;
+  }
+}
+
+/* Status bar pinned to bottom of canvas-shell. */
+.statusbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 38px;
+}
+.statusbar .progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.statusbar .progress-bar::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 30%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  animation: slide 1.5s infinite ease-in-out;
+}
+@keyframes slide {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}

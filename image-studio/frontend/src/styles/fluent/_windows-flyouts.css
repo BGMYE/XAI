@@ -1,0 +1,65 @@
+/* Windows flyouts and overflow guards. */
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu {
+  border-color: var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  box-shadow: var(--shadow-flyout);
+  padding: 4px;
+  backdrop-filter: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-item {
+  min-height: 32px;
+  border-radius: 4px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-item:hover {
+  background: var(--tool-hover-bg);
+  color: var(--text);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-item.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-icon {
+  display: inline-flex;
+  width: 18px;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal,
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal * {
+  min-width: 0;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal {
+  overflow-wrap: anywhere;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal input,
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal textarea,
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal code,
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal p,
+html[data-platform="windows"][data-ui-family="fluent"] .upstream-config-modal span {
+  overflow-wrap: anywhere;
+}

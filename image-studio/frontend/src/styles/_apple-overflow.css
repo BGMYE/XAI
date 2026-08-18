@@ -1,0 +1,98 @@
+/* Apple/mac overflow guards for dense settings flyouts. */
+
+html[data-ui-family="apple"] .upstream-config-modal,
+html[data-ui-family="apple"] .upstream-config-modal *,
+html[data-ui-family="apple"] .upstream-config-modal-body,
+html[data-ui-family="apple"] .upstream-config-modal-body * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal,
+html[data-ui-family="apple"] .upstream-config-modal-body {
+  max-width: calc(100vw - 40px);
+  overflow-wrap: anywhere;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .platform-card,
+html[data-ui-family="apple"] .upstream-config-modal button,
+html[data-ui-family="apple"] .upstream-config-modal input,
+html[data-ui-family="apple"] .upstream-config-modal textarea {
+  max-width: 100%;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal input,
+html[data-ui-family="apple"] .upstream-config-modal textarea,
+html[data-ui-family="apple"] .upstream-config-modal code,
+html[data-ui-family="apple"] .upstream-config-modal p {
+  overflow-wrap: anywhere;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .platform-action-btn,
+html[data-ui-family="apple"] .upstream-config-modal .platform-chip,
+html[data-ui-family="apple"] .upstream-config-modal .platform-pill,
+html[data-ui-family="apple"] .upstream-config-modal .liquid-primary-button {
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: center;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .platform-action-btn,
+html[data-ui-family="apple"] .upstream-config-modal .liquid-primary-button {
+  align-content: center;
+  min-height: 34px;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-card {
+  min-height: 58px;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+  padding: 9px 12px;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  width: 100%;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-title,
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-sub,
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-check {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-title {
+  line-height: 1.22;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-sub {
+  display: -webkit-box;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal .upstream-option-check {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+html[data-ui-family="apple"] .upstream-config-modal button > svg {
+  flex: 0 0 auto;
+}

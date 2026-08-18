@@ -1,0 +1,326 @@
+/* Windows control, canvas, modal, and history refinements. */
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-pill,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-action-btn,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-icon-btn,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-tab,
+html[data-platform="windows"][data-ui-family="fluent"] .liquid-primary-button,
+html[data-platform="windows"][data-ui-family="fluent"] .btn {
+  border-radius: var(--control-radius);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .app-header .platform-seg,
+html[data-platform="windows"][data-ui-family="fluent"] .api-mode-switch,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-seg {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  box-shadow: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-action-btn,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-pill {
+  min-height: 32px;
+  border-color: var(--border);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-icon-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-icon-btn:hover,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-pill:hover,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-action-btn:hover,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip:hover {
+  background: var(--tool-hover-bg);
+  color: var(--tool-hover-text);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-icon-btn:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-pill:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-action-btn:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-tab:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .liquid-primary-button:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 76%, white 24%);
+  outline-offset: 2px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip.active,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip[aria-pressed="true"],
+html[data-platform="windows"][data-ui-family="fluent"] .platform-tab.active,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-tab[aria-pressed="true"],
+html[data-platform="windows"][data-ui-family="fluent"] .platform-chip:has(input:checked),
+html[data-platform="windows"][data-ui-family="fluent"] .api-mode-chip.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-grid {
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, white 8%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22);
+}
+
+html.dark[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-grid {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button {
+  min-height: 44px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 90%, black 10%);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    0 1px 1px rgb(0 0 0 / 0.03);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--surface) 40%, var(--accent) 8%);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button[data-active="true"],
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 54%, white 10%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 18%, white 82%) 0%,
+    color-mix(in srgb, var(--accent) 12%, var(--surface)) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, white 8%),
+    0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+html.dark[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button[data-active="true"],
+html.dark[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-button[aria-pressed="true"] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 24%, rgb(255 255 255 / 0.14)) 0%,
+    color-mix(in srgb, var(--accent) 16%, var(--surface)) 100%
+  );
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-content {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .windows-batch-count-unit {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  opacity: 0.76;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .liquid-primary-button,
+html[data-platform="windows"][data-ui-family="fluent"] .btn {
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--accent) 78%, black 22%);
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+  font-weight: 600;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .liquid-primary-button:hover,
+html[data-platform="windows"][data-ui-family="fluent"] .btn:hover {
+  background: var(--accent-2);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .btn.secondary {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .btn.secondary:hover {
+  background: var(--surface-2);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] textarea,
+html[data-platform="windows"][data-ui-family="fluent"] select,
+html[data-platform="windows"][data-ui-family="fluent"] input[type="text"],
+html[data-platform="windows"][data-ui-family="fluent"] input[type="number"],
+html[data-platform="windows"][data-ui-family="fluent"] input[type="password"],
+html[data-platform="windows"][data-ui-family="fluent"] .input,
+html[data-platform="windows"][data-ui-family="fluent"] .textarea,
+html[data-platform="windows"][data-ui-family="fluent"] .select {
+  min-height: 32px;
+  border-radius: var(--control-radius);
+  background: var(--surface);
+  border-color: var(--border-2);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.05);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] textarea,
+html[data-platform="windows"][data-ui-family="fluent"] .textarea {
+  min-height: 112px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .focus-ring:focus-visible,
+html[data-platform="windows"][data-ui-family="fluent"] .input:focus,
+html[data-platform="windows"][data-ui-family="fluent"] .textarea:focus,
+html[data-platform="windows"][data-ui-family="fluent"] .select:focus,
+html[data-platform="windows"][data-ui-family="fluent"] textarea:focus,
+html[data-platform="windows"][data-ui-family="fluent"] select:focus,
+html[data-platform="windows"][data-ui-family="fluent"] input[type="text"]:focus,
+html[data-platform="windows"][data-ui-family="fluent"] input[type="number"]:focus,
+html[data-platform="windows"][data-ui-family="fluent"] input[type="password"]:focus {
+  border-color: color-mix(in srgb, var(--accent) 74%, white 26%);
+  box-shadow:
+    inset 0 -2px 0 var(--accent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .workspace-tab {
+  height: auto;
+  min-width: 92px;
+  max-width: 190px;
+  min-height: 32px;
+  padding: 7px 12px 6px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .workspace-tab:hover {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--text);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .workspace-tab.active {
+  margin-bottom: -1px;
+  border-color: var(--border);
+  border-bottom: 1px solid var(--surface);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .workspace-tab-add,
+html[data-platform="windows"][data-ui-family="fluent"] .workspace-bar .platform-icon-btn {
+  width: 32px;
+  height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .canvas-toolbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .canvas-toolbar > .flex {
+  width: 100%;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .toolbar-group,
+html[data-platform="windows"][data-ui-family="fluent"] .toolbar-group-body {
+  display: contents;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .toolbar-note {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .source-strip {
+  min-height: 56px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .source-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .stage-host {
+  background-color: var(--panel-2);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .statusbar {
+  min-height: 36px;
+  padding: 9px 14px;
+  background: var(--panel-2);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .history-rail .grid {
+  gap: 6px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .history-rail .aspect-square {
+  border-radius: 4px;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .history-rail img {
+  transition: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .history-rail .group:hover img {
+  transform: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .app-modal-backdrop {
+  background: rgb(0 0 0 / 0.32);
+  backdrop-filter: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .app-modal-card {
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-flyout);
+  backdrop-filter: none;
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .app-modal-header {
+  border-bottom-color: var(--border);
+}
+
+html[data-platform="windows"][data-ui-family="fluent"] .toast,
+html[data-platform="windows"][data-ui-family="fluent"] .modal-card,
+html[data-platform="windows"][data-ui-family="fluent"] .result-drawer {
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-flyout);
+}

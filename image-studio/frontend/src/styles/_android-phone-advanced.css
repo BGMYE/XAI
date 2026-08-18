@@ -1,0 +1,359 @@
+html[data-platform="android"] .android-advanced-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+html[data-platform="android"] .app-modal-backdrop-phone:has(.android-advanced-modal-panel) {
+  background:
+    radial-gradient(circle at 50% 8%, rgb(0 106 96 / 0.18), transparent 32%),
+    rgb(15 23 42 / 0.28);
+  backdrop-filter: blur(12px);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel) {
+  min-height: 72vh;
+  max-height: 92vh;
+  border: 0;
+  border-radius: 32px 32px 0 0;
+  background: linear-gradient(180deg, rgb(249 252 249 / 0.99), rgb(238 245 240 / 0.99));
+  box-shadow: 0 -20px 60px rgb(15 23 42 / 0.24);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel)::before {
+  content: "";
+  width: 46px;
+  height: 5px;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.16);
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel) .app-modal-header-phone {
+  border-bottom: 0;
+  padding: 9px 20px 7px;
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel) .app-modal-header-phone h3 {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+html[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel) .app-modal-body-phone {
+  padding: 0 14px calc(22px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-platform="android"] .app-modal-card-desktop:has(.android-advanced-modal-panel) {
+  border: 0;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgb(249 252 249 / 0.98), rgb(238 245 240 / 0.98));
+}
+
+html[data-platform="android"] .android-advanced-modal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgb(15 23 42 / 0.06);
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.9));
+  box-shadow: 0 12px 30px rgb(15 23 42 / 0.06);
+}
+
+html[data-platform="android"] .android-advanced-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 116px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 24px;
+  padding: 13px;
+  color: rgb(82 82 91);
+  text-align: left;
+  transition: color 160ms ease;
+}
+
+html[data-platform="android"] .android-advanced-toggle > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+html[data-platform="android"] .android-advanced-toggle strong {
+  overflow: hidden;
+  color: rgb(24 24 27);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-advanced-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+html[data-platform="android"] .android-advanced-summary-grid > span {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgb(15 23 42 / 0.06);
+  border-radius: 16px;
+  background: rgb(248 250 249 / 0.88);
+  padding: 8px 10px;
+}
+
+html[data-platform="android"] .android-advanced-summary-grid > span > span {
+  overflow: hidden;
+  color: rgb(82 82 91);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-advanced-summary-grid > span > strong {
+  overflow: hidden;
+  color: rgb(24 24 27);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-advanced-toggle-state {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgb(0 106 96 / 0.1);
+  padding: 0 14px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+html[data-target-platform="android"] .android-advanced-toggle {
+  min-height: 106px;
+}
+
+html[data-target-platform="android"] .android-advanced-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+html[data-target-platform="android"] .android-advanced-summary-grid > span {
+  min-height: 44px;
+  border-radius: 15px;
+  padding: 7px 8px;
+}
+
+html[data-target-platform="android"] .android-advanced-summary-grid > span > span {
+  font-size: 9px;
+}
+
+html[data-target-platform="android"] .android-advanced-summary-grid > span > strong {
+  font-size: 12px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-toggle {
+  height: 100%;
+  min-height: 0;
+  gap: 6px;
+  align-items: flex-start;
+  overflow: visible;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-toggle strong {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-pad-advanced-block .android-advanced-toggle > span:first-child > strong {
+  max-width: none;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-toggle > span:first-child {
+  min-height: 0;
+  overflow: visible;
+  flex: 1 1 auto;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 5px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-summary-grid > span {
+  min-height: 32px;
+  border-radius: 11px;
+  padding: 4px 6px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-summary-grid > span > span {
+  font-size: 8px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-summary-grid > span > strong {
+  font-size: 10px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-advanced-toggle-state {
+  min-height: 32px;
+  align-self: flex-start;
+  padding-inline: 9px;
+  font-size: 10px;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"][data-mode="edit"] .android-advanced-toggle {
+  padding: 7px !important;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"] .android-pad-advanced-block .android-advanced-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+html[data-target-platform="android-pad"] .android-pad-compose[data-orientation="landscape"][data-mode="generate"] .android-pad-advanced-block .android-advanced-toggle {
+  align-content: start;
+}
+
+html[data-platform="android"] .android-phone-advanced-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgb(15 23 42 / 0.05);
+  padding: 12px 14px;
+}
+
+html[data-platform="android"] .android-phone-advanced-label {
+  color: rgb(63 63 70);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+html[data-platform="android"] .android-phone-advanced-textarea,
+html[data-platform="android"] .android-phone-seed-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 16px;
+  background: rgb(248 250 249 / 0.92);
+  color: rgb(24 24 27);
+}
+
+html[data-platform="android"] .android-phone-advanced-textarea {
+  min-height: 62px;
+  resize: none;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+html[data-platform="android"] .android-phone-advanced-textarea::placeholder,
+html[data-platform="android"] .android-phone-seed-input::placeholder {
+  color: rgb(113 113 122 / 0.72);
+}
+
+html[data-platform="android"] .android-phone-format-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  gap: 7px;
+}
+
+html[data-platform="android"] .android-phone-format-row .android-choice-chip {
+  min-width: 0;
+  min-height: 40px;
+  padding-inline: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .android-phone-seed-row {
+  display: flex;
+  gap: 8px;
+}
+
+html[data-platform="android"] .android-phone-seed-input {
+  min-height: 42px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+html[data-platform="android"] .android-phone-seed-icon-button {
+  display: inline-flex;
+  min-width: 42px;
+  min-height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  border-color: rgb(15 23 42 / 0.08);
+  color: rgb(82 82 91);
+}
+
+html[data-platform="android"] .android-phone-seed-icon-button.danger {
+  color: rgb(185 28 28);
+}
+
+html.dark[data-platform="android"] .app-modal-card-phone:has(.android-advanced-modal-panel),
+html.dark[data-platform="android"] .app-modal-card-desktop:has(.android-advanced-modal-panel) {
+  background: linear-gradient(180deg, rgb(24 26 28 / 0.98), rgb(15 20 20 / 0.98));
+}
+
+html.dark[data-platform="android"] .android-advanced-toggle strong {
+  color: rgb(244 244 245);
+}
+
+html.dark[data-platform="android"] .android-advanced-summary-grid > span {
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.04);
+}
+
+html.dark[data-platform="android"] .android-advanced-summary-grid > span > span {
+  color: rgb(212 212 216 / 0.72);
+}
+
+html.dark[data-platform="android"] .android-advanced-summary-grid > span > strong {
+  color: rgb(244 244 245);
+}
+
+html.dark[data-platform="android"] .android-advanced-modal-panel {
+  border-color: rgb(255 255 255 / 0.08);
+  background:
+    linear-gradient(180deg, rgb(28 31 39 / 0.95), rgb(24 27 34 / 0.9));
+}
+
+html.dark[data-platform="android"] .android-phone-advanced-section {
+  border-top-color: rgb(255 255 255 / 0.06);
+}
+
+html.dark[data-platform="android"] .android-phone-advanced-label {
+  color: rgb(244 244 245);
+}
+
+html.dark[data-platform="android"] .android-phone-advanced-textarea,
+html.dark[data-platform="android"] .android-phone-seed-input {
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(244 244 245);
+}

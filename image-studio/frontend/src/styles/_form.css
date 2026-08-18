@@ -1,0 +1,62 @@
+/* Inputs, radios, source pills, error banner. */
+
+.input, .textarea, .select {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms;
+}
+.input:focus, .textarea:focus, .select:focus { border-color: var(--accent); }
+.textarea { min-height: 90px; resize: vertical; line-height: 1.5; font-family: inherit; }
+
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+
+.radio-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.radio {
+  display: flex; align-items: center;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.radio.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--on-accent-soft);
+  font-weight: 500;
+}
+.radio input { display: none; }
+
+.source-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.source-pill .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-pill button {
+  background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 16px;
+}
+.source-pill button:hover { color: var(--text); }
+
+.error-banner {
+  background: var(--danger-soft);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

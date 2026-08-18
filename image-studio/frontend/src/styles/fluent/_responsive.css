@@ -1,0 +1,47 @@
+/* Fluent responsive pane rules. */
+
+@media (max-width: 1180px) {
+  html[data-ui-family="fluent"] {
+    --fluent-pane-left: clamp(320px, 31vw, 360px);
+    --fluent-pane-right: clamp(280px, 27vw, 320px);
+  }
+}
+
+@media (max-width: 980px) {
+  html[data-ui-family="fluent"] .studio {
+    grid-template-columns: minmax(320px, 36vw) minmax(0, 1fr);
+  }
+
+  html[data-ui-family="fluent"] .history-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  html[data-platform="windows"][data-ui-family="fluent"] {
+    --fluent-pane-left: 336px;
+    --fluent-pane-right: 300px;
+  }
+
+  html[data-platform="windows"][data-ui-family="fluent"] .studio {
+    grid-template-columns: var(--fluent-pane-left) minmax(0, 1fr) var(--fluent-pane-right);
+  }
+
+  html[data-platform="windows"][data-ui-family="fluent"] .control-panel {
+    width: var(--fluent-pane-left);
+  }
+
+  html[data-platform="windows"][data-ui-family="fluent"] .history-rail {
+    width: var(--fluent-pane-right);
+  }
+}
+
+@media (max-width: 980px) {
+  html[data-platform="windows"][data-ui-family="fluent"] .studio {
+    grid-template-columns: minmax(320px, 36vw) minmax(0, 1fr);
+  }
+
+  html[data-platform="windows"][data-ui-family="fluent"] .history-rail {
+    display: none;
+  }
+}

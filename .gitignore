@@ -1,0 +1,71 @@
+# Build artifacts
+/bin/
+/image-studio/build/bin/
+/image-studio/build/darwin/build/
+/image-studio/build/windows/build/
+/image-studio/frontend/dist/
+/image-studio/frontend/dist-file-preview/
+/image-studio/frontend/node_modules/
+/android-shell/.gradle/
+/android-shell/.gradle-wrapper/
+/android-shell/.kotlin/
+/android-shell/build/
+/android-shell/app/build/
+/android-shell/local.properties
+/android-shell/*.jks
+/android-shell/*.keystore
+/android-shell/app/src/main/assets/web/
+/android-shell/app/src/phone/assets/web/
+/android-shell/app/src/pad/assets/web/
+
+# Generated images, raw SSE dumps, imported sources
+# (raw SSE files include request headers — may leak API keys)
+/images/
+/image-studio/build/bin/data/
+*.exe
+*.exe~
+
+# Go
+*.test
+*.out
+.gobin/
+.gocache/
+.gomodcache/
+.gopath/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Claude / Cursor local config (not for public repo)
+.claude/
+.cursor/
+
+# Local env overrides
+.env
+.env.local
+*.local
+
+# Local caches / sandboxes
+.npm-cache/
+.sandbox-home/
+.tmp/
+.tmp-*
+.tmp-*/
+.tmp-home/
+.tmp-npm-cache/
+/image-studio-gio
+gio-client/image-studio-gio
+
+# Frontend (wails-generated hash files)
+package-lock.json.md5
+package.json.md5

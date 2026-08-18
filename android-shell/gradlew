@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+
+set -eu
+
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+GRADLE_VERSION=8.7
+DIST_NAME="gradle-${GRADLE_VERSION}-bin.zip"
+DIST_URL="https://services.gradle.org/distributions/${DIST_NAME}"
+WRAPPER_DIR="${APP_HOME}/.gradle-wrapper"
+DIST_ZIP="${WRAPPER_DIR}/${DIST_NAME}"
+DIST_HOME="${WRAPPER_DIR}/gradle-${GRADLE_VERSION}"
+GRADLE_BIN="${DIST_HOME}/bin/gradle"
+
+mkdir -p "${WRAPPER_DIR}"
+
+if [ ! -x "${GRADLE_BIN}" ]; then
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "${DIST_URL}" -o "${DIST_ZIP}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "${DIST_URL}" -O "${DIST_ZIP}"
+  else
+    echo "gradlew requires curl or wget to download Gradle ${GRADLE_VERSION}" >&2
+    exit 1
+  fi
+  rm -rf "${DIST_HOME}"
+  unzip -oq "${DIST_ZIP}" -d "${WRAPPER_DIR}"
+fi
+
+exec "${GRADLE_BIN}" -p "${APP_HOME}" "$@"

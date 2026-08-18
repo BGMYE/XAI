@@ -1,0 +1,121 @@
+name: Bug report
+description: 已完成故障排查，并确认问题来自 Image Studio 自身
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先阅读 [docs/troubleshooting.md](https://github.com/RoseKhlifa/Image-Studio/blob/main/docs/troubleshooting.md)。
+
+        如果问题来自 `BASE_URL`、`API Key`、模型权限、账户余额、IP 白名单、上游 524/504、relay 兼容性或服务商临时故障，请不要提交 Bug Issue。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已经阅读故障排查文档，并完成了对应自查。
+          required: true
+        - label: 我已经确认这不是 BASE_URL、API Key、模型权限、余额、白名单、上游超时或 relay 兼容性问题。
+          required: true
+        - label: 我已经查看过 raw 响应、日志或历史详情中的真实报错。
+          required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Android
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 例如 v0.1.6，或 Actions artifact 的构建日期 / commit
+      placeholder: v0.1.6
+    validations:
+      required: true
+
+  - type: dropdown
+    id: api_shape
+    attributes:
+      label: API 形态
+      options:
+        - Responses API
+        - Images API
+        - Both
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: upstream_type
+    attributes:
+      label: BASE_URL 类型
+      description: 可脱敏，例如官方 / OpenAI 兼容中转 / 自建网关
+      placeholder: OpenAI 兼容中转
+    validations:
+      required: true
+
+  - type: input
+    id: text_model
+    attributes:
+      label: 文本模型 ID
+      description: 如果未使用可填 N/A
+      placeholder: gpt-5.5
+    validations:
+      required: true
+
+  - type: input
+    id: image_model
+    attributes:
+      label: 图像模型 ID
+      placeholder: gpt-image-2
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按顺序描述最短复现路径
+      placeholder: |
+        1. 打开...
+        2. 选择...
+        3. 点击...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      placeholder: 发生了什么，页面提示什么，结果保存到了哪里或没有保存
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      placeholder: 你原本预期它应该如何工作
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: raw 响应 / 日志 / 截图
+      description: 请脱敏后粘贴。至少提供 HTTP 状态码、错误 message 或能定位问题的截图。
+      placeholder: |
+        status: 500
+        message: ...
+    validations:
+      required: true

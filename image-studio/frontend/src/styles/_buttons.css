@@ -1,0 +1,165 @@
+/* Reusable button / control primitives. */
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, transform 80ms;
+}
+.btn:hover { background: var(--accent-2); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; transform: none; }
+.btn.secondary { background: var(--btn-secondary-bg); color: var(--text); border: 0; }
+.btn.secondary:hover { background: var(--btn-secondary-bg-hover); }
+.btn.danger { background: var(--danger); }
+.btn.danger:hover { background: var(--danger); filter: brightness(1.1); }
+
+.tool-btn {
+  background: transparent; color: var(--text-muted);
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tool-btn:hover { background: var(--tool-hover-bg); color: var(--tool-hover-text); }
+.tool-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--on-accent-soft); }
+.tool-btn:disabled { color: var(--text-dim); cursor: not-allowed; }
+
+.icon-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  font-size: 16px;
+  transition: color 120ms, border-color 120ms;
+}
+.icon-btn:hover { color: var(--text); border-color: var(--accent); }
+.icon-btn .badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* Segmented control (used for quality + batch count). */
+.seg {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.seg-item {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 120ms, color 120ms;
+}
+.seg-item:hover { color: var(--text); }
+.seg-item.active { background: var(--accent); color: #fff; font-weight: 500; }
+
+/* Style chip / annotation color chip. */
+.style-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.style-pill {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 120ms;
+}
+.style-pill:hover { border-color: var(--accent); color: var(--text); }
+.style-pill.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mac-style-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.mac-style-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms;
+}
+
+.mac-style-pill > span {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.mac-style-pill:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--text);
+}
+
+.mac-style-pill.active,
+.mac-style-pill[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.42);
+}
+
+.color-row { display: flex; gap: 3px; align-items: center; }
+.color-chip {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 80ms, border-color 80ms;
+}
+.color-chip:hover { transform: scale(1.1); }
+.color-chip.active { border-color: var(--text); }

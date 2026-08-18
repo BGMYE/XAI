@@ -1,0 +1,42 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.1.5",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "node ./scripts/platform-vite.mjs dev",
+    "dev:windows": "node ./scripts/platform-vite.mjs dev windows",
+    "dev:macos": "node ./scripts/platform-vite.mjs dev macos",
+    "dev:linux": "node ./scripts/platform-vite.mjs dev linux",
+    "dev:android": "node ./scripts/platform-vite.mjs dev android",
+    "dev:android-pad": "node ./scripts/platform-vite.mjs dev android-pad",
+    "build": "node ./scripts/platform-vite.mjs build",
+    "build:windows": "node ./scripts/platform-vite.mjs build windows",
+    "build:windows:file-preview": "node ./scripts/platform-vite.mjs build-file-preview windows",
+    "build:macos": "node ./scripts/platform-vite.mjs build macos",
+    "build:linux": "node ./scripts/platform-vite.mjs build linux",
+    "build:android": "node ./scripts/platform-vite.mjs build android",
+    "build:android-pad": "node ./scripts/platform-vite.mjs build android-pad",
+    "test": "node --test ./test/*.test.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.2",
+    "konva": "^9.3.22",
+    "lucide-react": "^0.471.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-konva": "^18.2.16",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
