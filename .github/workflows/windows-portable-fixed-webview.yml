@@ -1,0 +1,128 @@
+name: Windows Portable Fixed WebView2
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_version:
+        description: "基础版本号，例如 0.1.6。手动构建前必须填写。"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-version:
+    name: Prepare version metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      product_version: ${{ steps.version.outputs.product_version }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      frontend_version: ${{ steps.version.outputs.frontend_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_BASE_VERSION: ${{ github.event.inputs.base_version }}
+        run: |
+          if [ -z "${DISPATCH_BASE_VERSION// }" ]; then
+            echo "base_version is required for manual portable builds" >&2
+            exit 1
+          fi
+          eval "$(./scripts/compute-version.sh "$DISPATCH_BASE_VERSION")"
+          {
+            echo "product_version=${PRODUCT_VERSION}"
+            echo "app_version=${APP_VERSION}"
+            echo "frontend_version=${FRONTEND_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-portable:
+    name: Build ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-amd64-portable-fixed-webview
+            runner: windows-latest
+            wails_args: -platform windows/amd64 -clean
+            portable_arch: x64
+            artifact_suffix: windows-amd64-portable-fixed-webview.zip
+          - id: windows-arm64-portable-fixed-webview
+            runner: windows-11-arm
+            wails_args: -platform windows/arm64 -clean
+            portable_arch: arm64
+            artifact_suffix: windows-arm64-portable-fixed-webview.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+          cache-dependency-path: image-studio/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+
+      - name: Sync version metadata
+        shell: bash
+        env:
+          IMAGE_STUDIO_PRODUCT_VERSION: ${{ needs.prepare-version.outputs.product_version }}
+          IMAGE_STUDIO_FRONTEND_VERSION: ${{ needs.prepare-version.outputs.frontend_version }}
+        run: node ./scripts/sync-version-metadata.mjs
+
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        shell: bash
+        run: npm ci
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build portable exe
+        working-directory: image-studio
+        shell: bash
+        env:
+          VITE_APP_VERSION: ${{ needs.prepare-version.outputs.app_version }}
+        run: |
+          wails build ${{ matrix.wails_args }} \
+            -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
+
+      - name: Build portable fixed-webview zip
+        id: package
+        shell: pwsh
+        run: |
+          $artifactName = "image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
+          $artifactPath = "dist/$artifactName"
+          ./scripts/build-windows-portable-fixed-webview.ps1 `
+            -Architecture "${{ matrix.portable_arch }}" `
+            -Version "${{ needs.prepare-version.outputs.app_version }}" `
+            -BinaryPath "image-studio/build/bin/image-studio.exe" `
+            -OutputZipPath $artifactPath
+          "artifact_name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "artifact_path=$artifactPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 14

@@ -1,0 +1,65 @@
+name: Verify Issue Close Tooling
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-issue-close-tooling:
+    name: Verify issue close tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Prepare verification output directory
+        run: |
+          mkdir -p .tmp/issue-close-results
+          mkdir -p .tmp/issue-close-export
+
+      - name: Verify issue close tooling
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          IMAGE_STUDIO_VERIFY_RESULTS_DIR: .tmp/issue-close-results
+        run: node ./scripts/verify-issue-close-tooling.mjs
+
+      - name: Export issue close comment bundle
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node ./scripts/issue-close-helper.mjs export .tmp/issue-close-export > .tmp/issue-close-export/export-result.json
+
+      - name: Upload issue close tooling results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-issue-close-tooling-results
+          path: .tmp/issue-close-results
+          if-no-files-found: warn
+
+      - name: Upload issue close comment bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-issue-close-comment-bundle
+          path: .tmp/issue-close-export
+          if-no-files-found: warn
+
+      - name: Render issue close tooling job summary
+        if: always()
+        run: |
+          if [ -f .tmp/issue-close-results/issue-close-tooling.json ]; then
+            node ./scripts/render-issue-close-summary.mjs .tmp/issue-close-results/issue-close-tooling.json .tmp/issue-close-export/manifest.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Issue Close Tooling"
+              echo
+              echo "- result file missing: \`.tmp/issue-close-results/issue-close-tooling.json\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

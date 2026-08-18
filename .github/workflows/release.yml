@@ -1,0 +1,721 @@
+name: Release
+
+# Build desktop targets in parallel and produce Android APKs for phone and pad
+# shells from the bundled WebView wrapper in `android-shell/`.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      base_version:
+        description: "基础版本号，例如 0.1.6。手动 release 编译前必须填写。"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-version:
+    name: Prepare version metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      product_version: ${{ steps.version.outputs.product_version }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      frontend_version: ${{ steps.version.outputs.frontend_version }}
+      android_version_name: ${{ steps.version.outputs.android_version_name }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
+      version_channel: ${{ steps.version.outputs.version_channel }}
+      version_sha: ${{ steps.version.outputs.version_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_BASE_VERSION: ${{ github.event.inputs.base_version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -z "${DISPATCH_BASE_VERSION// }" ]; then
+              echo "base_version is required for manual release builds" >&2
+              exit 1
+            fi
+            eval "$(./scripts/compute-version.sh "$DISPATCH_BASE_VERSION")"
+          else
+            eval "$(./scripts/compute-version.sh)"
+          fi
+          {
+            echo "product_version=${PRODUCT_VERSION}"
+            echo "app_version=${APP_VERSION}"
+            echo "frontend_version=${FRONTEND_VERSION}"
+            echo "android_version_name=${ANDROID_VERSION_NAME}"
+            echo "android_version_code=${ANDROID_VERSION_CODE}"
+            echo "version_channel=${VERSION_CHANNEL}"
+            echo "version_sha=${VERSION_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-desktop:
+    name: Build ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-amd64
+            runner: windows-latest
+            goos: windows
+            artifact_suffix: windows-amd64.exe
+            wails_args: -platform windows/amd64 -clean
+            package_cmd: cp image-studio/build/bin/image-studio.exe "$artifact_path"
+          - id: windows-arm64
+            runner: windows-11-arm
+            goos: windows
+            artifact_suffix: windows-arm64.exe
+            wails_args: -platform windows/arm64 -clean
+            package_cmd: cp image-studio/build/bin/image-studio.exe "$artifact_path"
+          - id: macos-universal
+            runner: macos-latest
+            goos: darwin
+            artifact_suffix: macos-universal.zip
+            wails_args: ""
+            package_cmd: ditto -c -k --sequesterRsrc --keepParent "image-studio/build/bin/Image Studio.app" "$artifact_path"
+          - id: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            artifact_suffix: linux-amd64.tar.gz
+            wails_args: -platform linux/amd64 -clean -tags webkit2_41
+            package_cmd: tar -C image-studio/build/bin -czf "$artifact_path" image-studio
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            artifact_suffix: linux-arm64.tar.gz
+            wails_args: -platform linux/arm64 -clean -tags webkit2_41
+            package_cmd: tar -C image-studio/build/bin -czf "$artifact_path" image-studio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+          cache-dependency-path: image-studio/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+
+      - name: Sync version metadata
+        shell: bash
+        env:
+          IMAGE_STUDIO_PRODUCT_VERSION: ${{ needs.prepare-version.outputs.product_version }}
+          IMAGE_STUDIO_FRONTEND_VERSION: ${{ needs.prepare-version.outputs.frontend_version }}
+        run: node ./scripts/sync-version-metadata.mjs
+
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        shell: bash
+        run: npm ci
+
+      - name: Install Linux build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails CLI
+        if: matrix.goos != 'darwin'
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build desktop app
+        working-directory: image-studio
+        shell: bash
+        env:
+          VITE_APP_VERSION: ${{ needs.prepare-version.outputs.app_version }}
+        run: |
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            bash ../scripts/package-local-macos-app.sh
+          else
+            wails build ${{ matrix.wails_args }} \
+              -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
+          fi
+
+      - name: Stage packaged artifact
+        id: package
+        shell: bash
+        run: |
+          mkdir -p dist
+          artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
+          artifact_path="dist/${artifact_name}"
+          ${{ matrix.package_cmd }}
+          ls -la dist/
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "artifact_path=${artifact_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect Windows signing inputs
+        id: windows_signing
+        if: matrix.goos == 'windows'
+        shell: bash
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+        run: |
+          if [ -n "$IMAGE_STUDIO_WINDOWS_CERT_BASE64" ] && [ -n "$IMAGE_STUDIO_WINDOWS_CERT_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign Windows artifact
+        if: matrix.goos == 'windows' && steps.windows_signing.outputs.available == 'true'
+        shell: pwsh
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+          IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL: ${{ vars.IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL }}
+        run: |
+          ./scripts/sign-windows-binary.ps1 -Path "${{ steps.package.outputs.artifact_path }}"
+
+      - name: Warn on unsigned Windows artifacts
+        if: matrix.goos == 'windows' && steps.windows_signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Windows artifact is unsigned. Windows 11 Smart App Control / SmartScreen may block it."
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 14
+
+  build-windows-installer:
+    name: Build windows universal installer
+    runs-on: windows-latest
+    needs:
+      - prepare-version
+      - build-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Windows desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-*.exe
+
+      - name: Prepare installer inputs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path image-studio/build/bin | Out-Null
+          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.exe/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.exe" "image-studio/build/bin/image-studio-amd64.exe"
+          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe" "image-studio/build/bin/image-studio-arm64.exe"
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          $nsisBin = Join-Path ${env:ProgramFiles(x86)} "NSIS"
+          if (-not (Test-Path (Join-Path $nsisBin "makensis.exe"))) {
+            throw "makensis.exe not found after NSIS install."
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $nsisBin
+
+      - name: Build NSIS installer
+        working-directory: image-studio/build/windows/installer
+        shell: pwsh
+        run: |
+          $defines = @(
+            "/DINFO_PROJECTNAME=image-studio"
+            "/DINFO_COMPANYNAME=YuanHua"
+            "/DINFO_PRODUCTNAME=Image Studio"
+            "/DINFO_PRODUCTVERSION=${{ needs.prepare-version.outputs.product_version }}"
+            "/DINFO_COPYRIGHT=Copyright (c) 2026"
+            "/DARG_WAILS_AMD64_BINARY=..\..\bin\image-studio-amd64.exe"
+            "/DARG_WAILS_ARM64_BINARY=..\..\bin\image-studio-arm64.exe"
+          )
+          & makensis @defines project.nsi
+
+      - name: Stage installer artifact
+        id: package
+        shell: bash
+        run: |
+          mkdir -p dist/out
+          artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-installer.exe"
+          artifact_path="dist/out/${artifact_name}"
+          cp image-studio/build/bin/image-studio-amd64_arm64-installer.exe "$artifact_path"
+          ls -la dist/out/
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "artifact_path=${artifact_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect Windows signing inputs
+        id: windows_signing
+        shell: bash
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+        run: |
+          if [ -n "$IMAGE_STUDIO_WINDOWS_CERT_BASE64" ] && [ -n "$IMAGE_STUDIO_WINDOWS_CERT_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign Windows installer
+        if: steps.windows_signing.outputs.available == 'true'
+        shell: pwsh
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+          IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL: ${{ vars.IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL }}
+        run: |
+          ./scripts/sign-windows-binary.ps1 -Path "${{ steps.package.outputs.artifact_path }}"
+
+      - name: Warn on unsigned Windows installer
+        if: steps.windows_signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Windows installer is unsigned. Windows 11 Smart App Control / SmartScreen may block it."
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 14
+
+  build-windows-msix:
+    name: Build windows msix
+    runs-on: windows-latest
+    needs:
+      - prepare-version
+      - build-desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: x64
+            artifact_suffix: windows-x64.msix
+            input_artifact: windows-amd64.exe
+            input_binary: image-studio-amd64.exe
+            package_arch: x64
+          - id: arm64
+            artifact_suffix: windows-arm64.msix
+            input_artifact: windows-arm64.exe
+            input_binary: image-studio-arm64.exe
+            package_arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packaging dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Download desktop artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}
+
+      - name: Prepare msix input
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path image-studio/build/bin | Out-Null
+          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}" "image-studio/build/bin/${{ matrix.input_binary }}"
+
+      - name: Detect MSIX identity configuration
+        id: msix_identity
+        shell: bash
+        env:
+          IMAGE_STUDIO_MSIX_IDENTITY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_IDENTITY_NAME || 'Image-Studio.Image-Studio' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER || 'CN=D9AC33A5-F2A0-4194-9BCA-D17B6B918495' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME || 'Image-Studio' }}
+        run: |
+          if [ -n "$IMAGE_STUDIO_MSIX_IDENTITY_NAME" ] && [ -n "$IMAGE_STUDIO_MSIX_PUBLISHER" ] && [ -n "$IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build MSIX package
+        if: steps.msix_identity.outputs.available == 'true'
+        shell: pwsh
+        env:
+          IMAGE_STUDIO_MSIX_IDENTITY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_IDENTITY_NAME || 'Image-Studio.Image-Studio' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER || 'CN=D9AC33A5-F2A0-4194-9BCA-D17B6B918495' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME || 'Image-Studio' }}
+        run: |
+          ./scripts/build-msix.ps1 `
+            -Architecture "${{ matrix.package_arch }}" `
+            -Version "${{ needs.prepare-version.outputs.product_version }}" `
+            -Publisher "$env:IMAGE_STUDIO_MSIX_PUBLISHER" `
+            -IdentityName "$env:IMAGE_STUDIO_MSIX_IDENTITY_NAME" `
+            -PublisherDisplayName "$env:IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME" `
+            -SourceExe "image-studio/build/bin/${{ matrix.input_binary }}" `
+            -OutputPath "dist/msix/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
+
+      - name: Warn on skipped MSIX package
+        if: steps.msix_identity.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Skipping MSIX packaging because IMAGE_STUDIO_MSIX_IDENTITY_NAME / IMAGE_STUDIO_MSIX_PUBLISHER / IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME are not all configured."
+
+      - name: Upload MSIX artifact
+        if: steps.msix_identity.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}
+          path: dist/msix/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}
+          retention-days: 14
+
+  build-windows-msixbundle:
+    name: Build windows msixbundle
+    runs-on: windows-latest
+    needs:
+      - prepare-version
+      - build-windows-msix
+    steps:
+      - name: Detect MSIX identity configuration
+        id: msix_identity
+        shell: bash
+        env:
+          IMAGE_STUDIO_MSIX_IDENTITY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_IDENTITY_NAME || 'Image-Studio.Image-Studio' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER || 'CN=D9AC33A5-F2A0-4194-9BCA-D17B6B918495' }}
+          IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME || 'Image-Studio' }}
+        run: |
+          if [ -n "$IMAGE_STUDIO_MSIX_IDENTITY_NAME" ] && [ -n "$IMAGE_STUDIO_MSIX_PUBLISHER" ] && [ -n "$IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download MSIX artifacts
+        if: steps.msix_identity.outputs.available == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/msix
+          pattern: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-*.msix
+
+      - name: Build MSIX bundle
+        if: steps.msix_identity.outputs.available == 'true'
+        shell: pwsh
+        run: |
+          $makeAppx = Get-ChildItem -Path (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin") -Filter makeappx.exe -Recurse -ErrorAction Stop |
+            Where-Object { $_.FullName -match "\\x64\\makeappx\.exe$" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $makeAppx) {
+            throw "makeappx.exe not found."
+          }
+          New-Item -ItemType Directory -Force -Path dist/msixbundle | Out-Null
+          $mappingLines = @(
+            "[Files]"
+            '"dist/msix/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-x64.msix\image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-x64.msix" "image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-x64.msix"'
+            '"dist/msix/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.msix\image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.msix" "image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.msix"'
+          )
+          Set-Content -LiteralPath dist/msixbundle/bundle.map -Value $mappingLines -Encoding ASCII
+          & $makeAppx.FullName bundle /f dist/msixbundle/bundle.map /p "dist/msixbundle/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows.msixbundle" /o
+          if ($LASTEXITCODE -ne 0) {
+            throw "makeappx bundle failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Warn on skipped MSIX bundle
+        if: steps.msix_identity.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Skipping MSIX bundle because IMAGE_STUDIO_MSIX_IDENTITY_NAME / IMAGE_STUDIO_MSIX_PUBLISHER / IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME are not all configured."
+
+      - name: Upload MSIX bundle artifact
+        if: steps.msix_identity.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows.msixbundle
+          path: dist/msixbundle/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows.msixbundle
+          retention-days: 14
+
+  build-android-apk:
+    name: Build android apk
+    runs-on: ubuntu-24.04
+    needs: prepare-version
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+
+      - name: Sync version metadata
+        shell: bash
+        env:
+          IMAGE_STUDIO_PRODUCT_VERSION: ${{ needs.prepare-version.outputs.product_version }}
+          IMAGE_STUDIO_FRONTEND_VERSION: ${{ needs.prepare-version.outputs.frontend_version }}
+        run: node ./scripts/sync-version-metadata.mjs
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Prepare Android user home
+        run: mkdir -p .tmp/android-home/.android
+
+      - name: Write Android local.properties
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android-shell/local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build android apk
+        env:
+          ANDROID_USER_HOME: ${{ github.workspace }}/.tmp/android-home/.android
+          ANDROID_SDK_HOME: ${{ github.workspace }}/.tmp/android-home
+          HOME: ${{ github.workspace }}/.tmp/android-home
+          IMAGE_STUDIO_ANDROID_VERSION_NAME: ${{ needs.prepare-version.outputs.android_version_name }}
+          IMAGE_STUDIO_ANDROID_VERSION_CODE: ${{ needs.prepare-version.outputs.android_version_code }}
+          VITE_APP_VERSION: ${{ needs.prepare-version.outputs.app_version }}
+        run: |
+          gradle -p android-shell --no-daemon assembleRelease
+
+      - name: Verify signed apk
+        env:
+          ANDROID_USER_HOME: ${{ github.workspace }}/.tmp/android-home/.android
+          ANDROID_SDK_HOME: ${{ github.workspace }}/.tmp/android-home
+          HOME: ${{ github.workspace }}/.tmp/android-home
+        run: |
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify -v "android-shell/app/build/outputs/apk/release/app-release.apk"
+
+      - name: Stage apk artifact
+        id: package
+        shell: bash
+        run: |
+          mkdir -p dist
+          artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-android-release.apk"
+          artifact_path="dist/${artifact_name}"
+          cp android-shell/app/build/outputs/apk/release/app-release.apk "$artifact_path"
+          ls -la dist/
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "artifact_path=${artifact_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload apk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 14
+
+  build-gio-desktop:
+    name: Build Gio ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-amd64
+            runner: windows-latest
+            goos: windows
+            goarch: amd64
+            gui_ldflags: -H=windowsgui
+            artifact_suffix: windows-amd64.exe
+            exe_ext: .exe
+            package_cmd: cp dist/gio/image-studio-gio.exe "$artifact_path"
+          - id: windows-arm64
+            runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            gui_ldflags: -H=windowsgui
+            artifact_suffix: windows-arm64.exe
+            exe_ext: .exe
+            package_cmd: cp dist/gio/image-studio-gio.exe "$artifact_path"
+          - id: macos-arm64
+            runner: macos-15
+            goos: darwin
+            goarch: arm64
+            gui_ldflags: ""
+            artifact_suffix: macos-arm64.tar.gz
+            exe_ext: ""
+            package_cmd: tar -C dist/gio -czf "$artifact_path" image-studio-gio
+          - id: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            gui_ldflags: ""
+            artifact_suffix: linux-amd64.tar.gz
+            exe_ext: ""
+            package_cmd: tar -C dist/gio -czf "$artifact_path" image-studio-gio
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            gui_ldflags: ""
+            artifact_suffix: linux-arm64.tar.gz
+            exe_ext: ""
+            package_cmd: tar -C dist/gio -czf "$artifact_path" image-studio-gio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+          cache-dependency-path: gio-client/go.sum
+
+      - name: Install Linux Gio build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libegl1-mesa-dev \
+            libvulkan-dev \
+            libwayland-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcursor-dev \
+            libxfixes-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev
+
+      - name: Build Gio client
+        working-directory: gio-client
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p ../dist/gio
+          go build -trimpath \
+            -ldflags "-s -w ${{ matrix.gui_ldflags }} -X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}" \
+            -o "../dist/gio/image-studio-gio${{ matrix.exe_ext }}" \
+            ./cmd/image-studio-gio
+
+      - name: Stage Gio artifact
+        id: package
+        shell: bash
+        run: |
+          artifact_name="image-studio-gio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
+          artifact_path="dist/${artifact_name}"
+          ${{ matrix.package_cmd }}
+          ls -la dist/
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "artifact_path=${artifact_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect Windows signing inputs
+        id: windows_signing
+        if: matrix.goos == 'windows'
+        shell: bash
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+        run: |
+          if [ -n "$IMAGE_STUDIO_WINDOWS_CERT_BASE64" ] && [ -n "$IMAGE_STUDIO_WINDOWS_CERT_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign Gio Windows artifact
+        if: matrix.goos == 'windows' && steps.windows_signing.outputs.available == 'true'
+        shell: pwsh
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+          IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL: ${{ vars.IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL }}
+        run: |
+          ./scripts/sign-windows-binary.ps1 -Path "${{ steps.package.outputs.artifact_path }}"
+
+      - name: Warn on unsigned Gio Windows artifacts
+        if: matrix.goos == 'windows' && steps.windows_signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Windows artifact is unsigned. Windows 11 Smart App Control / SmartScreen may block it."
+
+      - name: Upload Gio artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 14
+
+  publish-release:
+    name: Publish release assets
+    runs-on: ubuntu-24.04
+    needs:
+      - prepare-version
+      - build-desktop
+      - build-windows-installer
+      - build-windows-msix
+      - build-windows-msixbundle
+      - build-android-apk
+      - build-gio-desktop
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifact layout
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find dist -type f -maxdepth 2 -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.prepare-version.outputs.product_version }}
+          tag_name: v${{ needs.prepare-version.outputs.product_version }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+          generate_release_notes: false

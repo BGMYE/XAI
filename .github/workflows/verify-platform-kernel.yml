@@ -1,0 +1,85 @@
+name: Verify Platform Kernel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-local-platform-kernel:
+    name: Verify local platform kernel suite
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            image-studio/frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        run: npm ci
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Prepare Android local.properties
+        run: |
+          mkdir -p .tmp/android-home/.android
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android-shell/local.properties
+
+      - name: Prepare verification output directory
+        run: mkdir -p .tmp/verify-results
+
+      - name: Verify local platform kernel suite
+        env:
+          IMAGE_STUDIO_SKIP_RUNTIME_UPDATE_PROBE: "1"
+          IMAGE_STUDIO_INCLUDE_ISSUE_CLOSE_VERIFY: "1"
+          IMAGE_STUDIO_SKIP_ISSUE_CLOSE_GITHUB_SYNC: "1"
+          IMAGE_STUDIO_VERIFY_RESULTS_DIR: .tmp/verify-results
+        run: node ./scripts/verify-local-platform-kernel.mjs
+
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-platform-kernel-results
+          path: .tmp/verify-results
+          if-no-files-found: warn
+
+      - name: Render verification job summary
+        if: always()
+        run: |
+          if [ -f .tmp/verify-results/platform-kernel-summary.json ]; then
+            node ./scripts/render-verify-platform-summary.mjs .tmp/verify-results/platform-kernel-summary.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Verify Platform Kernel"
+              echo
+              echo "- summary file missing: \`.tmp/verify-results/platform-kernel-summary.json\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
