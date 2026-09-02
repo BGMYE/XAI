@@ -79,7 +79,7 @@ Image Studio 在本地可能处理以下数据：
 
 桌面版当前版本支持检查新版本。检查更新时，会向 GitHub 请求：
 
-- `https://api.github.com/repos/RoseKhlifa/Image-Studio/releases/latest`
+- `https://api.github.com/repos/BGMYE/XAI/releases/latest`
 
 这会使 GitHub 获取你的网络请求元数据，例如 IP 地址、请求时间、User-Agent 或其他标准 HTTP 信息。
 
@@ -182,4 +182,4 @@ Android 后台服务不会在应用空闲时常驻，也不申请悬浮窗权限
 
 如果你对本项目的隐私行为有疑问，建议通过项目 Issues 反馈：
 
-- [RoseKhlifa/Image-Studio Issues](https://github.com/RoseKhlifa/Image-Studio/issues)
+- [BGMYE/XAI Issues](https://github.com/BGMYE/XAI/issues)

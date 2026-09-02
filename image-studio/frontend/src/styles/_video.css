@@ -1,0 +1,66 @@
+.video-generation-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.video-generation-heading,
+.video-generation-actions,
+.video-generation-status,
+.video-generation-result button {
+  display: flex;
+  align-items: center;
+}
+
+.video-generation-heading { gap: 10px; }
+.video-generation-heading h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.video-generation-heading p { margin: 2px 0 0; color: var(--text-muted); font-size: 11px; }
+.video-generation-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.video-generation-prompt,
+.video-generation-options input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--surface);
+}
+.video-generation-prompt { min-height: 82px; resize: vertical; padding: 10px 12px; }
+.video-generation-options { display: grid; grid-template-columns: 0.7fr 1.3fr; gap: 10px; }
+.video-generation-options label { display: grid; gap: 5px; color: var(--text-muted); font-size: 11px; }
+.video-generation-options input { min-height: 36px; padding: 7px 10px; font-family: var(--mono-font); }
+.video-generation-actions { min-height: 34px; gap: 10px; }
+.video-generation-actions button,
+.video-generation-result button {
+  min-height: 34px;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-weight: 600;
+}
+.video-generation-submit { color: white; border-color: transparent !important; background: var(--gradient-primary); }
+.video-generation-cancel { color: var(--danger); background: var(--danger-soft); }
+.video-generation-status { gap: 5px; color: var(--text-muted); font-size: 11px; }
+.video-generation-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--error-border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: var(--error-text);
+  background: var(--danger-soft);
+  font-size: 12px;
+}
+.video-generation-result { display: grid; gap: 8px; }
+.video-generation-result video { width: 100%; max-height: 240px; border-radius: 11px; background: #000; }
+.video-generation-result button { justify-self: start; color: var(--accent); background: var(--surface); }

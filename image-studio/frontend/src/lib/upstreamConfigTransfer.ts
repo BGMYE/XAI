@@ -13,6 +13,7 @@ export type UpstreamConfigExportProfile = {
   baseURL: string;
   textModelID: string;
   imageModelID: string;
+  videoModelID: string;
   reasoningEffort: ReasoningEffortValue;
   concurrencyLimit: number;
   fallbackProfileId?: string;
@@ -47,6 +48,7 @@ export type UpstreamConfigImportActions = {
     allowInsecureConnection?: boolean;
     textModelID?: string;
     imageModelID?: string;
+    videoModelID?: string;
     reasoningEffort?: ReasoningEffortValue;
     concurrencyLimit?: number;
     apiKey?: string;
@@ -79,6 +81,7 @@ function toProfileSnapshot(input: UpstreamConfigExportProfile, actualId: string)
     baseURL: input.baseURL,
     textModelID: input.textModelID,
     imageModelID: input.imageModelID,
+    videoModelID: input.videoModelID,
     reasoningEffort: input.reasoningEffort,
     concurrencyLimit: input.concurrencyLimit,
     fallbackProfileId: input.fallbackProfileId,
@@ -163,6 +166,7 @@ function parseExportProfile(raw: unknown): UpstreamConfigExportProfile | null {
     baseURL: normalizeImportedBaseURL(source.baseURL),
     textModelID: typeof source.textModelID === "string" ? source.textModelID.trim() : "",
     imageModelID: typeof source.imageModelID === "string" ? source.imageModelID.trim() : "",
+    videoModelID: typeof source.videoModelID === "string" ? source.videoModelID.trim() : "",
     reasoningEffort: normalizeReasoningEffort(source.reasoningEffort),
     concurrencyLimit: normalizeConcurrencyLimit(source.concurrencyLimit),
     fallbackProfileId: typeof source.fallbackProfileId === "string" ? source.fallbackProfileId.trim() || undefined : undefined,
@@ -194,6 +198,7 @@ function parseNewAPIChannelConnTemplate(raw: Record<string, unknown>): ParsedUps
         baseURL,
         textModelID: "",
         imageModelID: "",
+        videoModelID: "",
         reasoningEffort: "xhigh",
         concurrencyLimit: 0,
         createdAt: Date.now(),
@@ -248,6 +253,8 @@ function parseOpenCodeProviderTemplate(raw: Record<string, unknown>): ParsedUpst
     const apiMode: APIMode = hasTextModels ? "responses" : hasImageModels ? "images" : "responses";
     const textModelID = hasTextModels ? catalog.text[0]?.id ?? "" : "";
     const imageModelID = hasImageModels ? catalog.image[0]?.id ?? "" : "";
+    // 模板导入也只接受明确分类出的视频模型，不使用文本/图片模型替代。
+    const videoModelID = catalog.video[0]?.id ?? "";
     const profileId = nextTemplateProfileId(nextIndex);
     nextIndex += 1;
 
@@ -262,6 +269,7 @@ function parseOpenCodeProviderTemplate(raw: Record<string, unknown>): ParsedUpst
       baseURL,
       textModelID,
       imageModelID,
+      videoModelID,
       reasoningEffort: inferReasoningEffortFromOpenCodeModel(provider?.models, textModelID),
       concurrencyLimit: 0,
       createdAt: Date.now(),
@@ -336,6 +344,7 @@ function buildProfilePatch(
     baseURL: incoming.baseURL,
     textModelID: incoming.textModelID,
     imageModelID: incoming.imageModelID,
+    videoModelID: incoming.videoModelID,
     reasoningEffort: incoming.reasoningEffort,
     concurrencyLimit: incoming.concurrencyLimit,
     lastUsedAt: incoming.lastUsedAt,
@@ -374,6 +383,7 @@ export async function applyParsedUpstreamConfigImport(
       baseURL: incoming.baseURL,
       textModelID: incoming.textModelID,
       imageModelID: incoming.imageModelID,
+      videoModelID: incoming.videoModelID,
       reasoningEffort: incoming.reasoningEffort,
       concurrencyLimit: incoming.concurrencyLimit,
       apiKey: incoming.apiKey,

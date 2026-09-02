@@ -36,6 +36,7 @@ export function createProfileActions(store: StateAdapter) {
       allowInsecureConnection?: boolean;
       textModelID?: string;
       imageModelID?: string;
+      videoModelID?: string;
       reasoningEffort?: ReasoningEffortValue;
       concurrencyLimit?: number;
       apiKey?: string;
@@ -54,6 +55,7 @@ export function createProfileActions(store: StateAdapter) {
         baseURL: cleanBaseURL(input.baseURL ?? ""),
         textModelID: (input.textModelID ?? "").trim(),
         imageModelID: (input.imageModelID ?? "").trim(),
+        videoModelID: (input.videoModelID ?? "").trim(),
         reasoningEffort: input.reasoningEffort ?? "xhigh",
         concurrencyLimit: normalizeConcurrencyLimit(input.concurrencyLimit ?? 0),
         fallbackProfileId: undefined,
@@ -96,6 +98,7 @@ export function createProfileActions(store: StateAdapter) {
         baseURL: patch.baseURL !== undefined ? cleanBaseURL(patch.baseURL) : current.baseURL,
         textModelID: patch.textModelID !== undefined ? patch.textModelID.trim() : current.textModelID,
         imageModelID: patch.imageModelID !== undefined ? patch.imageModelID.trim() : current.imageModelID,
+        videoModelID: patch.videoModelID !== undefined ? patch.videoModelID.trim() : current.videoModelID,
         reasoningEffort: patch.reasoningEffort ?? current.reasoningEffort ?? "xhigh",
         concurrencyLimit: patch.concurrencyLimit !== undefined
           ? normalizeConcurrencyLimit(patch.concurrencyLimit) : current.concurrencyLimit,

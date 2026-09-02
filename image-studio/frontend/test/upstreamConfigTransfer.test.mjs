@@ -13,6 +13,7 @@ test("buildUpstreamConfigExportFile includes profile metadata and api keys", asy
       baseURL: "https://relay.example.com",
       textModelID: "gpt-5.5",
       imageModelID: "gpt-image-2",
+      videoModelID: "sora-2",
       reasoningEffort: "xhigh",
       concurrencyLimit: 3,
       createdAt: 1,
@@ -25,6 +26,7 @@ test("buildUpstreamConfigExportFile includes profile metadata and api keys", asy
   assert.equal(payload.aiProfileId, "p-1");
   assert.equal(payload.profiles[0].apiKey, "sk-live");
   assert.equal(payload.profiles[0].allowInsecureConnection, false);
+  assert.equal(payload.profiles[0].videoModelID, "sora-2");
 });
 
 test("parseUpstreamConfigImportFile normalizes profiles and preserves embedded api keys", async () => {
@@ -45,6 +47,7 @@ test("parseUpstreamConfigImportFile normalizes profiles and preserves embedded a
         baseURL: " https://img.example.com/ ",
         textModelID: "ignored",
         imageModelID: "gpt-image-2",
+        videoModelID: " veo-3.1 ",
         reasoningEffort: "medium",
         concurrencyLimit: 5.9,
         fallbackProfileId: "backup-1",
@@ -70,6 +73,7 @@ test("parseUpstreamConfigImportFile normalizes profiles and preserves embedded a
         baseURL: "https://img.example.com",
         textModelID: "ignored",
         imageModelID: "gpt-image-2",
+        videoModelID: "veo-3.1",
         reasoningEffort: "medium",
         concurrencyLimit: 5,
         fallbackProfileId: "backup-1",
@@ -110,6 +114,7 @@ test("parseUpstreamConfigImportFile adapts newapi_channel_conn template", async 
       baseURL: "https://api.linzefeng.top",
       textModelID: "",
       imageModelID: "",
+      videoModelID: "",
       reasoningEffort: "xhigh",
       concurrencyLimit: 0,
       createdAt: parsed.profiles[0].createdAt,
@@ -164,6 +169,7 @@ test("parseUpstreamConfigImportFile adapts opencode provider template", async ()
       baseURL: "https://gptcodex.top",
       textModelID: "gpt-5.5",
       imageModelID: "",
+      videoModelID: "",
       reasoningEffort: "xhigh",
       concurrencyLimit: 0,
       createdAt: parsed.profiles[0].createdAt,

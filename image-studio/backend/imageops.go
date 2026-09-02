@@ -1,12 +1,14 @@
 package backend
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +101,7 @@ func (s *Service) CropImage(path string, x, y, w, h int) (ImageTransformResult, 
 		return ImageTransformResult{}, err
 	}
 	if result, err := transformWithGPU(allowed, out, gpuTransformRequest{
-		Kind: gpuTransformCrop,
+		Kind:  gpuTransformCrop,
 		CropX: x,
 		CropY: y,
 		CropW: rect.Dx(),
@@ -115,13 +117,54 @@ func (s *Service) CropImage(path string, x, y, w, h int) (ImageTransformResult, 
 
 // --- internal helpers ------------------------------------------------------
 
-func loadImage(path string) (image.Image, error) {
+const (
+	maxImageSnapshotBytes = 50 * 1024 * 1024
+	maxDecodedImageEdge   = 16_384
+	maxDecodedImagePixels = 64 * 1024 * 1024
+)
+
+func validateDecodedImageDimensions(width, height int) error {
+	if width <= 0 || height <= 0 {
+		return errors.New("invalid image dimensions")
+	}
+	if width > maxDecodedImageEdge || height > maxDecodedImageEdge {
+		return fmt.Errorf("decoded image edge exceeds %d pixels", maxDecodedImageEdge)
+	}
+	if uint64(width)*uint64(height) > uint64(maxDecodedImagePixels) {
+		return fmt.Errorf("decoded image exceeds %d pixel limit", maxDecodedImagePixels)
+	}
+	return nil
+}
+
+func readImageSnapshot(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", filepath.Base(path), err)
 	}
 	defer f.Close()
-	img, _, err := image.Decode(f)
+	data, err := io.ReadAll(io.LimitReader(f, maxImageSnapshotBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", filepath.Base(path), err)
+	}
+	if len(data) > maxImageSnapshotBytes {
+		return nil, fmt.Errorf("image exceeds %d byte limit", maxImageSnapshotBytes)
+	}
+	return data, nil
+}
+
+func loadImage(path string) (image.Image, error) {
+	data, err := readImageSnapshot(path)
+	if err != nil {
+		return nil, err
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode dimensions %s: %w", filepath.Base(path), err)
+	}
+	if err := validateDecodedImageDimensions(cfg.Width, cfg.Height); err != nil {
+		return nil, err
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode %s: %w", filepath.Base(path), err)
 	}

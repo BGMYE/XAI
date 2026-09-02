@@ -26,6 +26,7 @@ import {
   WriteAppUpdateProbe,
   probeCurrentUpstream,
   setKernelRuntimeMode,
+  UpscaleImage,
 } from "../platform/runtime/host";
 import type { backend } from "../../wailsjs/go/models";
 import {
@@ -199,6 +200,9 @@ import {
   type StreamPreviewPayload,
 } from "./studioStore.streamPreview";
 import type { GenerateOptionsLike } from "../platform/runtime/hostTypes";
+import type { CanvasNode } from "./canvasNodes";
+import { createCanvasNode, upsertCanvasNodeList } from "./canvasNodes";
+import type { CanvasViewport } from "./canvasNodes";
 
 type RuntimeGenerateOptions = GenerateOptionsLike & {
   sourceImages?: Array<SourceImage | BatchProcessSourceImage>;
@@ -663,10 +667,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   errorCanRetry: false,
   errorRawPath: null,
   isRunning: false,
+  upscaleRunning: false,
+  upscaleProgress: 0,
+  upscaleScale: null,
   lastPayload: null,
   runningJobMeta: {},
 
   currentImage: null,
+  canvasNodes: [],
+  canvasViewport: null,
+  selectedNodeId: null,
   history: [],
   historyHasMore: false,
   historyLoading: false,
@@ -982,9 +992,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const workspace = get().workspaces.find((w) => w.id === get().activeWorkspaceId);
       set({
         compareB: null,
+        maskDataURL: null,
+        strokes: [],
+        annotations: [],
+        selectedAnnotationId: null,
+        selectedNodeId: item?.id ?? null,
+        undoStack: [],
+        redoStack: [],
         resultGridOpen: false,
         workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, {
           currentImageId: currentImageIdForWorkspaceSnapshot(item, get().streamPreview, get().streamPreviews, workspace?.currentImageId ?? null),
+          selectedNodeId: item?.id ?? null,
           resultGridOpen: false,
         }),
       });
@@ -1041,6 +1059,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { errorRawPath: value as string | null }) });
     } else if (key === "lastPayload") {
       set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { lastPayload: value as GenerateOptionsLike | null }) });
+    } else if (key === "canvasNodes") {
+      set({ workspaces: get().workspaces.map((w) => w.id === get().activeWorkspaceId ? { ...w, canvasNodes: normalizedValue as CanvasNode[] } : w) });
     }
     if (key === "kernelRuntimeMode") {
       try { localStorage.setItem("gptcodex.kernelRuntimeMode", String(value)); } catch {}
@@ -1777,6 +1797,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           baseURL: legacyResponses.baseURL,
           textModelID: legacyResponses.textModelID,
           imageModelID: legacyResponses.imageModelID,
+          videoModelID: "",
           reasoningEffort: "xhigh",
           concurrencyLimit: normalizeConcurrencyLimit(legacyResponses.concurrencyLimit),
           createdAt: Date.now(),
@@ -1798,6 +1819,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           baseURL: legacyImages.baseURL,
           textModelID: legacyImages.textModelID,
           imageModelID: legacyImages.imageModelID,
+          videoModelID: "",
           reasoningEffort: "xhigh",
           concurrencyLimit: normalizeConcurrencyLimit(legacyImages.concurrencyLimit),
           createdAt: Date.now(),
@@ -2159,6 +2181,43 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   rotateCurrent: async (degrees) => mediaActions.rotateCurrent(degrees),
   flipCurrent: async (horizontal) => mediaActions.flipCurrent(horizontal),
   cropToRect: async (x, y, w, h) => mediaActions.cropToRect(x, y, w, h),
+  upscaleCurrent: async (scale) => mediaActions.upscaleCurrent(scale),
+  addCanvasNode: (node) => set((state) => {
+    const canvasNodes = upsertCanvasNodeList(state.canvasNodes, node);
+    return { canvasNodes, selectedNodeId: node.id,
+      workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, canvasNodes, selectedNodeId: node.id } : w) };
+  }),
+  addCanvasNodeToWorkspace: (workspaceId, node) => set((state) => {
+    const target = state.workspaces.find((workspace) => workspace.id === workspaceId);
+    const baseNodes = state.activeWorkspaceId === workspaceId ? state.canvasNodes : (target?.canvasNodes ?? []);
+    const canvasNodes = upsertCanvasNodeList(baseNodes, node);
+    return {
+      workspaces: state.workspaces.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, canvasNodes, selectedNodeId: node.id }
+        : workspace),
+      ...(state.activeWorkspaceId === workspaceId ? { canvasNodes, selectedNodeId: node.id } : {}),
+    };
+  }),
+  moveCanvasNode: (id, x, y) => set((state) => {
+    const canvasNodes = state.canvasNodes.map((n) => n.id === id ? { ...n, x, y } : n);
+    return { canvasNodes, workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, canvasNodes } : w) };
+  }),
+  removeCanvasNode: (id) => set((state) => {
+    const canvasNodes = state.canvasNodes.filter((n) => n.id !== id);
+    const selectedNodeId = state.selectedNodeId === id ? null : state.selectedNodeId;
+    return { canvasNodes, selectedNodeId, workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, canvasNodes, selectedNodeId } : w) };
+  }),
+  selectCanvasNode: (id) => set((state) => ({ selectedNodeId: id, workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, selectedNodeId: id } : w) })),
+  setCanvasViewport: (viewport: CanvasViewport | null) => set((state) => ({ canvasViewport: viewport, workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, canvasViewport: viewport ?? undefined } : w) })),
+  clearCanvas: () => set((state) => ({
+    canvasNodes: [], selectedNodeId: null, currentImage: null, canvasViewport: null,
+    compareB: null, compareSplit: 0.5, resultGridOpen: false,
+    maskDataURL: null, strokes: [], annotations: [], selectedAnnotationId: null,
+    undoStack: [], redoStack: [],
+    workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId
+      ? { ...w, canvasNodes: [], selectedNodeId: null, currentImageId: null, canvasViewport: undefined, resultGridOpen: false }
+      : w),
+  })),
   savePreset: (name) => mediaActions.savePreset(name),
   overwritePreset: (id) => mediaActions.overwritePreset(id),
   updatePreset: (id, patch) => mediaActions.updatePreset(id, patch),

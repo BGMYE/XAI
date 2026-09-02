@@ -241,6 +241,24 @@ export function AndroidUpstreamProfileForm({
         ) : null}
       </AndroidField>
 
+      <AndroidField label="视频模型 ID" hint="必须显式填写；不会使用文本或图像模型替代。也可直接手填上游要求的模型 ID。">
+        <input
+          type="text"
+          value={draft.videoModelID}
+          onChange={(event) => onPatchDraft({ videoModelID: event.target.value })}
+          placeholder="例如 sora-2"
+          className="focus-ring android-upstream-input font-mono-token"
+          spellCheck={false}
+        />
+        {modelCatalog && modelCatalog.video.length > 0 ? (
+          <AndroidModelSuggestions
+            models={modelCatalog.video}
+            selectedID={draft.videoModelID}
+            onSelect={(id) => onPatchDraft({ videoModelID: id })}
+          />
+        ) : null}
+      </AndroidField>
+
       <AndroidField label="并发数量限制" hint="0 表示不限制；正整数会限制同一配置跨标签页的并发任务。">
         <div className="android-upstream-stepper">
           <button

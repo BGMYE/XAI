@@ -352,6 +352,27 @@ export function UpstreamProfileEditor({
         ) : null}
       </Field>
 
+      <Field label="视频模型 ID">
+        <input
+          type="text"
+          value={draft.videoModelID}
+          placeholder="必须显式填写，例如 sora-2"
+          onChange={(e) => onPatchDraft({ videoModelID: e.target.value })}
+          spellCheck={false}
+          className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
+        />
+        {modelCatalog && modelCatalog.video.length > 0 ? (
+          <ModelSuggestions
+            title="识别到的视频模型"
+            models={modelCatalog.video}
+            selectedID={draft.videoModelID}
+            usesFluentUI={usesFluentUI}
+            onSelect={(id) => onPatchDraft({ videoModelID: id })}
+          />
+        ) : null}
+        <Hint>视频生成不提供默认模型，也不会使用文本或图像模型替代；可直接手填上游要求的模型 ID。</Hint>
+      </Field>
+
       <Field label="并发数量限制">
         <input
           type="number"

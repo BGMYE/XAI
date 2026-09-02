@@ -1,6 +1,6 @@
-import { ClipboardCopy, Folder, RotateCw, Save, Sparkles } from "lucide-react";
+import { ClipboardCopy, Folder, RotateCw, Save, Sparkles, Cpu } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
-import { BeginNativeFileDrag, OpenOutputDir } from "../../platform/runtime/host";
+import { BeginNativeFileDrag, OpenOutputDir, getHostCapabilities } from "../../platform/runtime/host";
 import { submitShortcutLabel } from "../../platform";
 import { historyPreviewSrc, useBlobURL } from "../../lib/images";
 import {
@@ -20,7 +20,12 @@ export function ResultDetailDrawer() {
   const close = useStudioStore((s) => s.closeResultDetail);
   const setField = useStudioStore((s) => s.setField);
   const pushToast = useStudioStore((s) => s.pushToast);
+  const selectBatchResult = useStudioStore((s) => s.selectBatchResult);
+  const upscaleCurrent = useStudioStore((s) => s.upscaleCurrent);
+  const upscaleRunning = useStudioStore((s) => s.upscaleRunning);
+  const upscaleProgress = useStudioStore((s) => s.upscaleProgress);
   const { usesFluentUI, targetPlatform } = usePlatform();
+  const localUpscaleAvailable = getHostCapabilities().localUpscale;
 
   if (!item) return null;
   const detail = item;
@@ -97,6 +102,20 @@ export function ResultDetailDrawer() {
           {androidTarget.isAndroid && (
             <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">{androidSaveHint()}</p>
           )}
+          <div className="mt-3 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
+            <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300"><Cpu className="h-3 w-3" /> 本地 CPU 放大</div>
+            <p className="mb-2 text-[10px] leading-relaxed text-zinc-500">高质量插值放大（非AI神经超分）</p>
+            {!localUpscaleAvailable && <p className="mb-2 text-[10px] text-amber-600">当前浏览器/Android 宿主不可用（需要 Wails 桌面原生绑定）</p>}
+            <div className="flex flex-wrap gap-1.5">
+              {[2, 4].map((scale) => (
+                <button key={scale} type="button" disabled={upscaleRunning || !detail.savedPath || !localUpscaleAvailable} onClick={async () => { await selectBatchResult(detail); await upscaleCurrent(scale as 2 | 4); }} className="rounded-full border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:text-zinc-300">
+                  {upscaleRunning ? `${upscaleProgress}%` : `${scale}x`}
+                </button>
+              ))}
+            </div>
+            {upscaleRunning && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.08]"><div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${upscaleProgress}%` }} /></div>}
+            {detail.upscaleAcceleration && <p className="mt-2 text-[10px] text-zinc-500">加速: <span className="font-mono-token">{detail.upscaleAcceleration}</span></p>}
+          </div>
         </section>
 
         <div className="space-y-4">

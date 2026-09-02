@@ -17,8 +17,8 @@ import (
 	"github.com/yuanhua/image-gptcodex/pkg/client"
 )
 
-const repoURL = "https://github.com/RoseKhlifa/Image-Studio"
-const issuesURL = "https://github.com/RoseKhlifa/Image-Studio/issues"
+const repoURL = "https://github.com/BGMYE/XAI"
+const issuesURL = "https://github.com/BGMYE/XAI/issues"
 const licenseURL = "https://www.gnu.org/licenses/agpl-3.0.html"
 
 type simplePaneContract struct {

@@ -19,8 +19,9 @@ import (
 
 const (
 	defaultAppVersion       = "0.1.5"
-	releasesPageURL         = "https://github.com/RoseKhlifa/Image-Studio/releases"
-	latestReleaseAPIURL     = "https://api.github.com/repos/RoseKhlifa/Image-Studio/releases/latest"
+	canonicalGitHubRepo     = "BGMYE/XAI"
+	releasesPageURL         = "https://github.com/" + canonicalGitHubRepo + "/releases"
+	latestReleaseAPIURL     = "https://api.github.com/repos/" + canonicalGitHubRepo + "/releases/latest"
 	latestReleaseAPIURLEnv  = "IMAGE_STUDIO_LATEST_RELEASE_API_URL"
 	latestReleaseAPIVersion = "2022-11-28"
 	updateRequestTimeout    = 8 * time.Second

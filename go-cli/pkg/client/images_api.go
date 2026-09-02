@@ -115,14 +115,31 @@ type imagesAPIDatum struct {
 	RevisedPrompt string `json:"revised_prompt"`
 }
 
+type imagesAPIError struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+}
+
+func (e *imagesAPIError) UnmarshalJSON(data []byte) error {
+	var message string
+	if err := json.Unmarshal(data, &message); err == nil {
+		e.Message = message
+		return nil
+	}
+	type alias imagesAPIError
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*e = imagesAPIError(decoded)
+	return nil
+}
+
 type imagesAPIResponse struct {
 	Created int              `json:"created"`
 	Data    []imagesAPIDatum `json:"data"`
-	Error   *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-	} `json:"error,omitempty"`
+	Error   *imagesAPIError  `json:"error,omitempty"`
 }
 
 type imageStreamExtractor struct {

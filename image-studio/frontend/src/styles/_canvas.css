@@ -827,3 +827,10 @@ html.dark .batch-grid-pending-stage-card {
   50%  { transform: translateX(120%); }
   100% { transform: translateX(120%); }
 }
+
+/* Warm Claude canvas chrome; keep artwork itself neutral and readable. */
+html[data-ui-family="apple"] .stage-host {
+  background-color: #f5efe9;
+  background-image: radial-gradient(circle at 20% 0%, rgba(255,255,255,.7), transparent 45%), linear-gradient(135deg, rgba(193,95,60,.06), transparent 55%);
+}
+html.dark[data-ui-family="apple"] .stage-host { background-color: #211b18; }

@@ -262,6 +262,7 @@ export function UpstreamConfigModal({
           baseURL: draft.baseURL,
           textModelID: draft.textModelID,
           imageModelID: draft.imageModelID,
+          videoModelID: draft.videoModelID,
           reasoningEffort: draft.reasoningEffort,
           concurrencyLimit: draft.concurrencyLimit,
           fallbackProfileId: draft.fallbackProfileId,

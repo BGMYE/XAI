@@ -58,8 +58,12 @@ import type {
   PromptImportActivationLike,
   PromptImportPayloadLike,
   PromptOptimizeOptionsLike,
+  CreateVideoOptionsLike,
+  PollVideoOptionsLike,
+  VideoResultLike,
   SelectFileResponseLike,
   SelectFilesResponseLike,
+  UpscaleResultLike,
 } from "./hostTypes.ts";
 
 const remoteJobControllers = new Map<string, AbortController>();
@@ -144,52 +148,57 @@ async function startRemoteJob(options: GenerateOptionsLike): Promise<JobStartedL
   const jobId = options.requestedJobId?.trim() || makeJobID();
   const controller = new AbortController();
   remoteJobControllers.set(jobId, controller);
-  void (async () => {
-    try {
-      const result = await runRemoteImageJob({ payload: {
-        ...options,
-        requestPolicy: normalizeRequestPolicy(options.requestPolicy),
-        imagesNewAPICompat: options.imagesNewAPICompat === true,
-        allowInsecureConnection: options.allowInsecureConnection === true,
-      }, sourceImages: options.sourceImages }, {
-        signal: controller.signal,
-        onLog: (line) => emitLocalEvent(`log:${jobId}`, line),
-        onProgress: (stage, elapsed, bytes) => emitLocalEvent(`progress:${jobId}`, { stage, elapsed, bytes }),
-        onPartialImage: (partial) => emitLocalEvent(`preview:${jobId}`, {
-          imageB64: partial.imageB64,
-          revisedPrompt: partial.revisedPrompt || "",
-          partialImageIndex: partial.partialImageIndex ?? -1,
-          mode: options.mode || "generate",
-          prompt: options.prompt,
-        }),
-      });
-      if (controller.signal.aborted) return;
-      const saved = registerVirtualImage({
-        imageB64: result.imageB64,
-        suggestedName: `image-${options.mode || "generate"}.${options.outputFormat || "png"}`,
-      });
-      emitLocalEvent(`result:${jobId}`, {
-        imageB64: result.imageB64,
-        revisedPrompt: result.revisedPrompt,
-        sourceEvent: result.sourceEvent,
-        savedPath: saved.path,
-        rawPath: result.rawPath,
-        mode: result.mode,
-        prompt: result.prompt,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      const typed = error instanceof RemoteKernelError
-        ? error
-        : new RemoteKernelError(String((error as any)?.message || error));
-      emitLocalEvent(`error:${jobId}`, {
-        message: typed.message,
-        rawPath: typed.rawPath || null,
-      });
-    } finally {
-      remoteJobControllers.delete(jobId);
-    }
-  })();
+  // Defer the remote run by one microtask so callers that await Generate/Edit
+  // can attach lifecycle listeners before a fast mocked or cached upstream
+  // emits preview/result events. Desktop Wails jobs already return before work.
+  queueMicrotask(() => {
+    void (async () => {
+      try {
+        const result = await runRemoteImageJob({ payload: {
+          ...options,
+          requestPolicy: normalizeRequestPolicy(options.requestPolicy),
+          imagesNewAPICompat: options.imagesNewAPICompat === true,
+          allowInsecureConnection: options.allowInsecureConnection === true,
+        }, sourceImages: options.sourceImages }, {
+          signal: controller.signal,
+          onLog: (line) => emitLocalEvent(`log:${jobId}`, line),
+          onProgress: (stage, elapsed, bytes) => emitLocalEvent(`progress:${jobId}`, { stage, elapsed, bytes }),
+          onPartialImage: (partial) => emitLocalEvent(`preview:${jobId}`, {
+            imageB64: partial.imageB64,
+            revisedPrompt: partial.revisedPrompt || "",
+            partialImageIndex: partial.partialImageIndex ?? -1,
+            mode: options.mode || "generate",
+            prompt: options.prompt,
+          }),
+        });
+        if (controller.signal.aborted) return;
+        const saved = registerVirtualImage({
+          imageB64: result.imageB64,
+          suggestedName: `image-${options.mode || "generate"}.${options.outputFormat || "png"}`,
+        });
+        emitLocalEvent(`result:${jobId}`, {
+          imageB64: result.imageB64,
+          revisedPrompt: result.revisedPrompt,
+          sourceEvent: result.sourceEvent,
+          savedPath: saved.path,
+          rawPath: result.rawPath,
+          mode: result.mode,
+          prompt: result.prompt,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        const typed = error instanceof RemoteKernelError
+          ? error
+          : new RemoteKernelError(String((error as any)?.message || error));
+        emitLocalEvent(`error:${jobId}`, {
+          message: typed.message,
+          rawPath: typed.rawPath || null,
+        });
+      } finally {
+        remoteJobControllers.delete(jobId);
+      }
+    })();
+  });
   return { jobId };
 }
 
@@ -261,6 +270,7 @@ export function getHostCapabilities(): HostCapabilities {
     nativeHistoryFileIO: kind === "wails-desktop" || canInvokeAndroidMethod("ImportHistoryFromFile"),
     nativeOutputDirectoryPicker: hasServiceMethod("ChooseOutputDir") && kind !== "android-shell",
     secureCredentialStore: kind === "wails-desktop",
+    localUpscale: kind === "wails-desktop" && hasServiceMethod("UpscaleImage"),
   };
 }
 
@@ -311,6 +321,26 @@ export function Edit(options: GenerateOptionsLike): Promise<JobStartedLike> {
     return invokeService<JobStartedLike>(unsupportedMessage, "Edit", withoutRuntimeSourceImages(options));
   }
   return startRemoteJob({ ...options, mode: "edit" });
+}
+
+export function CreateVideo(options: CreateVideoOptionsLike): Promise<VideoResultLike> {
+  if (hasServiceMethod("CreateVideo")) {
+    return invokeService<VideoResultLike>(unsupportedMessage, "CreateVideo", options);
+  }
+  if (canInvokeAndroidMethod("CreateVideo")) {
+    return invokeAndroid<VideoResultLike>(unsupportedMessage, "CreateVideo", options);
+  }
+  return Promise.reject(new Error(unsupportedMessage("CreateVideo")));
+}
+
+export function PollVideo(options: PollVideoOptionsLike): Promise<VideoResultLike> {
+  if (hasServiceMethod("PollVideo")) {
+    return invokeService<VideoResultLike>(unsupportedMessage, "PollVideo", options);
+  }
+  if (canInvokeAndroidMethod("PollVideo")) {
+    return invokeAndroid<VideoResultLike>(unsupportedMessage, "PollVideo", options);
+  }
+  return Promise.reject(new Error(unsupportedMessage("PollVideo")));
 }
 
 export function OptimizePrompt(options: PromptOptimizeOptionsLike): Promise<string> {
@@ -579,6 +609,14 @@ export function CropImage(path: string, x: number, y: number, width: number, hei
     return invokeService<ImageTransformResultLike>(unsupportedMessage, "CropImage", path, x, y, width, height);
   }
   return runPersistedVirtualTransform(path, (virtualPath) => cropVirtualImage(virtualPath, x, y, width, height));
+}
+
+/** Desktop-only local CPU upscale; browser and Android do not emulate this API. */
+export function UpscaleImage(path: string, scale: 2 | 4): Promise<UpscaleResultLike> {
+  if (detectHostKind() !== "wails-desktop" || !hasServiceMethod("UpscaleImage")) {
+    return Promise.reject(new Error(unsupportedMessage("UpscaleImage（本地 CPU 放大）")));
+  }
+  return invokeService<UpscaleResultLike>(unsupportedMessage, "UpscaleImage", path, scale);
 }
 
 export function ReadImageAsBase64(path: string): Promise<string> {

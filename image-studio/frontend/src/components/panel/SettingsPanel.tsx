@@ -25,9 +25,9 @@ import {
 } from "./settingsPrimitives";
 import { importCompletionSoundFile } from "../../lib/completionSound";
 
-const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
-const RELEASES_URL = "https://github.com/RoseKhlifa/Image-Studio/releases";
-const ISSUES_URL = "https://github.com/RoseKhlifa/Image-Studio/issues";
+const REPO_URL = "https://github.com/BGMYE/XAI";
+const RELEASES_URL = "https://github.com/BGMYE/XAI/releases";
+const ISSUES_URL = "https://github.com/BGMYE/XAI/issues";
 const LICENSE_URL = "https://www.gnu.org/licenses/agpl-3.0.html";
 
 type DesktopSettingsSectionId =

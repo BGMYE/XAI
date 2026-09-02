@@ -352,9 +352,19 @@ func createAVIFThumbnailFromBase64(imageB64, thumbPath string, maxEdge int) (wid
 	if comma := strings.Index(imageB64, ","); comma >= 0 {
 		imageB64 = imageB64[comma+1:]
 	}
+	if base64.StdEncoding.DecodedLen(len(imageB64)) > maxImageSnapshotBytes {
+		return 0, 0, fmt.Errorf("preview image exceeds %d byte limit", maxImageSnapshotBytes)
+	}
 	data, err := base64.StdEncoding.DecodeString(imageB64)
 	if err != nil {
 		return 0, 0, fmt.Errorf("decode preview base64: %w", err)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, fmt.Errorf("decode preview dimensions: %w", err)
+	}
+	if err := validateDecodedImageDimensions(cfg.Width, cfg.Height); err != nil {
+		return 0, 0, err
 	}
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -401,11 +411,10 @@ func createAVIFThumbnailFromImage(src image.Image, thumbPath string, maxEdge int
 }
 
 func imageConfig(path string) (image.Config, error) {
-	f, err := os.Open(path)
+	data, err := readImageSnapshot(path)
 	if err != nil {
 		return image.Config{}, err
 	}
-	defer f.Close()
-	cfg, _, err := image.DecodeConfig(f)
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	return cfg, err
 }

@@ -12,6 +12,7 @@ export type UpstreamModelCatalog = {
   all: UpstreamModelDescriptor[];
   text: UpstreamModelDescriptor[];
   image: UpstreamModelDescriptor[];
+  video: UpstreamModelDescriptor[];
 };
 
 function normalizeModelDescriptor(input: UpstreamModelDescriptorLike): UpstreamModelDescriptor | null {
@@ -51,8 +52,17 @@ function looksLikeImageModel(model: UpstreamModelDescriptor): boolean {
     || haystack.includes("vision-image");
 }
 
+function looksLikeVideoModel(model: UpstreamModelDescriptor): boolean {
+  const haystack = `${model.id} ${model.displayName} ${model.object} ${model.ownedBy}`.toLowerCase();
+  return /(^|[^a-z0-9])(sora|veo|kling|runway|hailuo|minimax-video|wan[-_.]?\d|luma|ray[-_.]?\d|pika|vidu)([^a-z0-9]|$)/.test(haystack)
+    || haystack.includes("video-generation")
+    || haystack.includes("video_generation")
+    || haystack.includes("text-to-video")
+    || haystack.includes("image-to-video");
+}
+
 function looksLikeTextModel(model: UpstreamModelDescriptor): boolean {
-  return !looksLikeImageModel(model);
+  return !looksLikeImageModel(model) && !looksLikeVideoModel(model);
 }
 
 function scoreTextModel(model: UpstreamModelDescriptor): number {
@@ -78,6 +88,15 @@ function scoreImageModel(model: UpstreamModelDescriptor): number {
   return 100;
 }
 
+function scoreVideoModel(model: UpstreamModelDescriptor): number {
+  const id = model.id.toLowerCase();
+  if (id.startsWith("sora")) return 0;
+  if (id.startsWith("veo")) return 1;
+  if (id.startsWith("kling")) return 2;
+  if (id.startsWith("runway")) return 3;
+  return 100;
+}
+
 function sortModels(models: UpstreamModelDescriptor[], scorer: (model: UpstreamModelDescriptor) => number) {
   return [...models].sort((a, b) => {
     const scoreDiff = scorer(a) - scorer(b);
@@ -88,12 +107,14 @@ function sortModels(models: UpstreamModelDescriptor[], scorer: (model: UpstreamM
 
 export function buildUpstreamModelCatalog(input: UpstreamModelDescriptorLike[] = []): UpstreamModelCatalog {
   const all = sortModels(uniqueModels(input), (model) => {
+    if (looksLikeVideoModel(model)) return 75 + scoreVideoModel(model);
     if (looksLikeImageModel(model)) return 50 + scoreImageModel(model);
     return scoreTextModel(model);
   });
   const text = sortModels(all.filter(looksLikeTextModel), scoreTextModel);
   const image = sortModels(all.filter(looksLikeImageModel), scoreImageModel);
-  return { all, text, image };
+  const video = sortModels(all.filter(looksLikeVideoModel), scoreVideoModel);
+  return { all, text, image, video };
 }
 
 export function preferredModelsForAPIMode(catalog: UpstreamModelCatalog, apiMode: APIMode) {

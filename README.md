@@ -2,10 +2,10 @@
   <img src="./docs/picture/image-edit-1137ff20.png" alt="Image Studio" width="180" />
 </p>
 
-# Image Studio
+# XAI · Image Studio
 
-> 开源图像生成 / 编辑客户端 · Wails(Go + React/TS) 桌面端 + Android WebView 壳层 ·
-> 支持 Responses API SSE / WebSocket mode 与标准 Images API
+> BGMYE/XAI 中的开源图像生成 / 编辑客户端 · Wails（Go + React/TS）桌面端 + Android WebView 壳层 ·
+> 支持 Responses API 的 SSE / WebSocket mode 与标准 Images API
 
 ![license](https://img.shields.io/badge/license-AGPLv3-b22222)
 ![go](https://img.shields.io/badge/go-%3E%3D1.25-00ADD8)
@@ -15,7 +15,16 @@
 
 Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推理在 Cloudflare / Nginx 后面容易遇到的 524/504 断连问题。Responses API 模式支持 `HTTP SSE` 与 `WebSocket mode` 两种传输；Images API 模式则兼容标准 `/v1/images/generations` 与 `/v1/images/edits`。
 
-项目不内置任何默认上游。首次启动需要你自己填写 BASE_URL、API Key、文本模型与图像模型。
+项目不内置默认上游，也不提供公共 `BaseURL` 或 API Key。首次启动需要填写你有权使用的 OpenAI 兼容 `BaseURL`、API Key、文本模型与图像模型；生成请求和输入素材会发往该外部服务，其可用性、计费、隐私和模型能力由服务提供方决定。
+
+## 当前支持与边界
+
+- **Windows**：Wails 桌面端依赖 WebView2。仓库可构建 x64 / ARM64 产物，但 Release 或 Actions 中是否存在对应安装包、是否经过 Authenticode 签名，以 [BGMYE/XAI Releases](https://github.com/BGMYE/XAI/releases) 的实际资产为准；未签名构建可能被 SmartScreen 或 Smart App Control 拦截。
+- **macOS**：Wails 桌面端可构建 universal app。未使用有效 Apple Developer ID 签名并完成公证的包，可能被 Gatekeeper 阻止；仓库中的本地自签不等于 Apple 公证。
+- **外部上游**：应用只是客户端，不附送模型额度或代理服务。`BaseURL` 必须与所选 Responses API / Images API 形态兼容，API Key 也必须具备相应模型权限；连接成功不代表每个扩展参数都被上游实现。
+- **无限画布**：桌面端使用持久化世界坐标保存图片与视频节点，支持平移、以指针为中心缩放、节点选择/拖拽/删除、适配全部，以及按工作区保存节点与视口。蒙版和标注仍作用于当前选中的图片节点；视频节点可直接预览，无法跨域预览时会明确显示回退入口。
+- **外部视频**：上游配置可填写独立且显式的 `videoModelID`。桌面端通过当前 profile 的 `BaseURL + API Key + videoModelID` 提交 `/v1/videos`，轮询 `/v1/videos/{id}`，接受 URL 或 `b64_json` 结果，并把结果追加到无限画布。应用不会把视频模型静默替换成图像模型，也不内置本地视频模型、剪辑或转码。
+- **本地 CPU 放大**：桌面端提供 2x/4x 的 Catmull-Rom 高质量插值放大，结果会作为新图片保留并追加到画布。该功能只使用本机 CPU，真实标识为 `cpu-catmullrom`，**不是**神经网络/生成式 AI 超分。
 
 当前没有独立部署的在线 Web 版。仓库里的浏览器预览主要用于前端调试和 target platform 预览，不等同于可直接对外提供服务的 SaaS Web 端。
 
@@ -24,11 +33,11 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 ## 快速上手
 
 1. 安装应用
-   - 稳定版本:到 [RoseKhlifa/Image-Studio Releases](https://github.com/RoseKhlifa/Image-Studio/releases) 下载。
-   - 抢先体验当前分支的最新改动:到 [DR-lin-eng/Image-Studio Actions · release.yml](https://github.com/DR-lin-eng/Image-Studio/actions/workflows/release.yml) 下载最近一次成功构建的 artifact。
+   - 稳定版本：到 [BGMYE/XAI Releases](https://github.com/BGMYE/XAI/releases) 查看当前已发布资产。
+   - 抢先体验当前分支的最新改动：到 [BGMYE/XAI Actions · release.yml](https://github.com/BGMYE/XAI/actions/workflows/release.yml) 查看最近一次成功构建的 artifact。
      Windows 上这类 CI `exe` 如果没有签名，可能会被 Win11 Smart App Control / SmartScreen 拦截，因此只建议用于内部测试。
    - 各平台安装包区别、命名规则和选择建议见 [docs/packages.md](./docs/packages.md)。
-2. 首次启动后打开「上游配置」，填写 API 形态、BASE_URL、API Key、文本模型 ID、图像模型 ID。
+2. 首次启动后打开「上游配置」，填写 API 形态、BASE_URL、API Key、文本模型 ID、图像模型 ID；需要生视频时再显式填写视频模型 ID。
 3. 根据上游能力选择 API 形态
    - Responses API:更适合长推理、抗 524/504。
    - Images API:更适合只提供标准图像接口的兼容上游。
@@ -91,4 +100,4 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
   <a href="https://muxueai.pro"><img src="./docs/picture/%E8%B5%9E%E5%8A%A9-muxueai.pro.png" alt="赞助商 · muxueai.pro" width="720"></a>
 </p>
 
-[![Star History Chart](https://api.star-history.com/svg?repos=RoseKhlifa/Image-Studio&type=Date)](https://star-history.com/#RoseKhlifa/Image-Studio&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=BGMYE/XAI&type=Date)](https://star-history.com/#BGMYE/XAI&Date)

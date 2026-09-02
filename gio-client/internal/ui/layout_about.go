@@ -101,7 +101,7 @@ func (a *App) layoutAboutModal(gtx layout.Context) layout.Dimensions {
 					return a.label(gtx, "开源的图片生成 / 编辑客户端。数据都保存在本地机器，不上传任何服务器，API Key 走系统安全存储。", unit.Sp(11), fluent.textMuted, font.Normal)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.label(gtx, "Copyright © 2026 RoseKhlifa · 本程序按 GNU AGPL v3.0 发布，不提供任何担保。", unit.Sp(10), fluent.textDim, font.Normal)
+					return a.label(gtx, "Copyright © 2026 BGMYE/XAI contributors · 本程序按 GNU AGPL v3.0 发布，不提供任何担保。", unit.Sp(10), fluent.textDim, font.Normal)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return a.helpInfoCard(gtx, "更新", "", func(gtx layout.Context) layout.Dimensions {

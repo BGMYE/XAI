@@ -7,6 +7,7 @@ import {
   RegisterMediaAsset,
   ReadImageAsBase64,
   RotateImage,
+  UpscaleImage,
 } from "../platform/runtime/host";
 import { exportHistoryForPlatform } from "../platform/android/bridge";
 import {
@@ -35,6 +36,7 @@ import {
   withMediaAssetRef,
 } from "./studioStore.runtime";
 import { patchWorkspaceRuntime } from "./workspaceRuntime";
+import { createCanvasNode, upsertCanvasNodeList } from "./canvasNodes";
 
 type StateAdapter = {
   getState: () => StudioState;
@@ -48,6 +50,94 @@ export function createMediaActions(store: StateAdapter) {
   }
 
   return {
+    async upscaleCurrent(scale: 2 | 4) {
+      const snapshot = store.getState();
+      if (snapshot.upscaleRunning) return;
+      const source = snapshot.currentImage;
+      if (!source) { snapshot.pushToast("当前没有图片", "warn"); return; }
+      const workspaceId = snapshot.activeWorkspaceId;
+      store.setState({ upscaleRunning: true, upscaleProgress: 5, upscaleScale: scale });
+      try {
+        const current = await materializeHistoryItem(source, {
+          setState: (fn) => store.setState((state) => fn(state)),
+        });
+        if (!current?.savedPath) throw new Error("当前图无法落盘为本地托管文件");
+        store.setState({ upscaleProgress: 35 });
+        const result = await UpscaleImage(current.savedPath, scale);
+        store.setState({ upscaleProgress: 85 });
+        const ref = result.mediaAssetRef;
+        const createdAt = Date.now();
+        const item: HistoryItem = withMediaAssetRef({
+          ...current,
+          id: genId(),
+          imageB64: undefined,
+          imageBlob: null,
+          previewBlob: null,
+          previewOnly: true,
+          prompt: `(放大 ${scale}x) ${current.prompt || current.id}`,
+          parentId: current.id,
+          createdAt,
+          savedPath: result.path,
+          size: `${result.width}x${result.height}` as HistoryItem["size"],
+          upscaleAcceleration: result.acceleration,
+          upscaleScale: scale,
+          imageId: ref.imageId,
+          previewUrl: ref.previewUrl,
+          fullUrl: ref.fullUrl,
+          previewWidth: result.width,
+          previewHeight: result.height,
+        }, ref);
+        const targetWorkspace = store.getState().workspaces.find((workspace) => workspace.id === workspaceId);
+        const targetNodes = targetWorkspace?.canvasNodes ?? snapshot.canvasNodes;
+        const canvasNode = createCanvasNode({
+          id: item.id,
+          type: "image",
+          mediaId: item.imageId,
+          src: item.fullUrl || item.previewUrl,
+          label: `${scale}x 放大`,
+          x: targetNodes.length * 36,
+          y: targetNodes.length * 36,
+          width: result.width,
+          height: result.height,
+          createdAt,
+        });
+        let nextHistory: HistoryItem[] = [];
+        let sameTarget = false;
+        store.setState((state) => {
+          nextHistory = trimHistory([item, ...state.history]);
+          const activeTarget = state.activeWorkspaceId === workspaceId;
+          sameTarget = activeTarget && state.currentImage?.id === source.id;
+          const canvasNodes = activeTarget ? upsertCanvasNodeList(state.canvasNodes, canvasNode) : state.canvasNodes;
+          const workspaces = state.workspaces.map((workspace) => {
+            if (workspace.id !== workspaceId) return workspace;
+            const workspaceNodes = upsertCanvasNodeList(workspace.canvasNodes ?? targetNodes, canvasNode);
+            return {
+              ...workspace,
+              canvasNodes: workspaceNodes,
+              ...(sameTarget ? { selectedNodeId: item.id, currentImageId: item.id } : {}),
+            };
+          });
+          return {
+            history: nextHistory,
+            workspaces,
+            upscaleProgress: 100,
+            ...(activeTarget ? { canvasNodes } : {}),
+            ...(sameTarget ? { currentImage: item, resultDetail: item, selectedNodeId: item.id } : {}),
+          };
+        });
+        await persistHistoryItems([item]).catch(() => undefined);
+        persistTrimmedHistory(nextHistory);
+        snapshot.pushToast(
+          `已完成 ${scale}x 放大 · ${result.acceleration}${sameTarget ? "" : " · 已加入原工作区"}`,
+          "success",
+        );
+      } catch (e: any) {
+        snapshot.pushToast(`放大失败:${e?.message ?? e}`, "error");
+      } finally {
+        store.setState({ upscaleRunning: false, upscaleProgress: 0, upscaleScale: null });
+      }
+    },
+
     async setCompareB(item: HistoryItem | null) {
       if (!item) {
         store.setState({ compareB: null, compareSplit: 0.5 });
@@ -90,13 +180,17 @@ export function createMediaActions(store: StateAdapter) {
       const state = store.getState();
       store.setState({
         currentImage: { ...full, previewOnly: false },
+        selectedNodeId: full.id,
         resultGridOpen: false,
         compareB: null,
         maskDataURL: null,
         annotations: [],
+        undoStack: [],
+        redoStack: [],
         tool: "pan",
         workspaces: patchWorkspaceRuntime(state.workspaces, state.activeWorkspaceId, {
           currentImageId: full.id,
+          selectedNodeId: full.id,
           resultGridOpen: false,
         }),
       });
