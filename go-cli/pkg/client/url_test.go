@@ -53,6 +53,14 @@ func TestValidateBaseURLWithSecurityAllowsRemoteHTTP(t *testing.T) {
 	}
 }
 
+func TestValidateBaseURLRejectsCredentialAndURLMetadata(t *testing.T) {
+	for _, raw := range []string{"https://user:pass@example.com", "https://example.com?x=1", "https://example.com#frag"} {
+		if _, err := ValidateBaseURL(raw); err == nil {
+			t.Fatalf("%q should be rejected", raw)
+		}
+	}
+}
+
 func TestOpenAIAPIEndpointKeepsVersionedOpenAICompatibilityBase(t *testing.T) {
 	t.Parallel()
 

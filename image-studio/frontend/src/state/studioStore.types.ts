@@ -37,6 +37,7 @@ import type {
   Workspace,
 } from "../types/domain";
 import type { RunningJobMeta } from "./workspaceRuntime";
+import type { CanvasNode, CanvasViewport } from "./canvasNodes";
 
 export interface ModeConfig {
   baseURL: string;
@@ -127,9 +128,15 @@ export interface StudioState {
   errorCanRetry: boolean;
   errorRawPath: string | null;
   isRunning: boolean;
+  upscaleRunning: boolean;
+  upscaleProgress: number;
+  upscaleScale: 2 | 4 | null;
   lastPayload: GenerateOptionsLike | null;
   runningJobMeta: Record<string, RunningJobMeta>;
   currentImage: HistoryItem | null;
+  canvasNodes: CanvasNode[];
+  selectedNodeId: string | null;
+  canvasViewport: CanvasViewport | null;
   history: HistoryItem[];
   historyHasMore: boolean;
   historyLoading: boolean;
@@ -311,4 +318,12 @@ export interface StudioState {
   rotateCurrent: (degrees: number) => Promise<void>;
   flipCurrent: (horizontal: boolean) => Promise<void>;
   cropToRect: (x: number, y: number, w: number, h: number) => Promise<void>;
+  upscaleCurrent: (scale: 2 | 4) => Promise<void>;
+  addCanvasNode: (node: CanvasNode) => void;
+  addCanvasNodeToWorkspace: (workspaceId: string, node: CanvasNode) => void;
+  moveCanvasNode: (id: string, x: number, y: number) => void;
+  removeCanvasNode: (id: string) => void;
+  selectCanvasNode: (id: string | null) => void;
+  setCanvasViewport: (viewport: CanvasViewport | null) => void;
+  clearCanvas: () => void;
 }

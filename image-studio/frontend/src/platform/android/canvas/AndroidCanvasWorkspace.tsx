@@ -70,6 +70,7 @@ export function AndroidCanvasWorkspace() {
     undoStack,
     redoStack,
     setField,
+    clearCanvas,
     undo,
     redo,
     importMaskImage,
@@ -314,7 +315,7 @@ export function AndroidCanvasWorkspace() {
             <DockIconButton title="设为图生图源图" disabled={!hasImage} onClick={() => currentImage && runAction(() => reuseAsSource(currentImage), 8)}>
               <Scissors />
             </DockIconButton>
-            <DockIconButton title="清空画板" disabled={!hasImage} danger onClick={() => runAction(() => setField("currentImage", null), 8)}>
+            <DockIconButton title="清空画板" disabled={!hasImage} danger onClick={() => runAction(clearCanvas, 8)}>
               <Trash2 />
             </DockIconButton>
           </div>

@@ -195,7 +195,7 @@ export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void
             <p>
               <a
                 style={{ color: "var(--accent)", cursor: "pointer", textDecoration: "underline" }}
-                onClick={() => openExternalURLForPlatform("https://github.com/RoseKhlifa/Image-Studio/issues", OpenExternalURL).catch(() => undefined)}
+                onClick={() => openExternalURLForPlatform("https://github.com/BGMYE/XAI/issues", OpenExternalURL).catch(() => undefined)}
               >GitHub Issues</a> · 项目采用 GNU AGPL v3.0 开源
             </p>
           </div>

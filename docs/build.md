@@ -12,8 +12,8 @@
 ## 克隆源码
 
 ```bash
-git clone https://github.com/RoseKhlifa/Image-Studio.git
-cd Image-Studio
+git clone https://github.com/BGMYE/XAI.git
+cd XAI
 ```
 
 如果你正在跟随当前开发分支而不是上游正式 release，建议改用你实际工作的 fork 地址。
@@ -422,8 +422,22 @@ worker 端口等环境指纹，并列出每条 parity check 的通过/失败情�
 - Windows 额外产出 `image-studio-<version>-windows-x64.msix`、`image-studio-<version>-windows-arm64.msix` 与 `image-studio-<version>-windows.msixbundle`，供 Microsoft Store / 企业分发使用。
 - 单独构建一个 Android release APK。
 - tag 为 `v*` 时将所有产物附加到 GitHub Release。
+- macOS 额外产出 `image-studio-<version>-macos-universal.dmg`；DMG 内含 `/Applications` 快捷方式，用户可直接拖拽安装。
 
-### Windows 签名
+### macOS 签名与公证
+
+release workflow 会先对 `.app` 做 Developer ID 签名、公证与 staple，再打包 ZIP/DMG；DMG 生成后会再次对 DMG 本身签名、公证并 staple，上传步骤只有在这条链路成功后才执行。完整配置以下 GitHub Actions secrets 后启用正式链路：
+
+| Secret | 用途 |
+|---|---|
+| `APPLE_CERTIFICATE_BASE64` | Developer ID Application `.p12` 的 Base64 内容。 |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` 密码。 |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: ...` 的证书 identity。 |
+| `APPLE_ID` | Apple notarization 账号。 |
+| `APPLE_TEAM_ID` | Apple Developer Team ID。 |
+| `APPLE_APP_PASSWORD` | Apple app-specific password（不是 Apple ID 密码）。 |
+
+若任一 secret 缺失，workflow 会明确输出 warning，并继续产出可测试的包。当前本地 macOS 打包会给 `.app` 做 ad-hoc 签名，但这不等于 Developer ID 签名或 Apple 公证；此时 ZIP/DMG 仍可能被 Gatekeeper 拦截，不应作为正式对外安装包。临时证书与 notary profile 只写入隔离 keychain，脚本结束时会先恢复原 user keychain search list，再删除临时 keychain 和证书文件。
 
 Windows 11 的 Smart App Control / SmartScreen 会重点拦截无法验证发布者的 `exe`。仓库里的 release workflow 现在约定：
 

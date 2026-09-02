@@ -95,6 +95,32 @@ export type ProbeUpstreamResultLike = {
   responsesTransportError?: string;
 };
 
+export type CreateVideoOptionsLike = {
+  baseURL: string;
+  apiKey: string;
+  videoModelID: string;
+  endpointPath?: string;
+  prompt: string;
+  seconds?: number;
+  size?: string;
+  quality?: string;
+};
+
+export type PollVideoOptionsLike = {
+  baseURL: string;
+  apiKey: string;
+  videoID: string;
+  endpointPath?: string;
+};
+
+export type VideoResultLike = {
+  id: string;
+  status: string;
+  url?: string;
+  b64_json?: string;
+  error?: string;
+};
+
 export type UpstreamModelDescriptorLike = {
   id: string;
   object?: string;
@@ -136,6 +162,14 @@ export type SelectFilesResponseLike = {
   files: BatchInputImageLike[];
 };
 export type ImageTransformResultLike = { path: string; acceleration?: string };
+export type UpscaleMediaAssetLike = MediaAssetRefLike & { savedPath: string; fullUrl?: string; previewUrl?: string };
+export type UpscaleResultLike = {
+  path: string;
+  acceleration: string;
+  width: number;
+  height: number;
+  mediaAssetRef: UpscaleMediaAssetLike;
+};
 export type SelectFileResponseLike = {
   path: string;
   size: number;
@@ -206,6 +240,7 @@ export type HostCapabilities = {
   nativeHistoryFileIO: boolean;
   nativeOutputDirectoryPicker: boolean;
   secureCredentialStore: boolean;
+  localUpscale: boolean;
 };
 
 export type KernelRuntimeMode = "auto" | "local" | "remote";

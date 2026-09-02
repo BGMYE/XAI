@@ -16,6 +16,7 @@ import { PromptEditorSection } from "./PromptEditorSection";
 import { Section, Seg, SegItem } from "./panelChrome";
 import { SubmitBar } from "./SubmitBar";
 import { WindowsComposePanel } from "./WindowsComposePanel";
+import { VideoGenerationPanel } from "./VideoGenerationPanel";
 import {
   RESOLUTION_PRESETS,
   aspectPresetLabel,
@@ -452,6 +453,8 @@ export function ControlPanel({
         value={loopGeneration}
         onChange={(next) => setField("loopGeneration", next)}
       />
+
+      <VideoGenerationPanel />
 
       <SubmitBar
         apiKey={apiKey}

@@ -4,7 +4,7 @@ import { OpenExternalURL } from "../../platform/runtime/host";
 import { useStudioStore } from "../../state/studioStore";
 import { usePlatform } from "../../platform/context";
 
-const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
+const REPO_URL = "https://github.com/BGMYE/XAI";
 
 // 首次成功生图后弹一次的「邀请 star」弹窗。只在 store.starPromptOpen=true
 // 时挂载,关闭(无论哪个按钮)都会 set localStorage.gptcodex.starPrompted=1
@@ -24,7 +24,7 @@ export function StarPromptModal({ open }: { open: boolean }) {
       await OpenExternalURL(REPO_URL);
       pushToast("已为你打开 GitHub 仓库,点 ★ Star 就完事啦", "success", 4500);
     } catch {
-      pushToast("浏览器没拉起来,可以手动访问 github.com/RoseKhlifa/Image-Studio", "warn", 6000);
+      pushToast("浏览器没拉起来,可以手动访问 github.com/BGMYE/XAI", "warn", 6000);
     }
     dismiss();
   }
@@ -79,7 +79,7 @@ export function StarPromptModal({ open }: { open: boolean }) {
         >
           <Github className="h-4 w-4 shrink-0 text-zinc-700 dark:text-zinc-300" />
           <span className="flex-1 truncate text-[12px] font-mono-token text-zinc-700 dark:text-zinc-300">
-            RoseKhlifa/Image-Studio
+            BGMYE/XAI
           </span>
           <Heart className="h-3 w-3 text-red-400" fill="currentColor" />
         </div>

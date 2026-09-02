@@ -65,6 +65,7 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
   const baseURL = typeof o.baseURL === "string" ? o.baseURL : "";
   const textModelID = typeof o.textModelID === "string" ? o.textModelID : "";
   const imageModelID = typeof o.imageModelID === "string" ? o.imageModelID : "";
+  const videoModelID = typeof o.videoModelID === "string" ? o.videoModelID.trim() : "";
   const reasoningEffort = normalizeReasoningEffort(o.reasoningEffort);
   const concurrencyLimit = typeof o.concurrencyLimit === "number" && o.concurrencyLimit >= 0
     ? Math.floor(o.concurrencyLimit) : 0;
@@ -83,6 +84,7 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
     baseURL,
     textModelID,
     imageModelID,
+    videoModelID,
     reasoningEffort,
     concurrencyLimit,
     fallbackProfileId: fallbackProfileId || undefined,
@@ -153,6 +155,7 @@ export function makeBlankProfile(apiMode: APIMode = "responses", profiles: Upstr
     baseURL: "",
     textModelID: "",
     imageModelID: "",
+    videoModelID: "",
     reasoningEffort: "xhigh",
     concurrencyLimit: 0,
     fallbackProfileId: undefined,

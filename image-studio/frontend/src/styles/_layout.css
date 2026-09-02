@@ -2423,3 +2423,40 @@ html[data-target-platform="android-pad"][data-android-window-height="compact"] .
 html[data-target-platform="android-pad"][data-android-window-height="compact"] .android-pad-cta button {
   min-height: 48px;
 }
+
+/* Warm glass desktop shell */
+.app-root { background: transparent; }
+.app-header,
+.workspace-bar,
+.footer-bar {
+  background: var(--toolbar);
+  border-color: var(--border);
+  -webkit-backdrop-filter: var(--window-blur);
+  backdrop-filter: var(--window-blur);
+  box-shadow: inset 0 1px 0 var(--window-outline), 0 8px 28px rgb(49 42 32 / 0.045);
+}
+.app-header { min-height: 52px; padding-inline: 18px; }
+.brand-logo-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), inset 0 1px 0 rgb(255 255 255 / .35); }
+.brand-name { font-family: var(--title-font); font-weight: 600; letter-spacing: -.015em; }
+.workspace-bar { align-items: center; padding: 7px 12px; gap: 6px; }
+.workspace-tab {
+  min-height: 32px; padding: 6px 12px; border: 1px solid transparent;
+  border-radius: var(--tab-radius); background: transparent;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+.workspace-tab:hover { background: var(--lg-bg-soft); border-color: var(--lg-border-low); }
+.workspace-tab.active {
+  margin-bottom: 0; border: 1px solid var(--lg-border); background: var(--lg-bg-strong);
+  box-shadow: inset 0 1px 0 var(--lg-highlight), 0 4px 14px rgb(49 42 32 / .08);
+}
+.workspace-tab-close,
+.workspace-tab-add,
+.footer-link { border-radius: 999px; }
+.footer-bar { min-height: 38px; padding: 7px 18px; }
+.app-modal-backdrop { background: rgb(20 20 19 / .28); -webkit-backdrop-filter: blur(14px) saturate(120%); backdrop-filter: blur(14px) saturate(120%); }
+.app-modal-card {
+  border-color: var(--lg-border); background: var(--lg-bg-strong);
+  box-shadow: inset 0 1px 0 var(--lg-highlight), var(--lg-shadow);
+  -webkit-backdrop-filter: var(--window-blur); backdrop-filter: var(--window-blur);
+}
+.app-modal-header { border-color: var(--border); }

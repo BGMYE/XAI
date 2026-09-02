@@ -628,3 +628,30 @@ html.dark[data-ui-family="apple"] .faq-item {
   background: rgb(255 255 255 / 0.06);
   border-color: rgb(255 255 255 / 0.1);
 }
+
+/* Warm glass overlays */
+.modal-backdrop { background: rgb(20 20 19 / .36); -webkit-backdrop-filter: blur(16px) saturate(125%); backdrop-filter: blur(16px) saturate(125%); }
+.modal-card,
+.toast,
+.ctx-menu,
+.prompt-popover,
+.result-drawer {
+  border-color: var(--lg-border); background: var(--lg-bg-strong);
+  box-shadow: inset 0 1px 0 var(--lg-highlight), var(--lg-shadow);
+  -webkit-backdrop-filter: var(--window-blur); backdrop-filter: var(--window-blur);
+}
+.modal-card { border-radius: 20px; }
+.toast { border-radius: 14px; }
+.ctx-menu, .prompt-popover { border-radius: 14px; padding: 6px; }
+.result-drawer { background: var(--lg-bg-strong); }
+.ctx-item, .prompt-item, .rd-btn, .toast-action { border-radius: 9px; }
+.ctx-item:hover, .prompt-item:hover { background: var(--accent-soft); }
+.drop-overlay { background: rgb(201 100 66 / .16); border-color: var(--accent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.drop-message { background: rgb(20 20 19 / .76); border: 1px solid rgb(255 255 255 / .15); box-shadow: inset 0 1px 0 rgb(255 255 255 / .16), var(--lg-shadow); }
+.modal-close:focus-visible,
+.result-drawer-close:focus-visible,
+.ctx-item:focus-visible,
+.prompt-tab:focus-visible,
+.prompt-item:focus-visible,
+.rd-btn:focus-visible,
+.toast-action:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

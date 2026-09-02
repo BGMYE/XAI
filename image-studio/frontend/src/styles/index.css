@@ -1,4 +1,29 @@
 @import "tailwindcss";
+@import "./_buttons.css";
+@import "./_form.css";
+@import "./fluent/_tokens.css";
+@import "./fluent/_shared-shell.css";
+@import "./fluent/_shared-controls.css";
+@import "./_layout.css";
+@import "./_advanced-floating-panel.css";
+@import "./_android-phone-advanced.css";
+@import "./_android-settings.css";
+@import "./_android-upstream.css";
+@import "./_android-parameters.css";
+@import "./_android-history.css";
+@import "./_android-canvas.css";
+@import "./_apple-overflow.css";
+@import "./_panel.css";
+@import "./_canvas.css";
+@import "./_history.css";
+@import "./_overlays.css";
+@import "./fluent/_windows-theme.css";
+@import "./fluent/_windows-controls.css";
+@import "./fluent/_windows-compose.css";
+@import "./fluent/_windows-history.css";
+@import "./fluent/_windows-flyouts.css";
+@import "./fluent/_responsive.css";
+@import "./_video.css";
 
 /* 启用 class-based 暗色模式(挂在 <html> 上)。 */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -9,50 +34,51 @@
    等所有组件改完,这些变量会变成无人引用的 dead code,可以删。
    关键约束:这里的 CSS 变量都映射到 zinc + emerald 的对应色,实现「老组件不动也好看」。 */
 :root {
-  --accent: #007aff;
-  --accent-2: #409cff;
-  --accent-soft: rgb(0 122 255 / 0.1);
-  --bg: #f5f5f7;
-  --bg-2: #ececf1;
-  --panel: #ffffff;
-  --panel-2: #fbfbfd;
-  --surface: #f2f2f7;
-  --surface-2: #e5e5ea;
-  --sidebar: rgb(255 255 255 / 0.78);
-  --inspector: rgb(255 255 255 / 0.7);
-  --toolbar: rgb(255 255 255 / 0.76);
-  --border: rgb(60 60 67 / 0.16);
-  --border-2: rgb(60 60 67 / 0.22);
-  --text: #111111;
-  --text-muted: rgb(60 60 67 / 0.72);
-  --text-dim: rgb(60 60 67 / 0.48);
-  --danger: #ff3b30;
-  --danger-soft: rgb(255 59 48 / 0.1);
-  --success: #34c759;
-  --canvas-bg: #eef0f5;
-  --canvas-tile: #dde2eb;
+  color-scheme: light;
+  --accent: #c96442;
+  --accent-2: #b65335;
+  --accent-soft: rgb(201 100 66 / 0.13);
+  --bg: #f5f4ed;
+  --bg-2: #ece9df;
+  --panel: rgb(255 255 252 / 0.68);
+  --panel-2: rgb(250 249 245 / 0.76);
+  --surface: rgb(255 255 252 / 0.56);
+  --surface-2: rgb(239 236 226 / 0.74);
+  --sidebar: rgb(255 255 252 / 0.62);
+  --inspector: rgb(255 255 252 / 0.58);
+  --toolbar: rgb(255 255 252 / 0.64);
+  --border: rgb(70 64 54 / 0.13);
+  --border-2: rgb(70 64 54 / 0.21);
+  --text: #141413;
+  --text-muted: rgb(77 76 72 / 0.82);
+  --text-dim: rgb(94 93 89 / 0.62);
+  --danger: #b53333;
+  --danger-soft: rgb(181 51 51 / 0.1);
+  --success: #667a52;
+  --canvas-bg: #eeeae0;
+  --canvas-tile: #ddd7ca;
   --font-scale: 1;
-  --on-accent-soft: var(--accent);
-  --btn-secondary-bg: #f2f2f7;
-  --btn-secondary-bg-hover: #e7e8ee;
-  --tool-hover-bg: rgb(0 122 255 / 0.08);
-  --tool-hover-text: var(--accent);
-  --error-text: #c1271d;
-  --error-border: rgb(255 59 48 / 0.22);
-  --shadow-card: 0 10px 30px rgb(15 23 42 / 0.06);
-  --shadow-card-hover: 0 18px 48px rgb(15 23 42 / 0.09);
+  --on-accent-soft: #9d4128;
+  --btn-secondary-bg: rgb(232 230 220 / 0.78);
+  --btn-secondary-bg-hover: rgb(222 218 207 / 0.92);
+  --tool-hover-bg: rgb(201 100 66 / 0.1);
+  --tool-hover-text: #9d4128;
+  --error-text: #912d2d;
+  --error-border: rgb(181 51 51 / 0.22);
+  --shadow-card: 0 14px 40px rgb(49 42 32 / 0.08), 0 2px 8px rgb(49 42 32 / 0.05);
+  --shadow-card-hover: 0 20px 52px rgb(49 42 32 / 0.12), 0 4px 12px rgb(49 42 32 / 0.07);
   --pink: var(--accent);
   --pink-soft: var(--accent-soft);
-  --gradient-primary: var(--accent);
-  --gradient-primary-hover: var(--accent-2);
-  --gradient-card: transparent;
+  --gradient-primary: linear-gradient(145deg, #d47755, #c96442 58%, #b65335);
+  --gradient-primary-hover: linear-gradient(145deg, #df8060, #c96442 55%, #a9482e);
+  --gradient-card: linear-gradient(145deg, rgb(255 255 255 / 0.32), transparent 52%);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 20px;
-  --window-blur: blur(24px);
-  --window-outline: rgb(255 255 255 / 0.42);
-  --window-outline-dark: rgb(255 255 255 / 0.06);
+  --radius-xl: 22px;
+  --window-blur: blur(22px) saturate(145%);
+  --window-outline: rgb(255 255 255 / 0.72);
+  --window-outline-dark: rgb(255 255 255 / 0.1);
   --header-height: 58px;
   --mac-titlebar-safe-left: 110px;
   --mac-titlebar-safe-right: 18px;
@@ -60,75 +86,77 @@
   --mac-titlebar-bottom-pad: 8px;
   --tab-radius: 999px;
   --card-radius: 18px;
-  --control-radius: 999px;
-  --surface-elevated: rgb(255 255 255 / 0.7);
-  --surface-elevated-dark: rgb(255 255 255 / 0.03);
-  --lg-blur: 18px;
-  --lg-saturate: 160%;
-  --lg-brightness: 1.02;
-  --lg-bg: rgb(255 255 255 / 0.58);
-  --lg-bg-strong: rgb(255 255 255 / 0.7);
-  --lg-bg-soft: rgb(255 255 255 / 0.34);
-  --lg-border: rgb(255 255 255 / 0.64);
-  --lg-border-low: rgb(255 255 255 / 0.24);
-  --lg-shadow: 0 18px 52px rgb(26 36 64 / 0.14), 0 2px 8px rgb(26 36 64 / 0.07);
-  --lg-shadow-hover: 0 24px 68px rgb(26 36 64 / 0.19), 0 8px 20px rgb(26 36 64 / 0.1);
-  --lg-highlight: rgb(255 255 255 / 0.78);
-  --lg-sheen: rgb(255 255 255 / 0.42);
-  --lg-prism-blue: rgb(0 122 255 / 0.16);
-  --lg-prism-teal: rgb(90 200 250 / 0.13);
-  --lg-prism-pink: rgb(255 45 85 / 0.1);
-  --title-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro SC", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --body-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro SC", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --mono-font: "SFMono-Regular", "Cascadia Code", Menlo, Consolas, "Liberation Mono", monospace;
+  --control-radius: 12px;
+  --surface-elevated: rgb(255 255 252 / 0.66);
+  --surface-elevated-dark: rgb(255 255 255 / 0.07);
+  --lg-blur: 22px;
+  --lg-saturate: 145%;
+  --lg-brightness: 1.01;
+  --lg-bg: rgb(255 255 252 / 0.62);
+  --lg-bg-strong: rgb(255 255 252 / 0.76);
+  --lg-bg-soft: rgb(255 255 252 / 0.42);
+  --lg-border: rgb(255 255 255 / 0.7);
+  --lg-border-low: rgb(89 77 61 / 0.12);
+  --lg-shadow: 0 20px 58px rgb(49 42 32 / 0.14), 0 3px 12px rgb(49 42 32 / 0.06);
+  --lg-shadow-hover: 0 26px 72px rgb(49 42 32 / 0.18), 0 8px 20px rgb(49 42 32 / 0.08);
+  --lg-highlight: rgb(255 255 255 / 0.82);
+  --lg-sheen: rgb(255 255 255 / 0.46);
+  --lg-prism-blue: rgb(201 100 66 / 0.11);
+  --lg-prism-teal: rgb(130 117 85 / 0.1);
+  --lg-prism-pink: rgb(217 119 87 / 0.09);
+  --focus-ring: #3898ec;
+  --title-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --body-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --mono-font: "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
 }
 
 /* 暗色模式 */
 :root.dark {
-  --accent: #0a84ff;
-  --accent-2: #5eb0ff;
-  --accent-soft: rgb(10 132 255 / 0.18);
-  --bg: #131315;
-  --bg-2: #1c1c1e;
-  --panel: #232326;
-  --panel-2: #1c1c1f;
-  --surface: #2c2c2f;
-  --surface-2: #3a3a3d;
-  --sidebar: rgb(36 36 39 / 0.82);
-  --inspector: rgb(34 34 37 / 0.78);
-  --toolbar: rgb(28 28 31 / 0.82);
-  --border: rgb(84 84 88 / 0.52);
-  --border-2: rgb(84 84 88 / 0.72);
-  --text: #f5f5f7;
-  --text-muted: rgb(235 235 245 / 0.78);
-  --text-dim: rgb(235 235 245 / 0.54);
-  --danger: #ff453a;
-  --danger-soft: rgb(255 69 58 / 0.14);
-  --success: #30d158;
-  --canvas-bg: #1a1a1d;
-  --canvas-tile: #2b2d31;
-  --on-accent-soft: #9ed0ff;
-  --btn-secondary-bg: #323236;
-  --btn-secondary-bg-hover: #3c3c41;
-  --tool-hover-bg: rgb(10 132 255 / 0.16);
-  --tool-hover-text: #c9e3ff;
-  --error-text: #ffb3ad;
-  --error-border: rgb(255 69 58 / 0.34);
-  --shadow-card: 0 18px 46px rgb(0 0 0 / 0.38);
-  --shadow-card-hover: 0 24px 60px rgb(0 0 0 / 0.46);
-  --window-outline: rgb(255 255 255 / 0.06);
-  --lg-bg: rgb(30 32 38 / 0.58);
-  --lg-bg-strong: rgb(38 40 48 / 0.72);
-  --lg-bg-soft: rgb(255 255 255 / 0.08);
-  --lg-border: rgb(255 255 255 / 0.18);
-  --lg-border-low: rgb(255 255 255 / 0.08);
-  --lg-shadow: 0 22px 58px rgb(0 0 0 / 0.42), 0 2px 10px rgb(0 0 0 / 0.3);
-  --lg-shadow-hover: 0 28px 72px rgb(0 0 0 / 0.52), 0 8px 22px rgb(0 0 0 / 0.34);
-  --lg-highlight: rgb(255 255 255 / 0.24);
-  --lg-sheen: rgb(255 255 255 / 0.12);
-  --lg-prism-blue: rgb(10 132 255 / 0.2);
-  --lg-prism-teal: rgb(100 210 255 / 0.14);
-  --lg-prism-pink: rgb(255 55 95 / 0.12);
+  color-scheme: dark;
+  --accent: #d97757;
+  --accent-2: #e58a6b;
+  --accent-soft: rgb(217 119 87 / 0.18);
+  --bg: #141413;
+  --bg-2: #1b1b19;
+  --panel: rgb(36 35 32 / 0.7);
+  --panel-2: rgb(43 42 39 / 0.78);
+  --surface: rgb(255 252 245 / 0.08);
+  --surface-2: rgb(255 252 245 / 0.12);
+  --sidebar: rgb(29 28 26 / 0.72);
+  --inspector: rgb(27 26 24 / 0.72);
+  --toolbar: rgb(30 29 27 / 0.7);
+  --border: rgb(255 248 235 / 0.1);
+  --border-2: rgb(255 248 235 / 0.18);
+  --text: #f5f4ed;
+  --text-muted: rgb(232 230 220 / 0.76);
+  --text-dim: rgb(208 204 193 / 0.54);
+  --danger: #e27670;
+  --danger-soft: rgb(226 118 112 / 0.13);
+  --success: #9bae7e;
+  --canvas-bg: #1b1a18;
+  --canvas-tile: #2c2924;
+  --on-accent-soft: #f3b29a;
+  --btn-secondary-bg: rgb(255 252 245 / 0.09);
+  --btn-secondary-bg-hover: rgb(255 252 245 / 0.14);
+  --tool-hover-bg: rgb(217 119 87 / 0.15);
+  --tool-hover-text: #f3b29a;
+  --error-text: #f0aaa5;
+  --error-border: rgb(226 118 112 / 0.28);
+  --shadow-card: 0 18px 48px rgb(0 0 0 / 0.32), 0 3px 10px rgb(0 0 0 / 0.22);
+  --shadow-card-hover: 0 24px 62px rgb(0 0 0 / 0.42), 0 6px 16px rgb(0 0 0 / 0.26);
+  --window-outline: rgb(255 255 255 / 0.1);
+  --lg-bg: rgb(36 35 32 / 0.62);
+  --lg-bg-strong: rgb(42 41 38 / 0.76);
+  --lg-bg-soft: rgb(255 252 245 / 0.08);
+  --lg-border: rgb(255 255 255 / 0.16);
+  --lg-border-low: rgb(255 255 255 / 0.07);
+  --lg-shadow: 0 22px 62px rgb(0 0 0 / 0.46), 0 3px 12px rgb(0 0 0 / 0.3);
+  --lg-shadow-hover: 0 30px 78px rgb(0 0 0 / 0.56), 0 8px 22px rgb(0 0 0 / 0.34);
+  --lg-highlight: rgb(255 255 255 / 0.2);
+  --lg-sheen: rgb(255 255 255 / 0.1);
+  --lg-prism-blue: rgb(217 119 87 / 0.13);
+  --lg-prism-teal: rgb(155 174 126 / 0.08);
+  --lg-prism-pink: rgb(201 100 66 / 0.11);
 }
 
 /* Apple family: Liquid Glass is reserved for functional chrome and controls.
@@ -1048,29 +1076,29 @@ html[data-ui-family="apple"] .select:focus {
 @keyframes spin-emerald { to { transform: rotate(360deg); } }
 .spin-emerald { animation: spin-emerald 0.8s linear infinite; }
 
-/* 原有模块继续 import —— 这些里面的样式会在组件改造期间被逐个替换为 tailwind 类后失效。
-   每改完一个组件,删一段对应 CSS。 */
-@import "./_buttons.css";
-@import "./_form.css";
-@import "./fluent/_tokens.css";
-@import "./fluent/_shared-shell.css";
-@import "./fluent/_shared-controls.css";
-@import "./_layout.css";
-@import "./_advanced-floating-panel.css";
-@import "./_android-phone-advanced.css";
-@import "./_android-settings.css";
-@import "./_android-upstream.css";
-@import "./_android-parameters.css";
-@import "./_android-history.css";
-@import "./_android-canvas.css";
-@import "./_apple-overflow.css";
-@import "./_panel.css";
-@import "./_canvas.css";
-@import "./_history.css";
-@import "./_overlays.css";
-@import "./fluent/_windows-theme.css";
-@import "./fluent/_windows-controls.css";
-@import "./fluent/_windows-compose.css";
-@import "./fluent/_windows-history.css";
-@import "./fluent/_windows-flyouts.css";
-@import "./fluent/_responsive.css";
+/* Accessibility and compositing fallbacks */
+:where(button, [role="button"], a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: 2px;
+}
+::selection { background: rgb(201 100 66 / .24); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --window-blur: none; --lg-bg: #faf9f5; --lg-bg-strong: #faf9f5; --lg-bg-soft: #eeeae0; }
+  :root.dark { --lg-bg: #242320; --lg-bg-strong: #292824; --lg-bg-soft: #242320; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --window-blur: none; --panel: #faf9f5; --sidebar: #f8f6ef; --inspector: #f8f6ef; --toolbar: #f8f6ef; --surface-elevated: #faf9f5; }
+  :root.dark { --panel: #242320; --sidebar: #201f1d; --inspector: #201f1d; --toolbar: #22211f; --surface-elevated-dark: #292824; }
+}
+@media (update: slow) {
+  :root { --window-blur: blur(8px) saturate(115%); }
+  .liquid-ambient::before, .liquid-ambient::after { display: none; }
+  .platform-card, .fluent-surface { box-shadow: 0 4px 16px rgb(49 42 32 / .08); }
+}

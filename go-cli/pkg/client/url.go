@@ -17,12 +17,7 @@ func ValidateBaseURL(raw string) (string, error) {
 // ValidateBaseURLWithSecurity permits remote plain HTTP only when the caller
 // explicitly opted this single upstream into insecure connections.
 func ValidateBaseURLWithSecurity(raw string, allowInsecureConnection bool) (string, error) {
-	cleaned := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if cleaned == "" {
-		return "", fmt.Errorf("未配置上游 BASE_URL")
-	}
-	cleaned = strings.TrimSuffix(cleaned, "/v1")
-	cleaned = strings.TrimRight(cleaned, "/")
+	cleaned := strings.TrimSpace(raw)
 	if cleaned == "" {
 		return "", fmt.Errorf("未配置上游 BASE_URL")
 	}
@@ -30,9 +25,13 @@ func ValidateBaseURLWithSecurity(raw string, allowInsecureConnection bool) (stri
 	if err != nil {
 		return "", fmt.Errorf("BASE_URL 无效: %w", err)
 	}
-	if u.Scheme == "" || u.Host == "" {
+	if u.Scheme == "" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
 		return "", fmt.Errorf("BASE_URL 必须包含协议和主机,例如 https://example.com")
 	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Path = strings.TrimRight(strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/v1"), "/")
+	u.RawPath = ""
+	cleaned = u.String()
 	switch strings.ToLower(u.Scheme) {
 	case "https":
 		return cleaned, nil
@@ -52,10 +51,16 @@ func OpenAIAPIEndpoint(baseURL, endpointPath string) string {
 	if path == "" {
 		return cleaned
 	}
-	if isVersionedOpenAICompatibilityBaseURL(cleaned) {
+	base, err := url.Parse(cleaned)
+	if err != nil || base.Host == "" {
 		return cleaned + "/" + path
 	}
-	return cleaned + "/v1/" + path
+	if !isVersionedOpenAICompatibilityBaseURL(cleaned) {
+		base.Path = strings.TrimRight(base.Path, "/") + "/v1"
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + "/" + path
+	base.RawPath = ""
+	return base.String()
 }
 
 func openAIAPIEndpoint(baseURL, endpointPath string) string {

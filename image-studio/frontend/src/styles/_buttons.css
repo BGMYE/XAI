@@ -163,3 +163,32 @@
 }
 .color-chip:hover { transform: scale(1.1); }
 .color-chip.active { border-color: var(--text); }
+
+/* Warm tactile controls */
+.btn {
+  border: 1px solid rgb(151 67 40 / .28); border-radius: var(--control-radius);
+  background: var(--gradient-primary); color: #fffaf5;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .24), 0 6px 16px rgb(201 100 66 / .18);
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 100ms ease;
+}
+.btn:hover { background: var(--gradient-primary-hover); box-shadow: inset 0 1px 0 rgb(255 255 255 / .3), 0 9px 22px rgb(201 100 66 / .24); }
+.btn.secondary { border-color: var(--border); background: var(--btn-secondary-bg); box-shadow: inset 0 1px 0 var(--window-outline), 0 2px 8px rgb(49 42 32 / .06); }
+.tool-btn,
+.icon-btn,
+.seg,
+.style-pill { border-radius: var(--control-radius); }
+.icon-btn,
+.seg,
+.style-pill { background: var(--surface); border-color: var(--border); box-shadow: inset 0 1px 0 rgb(255 255 255 / .32); }
+.tool-btn:hover,
+.icon-btn:hover,
+.style-pill:hover { border-color: rgb(201 100 66 / .34); background: var(--tool-hover-bg); }
+.seg-item { border-radius: calc(var(--control-radius) - 3px); }
+.seg-item.active { background: var(--accent); color: #fffaf5; box-shadow: inset 0 1px 0 rgb(255 255 255 / .24), 0 3px 8px rgb(201 100 66 / .2); }
+.btn:focus-visible,
+.tool-btn:focus-visible,
+.icon-btn:focus-visible,
+.seg-item:focus-visible,
+.style-pill:focus-visible,
+.color-chip:focus-visible,
+.mac-style-pill:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

@@ -40,7 +40,7 @@
 - 模型未开通、接口不兼容、relay 静默忽略字段
 - 只有截图没有 raw 响应、无法描述复现步骤的模糊报错
 
-- Issues 地址: [https://github.com/RoseKhlifa/Image-Studio/issues](https://github.com/RoseKhlifa/Image-Studio/issues)
+- Issues 地址: [https://github.com/BGMYE/XAI/issues](https://github.com/BGMYE/XAI/issues)
 - 建议附上系统平台、应用版本、API 形态、上游 BASE_URL 类型、错误日志或截图。
 - 如果是生成失败，请尽量说明使用的是 Responses API 还是 Images API，以及对应模型 ID。
 

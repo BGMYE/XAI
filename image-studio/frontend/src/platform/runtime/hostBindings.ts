@@ -1,7 +1,11 @@
 import { hasAndroidInvokeBridge, invokeAndroidNative } from "../android/nativeInvoke.ts";
+import type { CreateVideoOptionsLike, PollVideoOptionsLike, VideoResultLike } from "./hostTypes.ts";
 
 type AnyFn = (...args: any[]) => any;
-export type ServiceBinding = Record<string, AnyFn>;
+export type ServiceBinding = Record<string, AnyFn> & {
+  CreateVideo?: (options: CreateVideoOptionsLike) => Promise<VideoResultLike> | VideoResultLike;
+  PollVideo?: (options: PollVideoOptionsLike) => Promise<VideoResultLike> | VideoResultLike;
+};
 export type RuntimeBinding = {
   EventsOnMultiple?: (eventName: string, callback: (...args: any[]) => void, maxCallbacks?: number) => () => void;
   EventsOff?: (eventName: string, ...additionalEventNames: string[]) => void;

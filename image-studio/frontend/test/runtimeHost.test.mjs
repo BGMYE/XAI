@@ -147,10 +147,12 @@ function installEnvironment() {
       userAgentData: { platform: "Android" },
     },
   });
-  globalThis.URL = {
-    ...URL,
-    createObjectURL: () => "blob:mock",
-    revokeObjectURL: () => {},
+  globalThis.URL = class MockURL extends realURL {
+    static createObjectURL() {
+      return "blob:mock";
+    }
+
+    static revokeObjectURL() {}
   };
   globalThis.setTimeout = (fn, _ms, ...args) => {
     queueMicrotask(() => fn(...args));

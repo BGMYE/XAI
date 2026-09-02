@@ -238,3 +238,26 @@
   margin-top: 4px;
 }
 .upstream-actions .btn { min-width: 96px; }
+
+/* Warm glass control panel */
+.panel {
+  background: var(--sidebar); border-color: var(--border); padding: 18px;
+  -webkit-backdrop-filter: var(--window-blur); backdrop-filter: var(--window-blur);
+  box-shadow: inset -1px 0 0 var(--window-outline);
+}
+.panel h1 { font-family: var(--title-font); font-size: 15px; letter-spacing: -.015em; }
+.panel label.head { letter-spacing: .02em; }
+.prompt-action-btn,
+.aspect-btn,
+.api-mode-btn,
+.api-mode-switch,
+.settings-hint {
+  border-color: var(--border); border-radius: var(--control-radius); background: var(--surface);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .32);
+}
+.prompt-action-btn:hover,
+.aspect-btn:hover,
+.api-mode-btn:hover { border-color: rgb(201 100 66 / .38); background: var(--accent-soft); }
+.aspect-btn.active,
+.api-mode-btn.active { border-color: rgb(201 100 66 / .44); box-shadow: inset 0 1px 0 rgb(255 255 255 / .38), 0 0 0 1px rgb(201 100 66 / .06); }
+.generate-btn { border-radius: 14px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .24), 0 10px 24px rgb(201 100 66 / .2); }

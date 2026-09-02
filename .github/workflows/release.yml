@@ -155,6 +155,47 @@ jobs:
               -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
           fi
 
+      - name: Detect macOS signing inputs
+        if: matrix.goos == 'darwin'
+        id: macos_signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE_BASE64" ] \
+            && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] \
+            && [ -n "$APPLE_SIGNING_IDENTITY" ] \
+            && [ -n "$APPLE_ID" ] \
+            && [ -n "$APPLE_TEAM_ID" ] \
+            && [ -n "$APPLE_APP_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign, notarize, and staple macOS app
+        if: matrix.goos == 'darwin' && steps.macos_signing.outputs.available == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./scripts/sign-notarize-macos.sh --app "image-studio/build/bin/Image Studio.app"
+
+      - name: Warn on unsigned macOS artifacts
+        if: matrix.goos == 'darwin' && steps.macos_signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::macOS ZIP and DMG contain only an ad-hoc-signed app; they are not Developer ID signed or Apple notarized and Gatekeeper may block them."
+
       - name: Stage packaged artifact
         id: package
         shell: bash
@@ -199,11 +240,48 @@ jobs:
         run: |
           echo "::warning::Windows artifact is unsigned. Windows 11 Smart App Control / SmartScreen may block it."
 
+      - name: Build macOS DMG
+        if: matrix.goos == 'darwin'
+        id: macos_dmg
+        shell: bash
+        run: |
+          artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-macos-universal.dmg"
+          artifact_path="dist/${artifact_name}"
+          ./scripts/package-macos-dmg.sh \
+            --app "image-studio/build/bin/Image Studio.app" \
+            --output "$artifact_path"
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "artifact_path=${artifact_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sign, notarize, and staple macOS DMG
+        if: matrix.goos == 'darwin' && steps.macos_signing.outputs.available == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./scripts/sign-notarize-macos.sh --dmg "${{ steps.macos_dmg.outputs.artifact_path }}"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.artifact_name }}
           path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload macOS DMG artifact
+        if: matrix.goos == 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.macos_dmg.outputs.artifact_name }}
+          path: ${{ steps.macos_dmg.outputs.artifact_path }}
+          if-no-files-found: error
           retention-days: 14
 
   build-windows-installer:

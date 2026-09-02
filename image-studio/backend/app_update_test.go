@@ -46,6 +46,19 @@ func TestCompareSemver(t *testing.T) {
 	}
 }
 
+func TestCanonicalUpdateRepositoryURLs(t *testing.T) {
+	const repository = "BGMYE/XAI"
+	if got, want := releasesPageURL, "https://github.com/"+repository+"/releases"; got != want {
+		t.Fatalf("releasesPageURL = %q, want %q", got, want)
+	}
+	if got, want := latestReleaseAPIURL, "https://api.github.com/repos/"+repository+"/releases/latest"; got != want {
+		t.Fatalf("latestReleaseAPIURL = %q, want %q", got, want)
+	}
+	if got := chooseReleaseURL(""); got != releasesPageURL {
+		t.Fatalf("chooseReleaseURL(empty) = %q, want %q", got, releasesPageURL)
+	}
+}
+
 func TestNormalizeReleaseVersion(t *testing.T) {
 	if got := normalizeReleaseVersion(" v1.1.6 "); got != "1.1.6" {
 		t.Fatalf("normalizeReleaseVersion() = %q, want 1.1.6", got)

@@ -30,6 +30,8 @@ export interface UpstreamProfile {
   baseURL: string;
   textModelID: string;
   imageModelID: string;
+  // 外部视频接口必须显式指定；空值表示未配置视频能力。
+  videoModelID: string;
   reasoningEffort: ReasoningEffortValue;
   // 0 = 不限。同一 profile 跨所有 workspace 共享并发计数。
   concurrencyLimit: number;
@@ -229,6 +231,8 @@ export interface HistoryItem {
   batchIndex?: number;
   previewSlotIndex?: number;
   elapsedSec?: number;     // generation duration in seconds
+  upscaleAcceleration?: string;
+  upscaleScale?: 2 | 4;
 
   sourcePaths?: string[];
   savedPath?: string;
@@ -300,6 +304,9 @@ export interface Workspace {
   // We store currentImageId rather than the full HistoryItem so we don't
   // duplicate large base64 blobs. The history list is shared across tabs.
   currentImageId: string | null;
+  canvasNodes?: import("../state/canvasNodes").CanvasNode[];
+  canvasViewport?: import("../state/canvasNodes").CanvasViewport;
+  selectedNodeId?: string | null;
   // IDs from the latest multi-request run for this workspace. These are history
   // IDs so the tab state stays light while the canvas can reopen the batch grid.
   batchResultIds: string[];

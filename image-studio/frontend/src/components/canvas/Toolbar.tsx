@@ -19,7 +19,7 @@ export function Toolbar() {
     annotations, selectedAnnotationId,
     fullscreen,
     batchResults, resultGridOpen, openResultGrid, closeResultGrid,
-    setField, toggleFullscreen, saveCurrentImageAs,
+    setField, clearCanvas, toggleFullscreen, saveCurrentImageAs,
     importMaskImage, resetMask, clearAnnotations,
     undoStack, redoStack, undo, redo,
     rotateCurrent, flipCurrent, cropToRect,
@@ -153,7 +153,7 @@ export function Toolbar() {
                 hasImage={!!currentImage}
                 onToggleFullscreen={() => void toggleFullscreen()}
                 onOpenDetail={() => currentImage && openResultDetail(currentImage)}
-                onClearCanvas={() => setField("currentImage", null)}
+                onClearCanvas={clearCanvas}
                 onSaveAs={saveCurrentImageAs}
               />
             </ToolbarGroup>
@@ -249,7 +249,7 @@ export function Toolbar() {
           hasImage={!!currentImage}
           onToggleFullscreen={() => void toggleFullscreen()}
           onOpenDetail={() => currentImage && openResultDetail(currentImage)}
-          onClearCanvas={() => setField("currentImage", null)}
+          onClearCanvas={clearCanvas}
           onSaveAs={saveCurrentImageAs}
         />
         </div>

@@ -60,3 +60,18 @@
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+/* Warm glass fields */
+.input, .textarea, .select, .radio, .source-pill {
+  border-color: var(--border); border-radius: var(--control-radius); background: var(--surface);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 1px 3px rgb(49 42 32 / .035);
+}
+.input, .textarea, .select { transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.input:hover, .textarea:hover, .select:hover { border-color: var(--border-2); background: var(--lg-bg-strong); }
+.input:focus-visible, .textarea:focus-visible, .select:focus-visible {
+  outline: none; border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 18%, transparent), inset 0 1px 0 rgb(255 255 255 / .42);
+}
+.radio:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.radio.active, .source-pill { border-color: rgb(201 100 66 / .4); background: var(--accent-soft); }
+.error-banner { border-radius: var(--control-radius); box-shadow: inset 0 1px 0 rgb(255 255 255 / .2); }

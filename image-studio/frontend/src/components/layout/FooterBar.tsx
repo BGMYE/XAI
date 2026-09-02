@@ -5,8 +5,8 @@ import { androidTarget, openExternalURLForPlatform, openOutputLocationForPlatfor
 import { appVersion } from "../../lib/version";
 import { usePlatform } from "../../platform/context";
 
-const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
-const ISSUES_URL = "https://github.com/RoseKhlifa/Image-Studio/issues";
+const REPO_URL = "https://github.com/BGMYE/XAI";
+const ISSUES_URL = "https://github.com/BGMYE/XAI/issues";
 
 export function FooterBar() {
   const { fullscreen, history, runningJobs, isRunning, workspaces, pushToast } = useStudioStore();

@@ -6,11 +6,11 @@
 
 ### 稳定版本
 
-稳定版本到 [RoseKhlifa/Image-Studio Releases](https://github.com/RoseKhlifa/Image-Studio/releases) 下载，适合日常使用与对外分发。
+稳定版本到 [BGMYE/XAI Releases](https://github.com/BGMYE/XAI/releases) 下载，适合日常使用与对外分发。
 
 ### 抢先测试版本
 
-如果你想体验当前分支最近完成、但还没有进入上游 tag 的改动，可以到 [DR-lin-eng/Image-Studio Actions · release.yml](https://github.com/DR-lin-eng/Image-Studio/actions/workflows/release.yml) 下载最近一次成功构建的 artifact。
+如果你想体验当前分支最近完成、但还没有进入正式 tag 的改动，可以到 [BGMYE/XAI Actions · release.yml](https://github.com/BGMYE/XAI/actions/workflows/release.yml) 下载最近一次成功构建的 artifact。
 
 这类构建通常会更快包含当前开发分支上的改动，但稳定性和回归覆盖不如正式 release，建议只在测试环境使用。
 
@@ -30,7 +30,8 @@ Windows 用户需要额外注意：Actions 里的 CI artifact 如果没有经过
 | Windows MSIX x64 | `image-studio-<version>-windows-x64.msix` | 面向 Microsoft Store / 企业分发的 x64 MSIX 包。 |
 | Windows MSIX ARM64 | `image-studio-<version>-windows-arm64.msix` | 面向 Microsoft Store / 企业分发的 ARM64 MSIX 包。 |
 | Windows MSIX Bundle | `image-studio-<version>-windows.msixbundle` | 同时包含 x64 与 ARM64 的 MSIX Bundle，优先用于 Microsoft Store 提交。 |
-| macOS universal | `image-studio-<version>-macos-universal.zip` | 解压后得到 `Image Studio.app`。 |
+| macOS universal ZIP | `image-studio-<version>-macos-universal.zip` | 解压后得到 `Image Studio.app`；适合手动安装。 |
+| macOS universal DMG | `image-studio-<version>-macos-universal.dmg` | 打开后拖入 Applications；完整配置 Apple secrets 时，app 与 DMG 都会完成 Developer ID 签名、公证和 staple。 |
 | Linux x64 | `image-studio-<version>-linux-amd64.tar.gz` | 标准 Wails 桌面版。 |
 | Linux ARM64 | `image-studio-<version>-linux-arm64.tar.gz` | 面向 ARM64 Linux 桌面环境。 |
 | Android | `image-studio-<version>-android-release.apk` | 单 APK，运行时自适应 phone / pad 布局。 |
@@ -62,6 +63,8 @@ Windows 用户需要额外注意：Actions 里的 CI artifact 如果没有经过
 ### macOS
 
 - 安装包是 universal 产物，同时覆盖 Apple Silicon 和 Intel。
+- 对外分发优先使用 `image-studio-<version>-macos-universal.dmg`，打开后将 `Image Studio.app` 拖入 Applications；ZIP 仅作为备用手动安装包。
+- 只有完整配置 Apple Developer ID 签名/公证 secrets 的 workflow 才会对 `.app` 和 DMG 分别完成签名、公证与 staple。未配置时 workflow 会继续产出只含 ad-hoc-signed app 的包，并明确警告它们不是 Developer ID 签名或 Apple 公证产物，仍可能被 Gatekeeper 拦截。
 - 如果被 Gatekeeper 拦截，可执行：
 
 ```bash

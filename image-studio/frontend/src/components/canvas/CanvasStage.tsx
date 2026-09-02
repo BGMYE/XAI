@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Stage, Layer, Image as KonvaImage, Line, Rect, Arrow } from "react-konva";
+import { Stage, Layer, Group, Image as KonvaImage, Line, Rect, Arrow } from "react-konva";
 import Konva from "konva";
 import { useStudioStore } from "../../state/studioStore";
 import { HistoryItem } from "../../types/domain";
@@ -16,6 +16,8 @@ import { StreamPreviewBadge } from "./StreamPreviewBadge";
 import { streamPreviewItemsFromPreviews } from "../../state/studioStore.streamPreview";
 import { historyFullSrc, orderedNavigationItemsForCurrent, sortHistoryItemsByCreatedAtAsc } from "../../lib/images";
 import { DragExportHandle } from "./DragExportHandle";
+import { CanvasNodeShape } from "./CanvasNodeShape";
+import { clampCanvasScale, createCanvasNode, fitCanvasView, oneToOneCanvasView, type CanvasViewport } from "../../state/canvasNodes";
 
 export function CanvasStage() {
   const {
@@ -39,6 +41,7 @@ export function CanvasStage() {
     batchResults, resultGridOpen, selectBatchResult, closeResultGrid,
     canvasViewResetTick,
     stepBatchResult,
+    canvasNodes, selectedNodeId, addCanvasNode, moveCanvasNode, removeCanvasNode, selectCanvasNode, canvasViewport, setCanvasViewport, clearCanvas,
   } = useStudioStore();
   const { isMac } = usePlatform();
   const streamPreviewItems = streamPreviewItemsFromPreviews(streamPreviews, {
@@ -155,12 +158,16 @@ export function CanvasStage() {
     return { scale, x: (hw - w) / 2, y: (hh - h) / 2, w, h };
   }
   const fit = computeFit(image, hostSize.w, hostSize.h);
+  const nodeFit = fitCanvasView(canvasNodes, hostSize.w, hostSize.h);
+  const selectedCanvasNode = canvasNodes.find((node) => node.id === selectedNodeId) ?? canvasNodes.find((node) => node.id === currentImage?.id);
+  useEffect(() => {
+    if (!canvasViewport && canvasNodes.length && hostSize.w > 0 && hostSize.h > 0) setCanvasViewport(fitCanvasView(canvasNodes, hostSize.w, hostSize.h));
+  }, [canvasViewport, canvasNodes, hostSize.w, hostSize.h, setCanvasViewport]);
 
   // `userView` only holds explicit user manipulation (pan / wheel zoom).
   // The effective view is `userView ?? fit`, so the displayed image is always
   // centered by default. userView is reset whenever currentImage.id changes.
-  const [userView, setUserView] = useState<{ scale: number; x: number; y: number } | null>(null);
-  const view = userView ?? { scale: fit.scale, x: fit.x, y: fit.y };
+  const view: CanvasViewport = canvasViewport ?? (canvasNodes.length > 0 ? nodeFit : { scale: fit.scale, x: fit.x, y: fit.y });
 
   // Imperatively push the latest fit onto the Konva Stage *after* React commits
   // and *before* paint. This is the belt-and-suspenders fix: even if React
@@ -179,14 +186,12 @@ export function CanvasStage() {
 
   // Double-click on the stage: cycle between fit and 100%.
   function onStageDblClick() {
-    if (!image || hostSize.w === 0) return;
-    if (!userView || Math.abs(userView.scale - 1) > 0.001) {
-      // Currently fit (or not at 100%) → snap to 100% centred on image.
-      const cx = (hostSize.w - image.width) / 2;
-      const cy = (hostSize.h - image.height) / 2;
-      setUserView({ scale: 1, x: cx, y: cy });
+    if (!selectedCanvasNode || hostSize.w === 0 || hostSize.h === 0) return;
+    if (Math.abs(view.scale - 1) > 0.001) {
+      // Centre the selected world-space node rather than assuming it starts at (0, 0).
+      setCanvasViewport(oneToOneCanvasView(selectedCanvasNode, hostSize.w, hostSize.h));
     } else {
-      setUserView(null); // back to fit
+      setCanvasViewport(fitCanvasView(canvasNodes, hostSize.w, hostSize.h));
     }
   }
 
@@ -206,16 +211,31 @@ export function CanvasStage() {
   // 操作:currentImage.id 没变(就是原来那张),但底图尺寸 / 坐标已变,残留的 pan/zoom
   // 与蒙版坐标系都失效了。
   useEffect(() => {
-    setUserView(null);
-    setMaskDataURL(null);
     drawingRef.current = { active: false, current: null };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentImage?.id, canvasViewResetTick]);
+  }, [currentImage?.id, canvasViewResetTick, canvasNodes.length]);
+
+  // Every generated/imported result becomes a persistent world-space node;
+  // selecting another result never clears existing nodes.
+  useEffect(() => {
+    if (!currentImage) return;
+    addCanvasNode(createCanvasNode({
+      id: currentImage.id,
+      type: "image",
+      mediaId: currentImage.imageId,
+      src: historyFullSrc(currentImage, null),
+      label: currentImage.prompt || "图片",
+      x: canvasNodes.find((node) => node.id === currentImage.id)?.x ?? ((hostSize.w / 2 - view.x) / view.scale - 140 + (canvasNodes.length % 4) * 36),
+      y: canvasNodes.find((node) => node.id === currentImage.id)?.y ?? ((hostSize.h / 2 - view.y) / view.scale - 140 + (canvasNodes.length % 4) * 36),
+      width: image?.width ?? 280,
+      height: image?.height ?? 280,
+    }));
+  }, [currentImage?.id, currentImageURL, image?.width, image?.height]);
 
   // setView is the only writer of userView. Treat any explicit pan/zoom as a
   // user override; auto-recenter happens by resetting to null elsewhere.
   function setView(v: { scale: number; x: number; y: number }) {
-    setUserView(v);
+    setCanvasViewport({ ...v, scale: clampCanvasScale(v.scale) });
   }
 
   // Mouse wheel zoom around cursor.
@@ -245,16 +265,27 @@ export function CanvasStage() {
     if (!stage || !image) return null;
     const p = stage.getPointerPosition();
     if (!p) return null;
-    return {
+    const world = {
       x: (p.x - view.x) / view.scale,
       y: (p.y - view.y) / view.scale,
+    };
+    return {
+      x: world.x - (selectedCanvasNode?.x ?? 0),
+      y: world.y - (selectedCanvasNode?.y ?? 0),
     };
   }
 
   // In-progress freehand annotation buffer (kept in ref to keep mousemove cheap).
   const freehandRef = useRef<number[] | null>(null);
+  const middlePanRef = useRef<{ x: number; y: number } | null>(null);
 
   function onMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (e.evt.button === 1) {
+      e.evt.preventDefault();
+      const p = stageRef.current?.getPointerPosition();
+      if (p) middlePanRef.current = p;
+      return;
+    }
     if (!image) return;
     const local = stagePointerToImageCoord();
     if (!local) return;
@@ -290,23 +321,33 @@ export function CanvasStage() {
   }
 
   function openCanvasMenu(e: Konva.KonvaEventObject<PointerEvent>) {
-    if (!currentImage) return;
+    if (canvasNodes.length === 0) return;
     e.evt.preventDefault();
     setCanvasMenu({ x: e.evt.clientX, y: e.evt.clientY });
   }
 
-  const canvasMenuItems: MenuItem[] = currentImage ? [
-    { label: "查看详情", icon: "ℹ", onClick: () => void useStudioStore.getState().openResultDetail(currentImage) },
-    { label: "另存为", icon: "💾", onClick: () => void useStudioStore.getState().saveCurrentImageAs() },
-    {
-      label: modeLabelForMenu(currentImage),
-      icon: "→",
-      onClick: () => void useStudioStore.getState().reuseAsSource(currentImage),
-    },
-    { separatorBefore: true, label: "清空画板", icon: "✕", onClick: () => useStudioStore.getState().setField("currentImage", null) },
-  ] : [];
+  const canvasMenuItems: MenuItem[] = [
+    ...(currentImage ? [
+      { label: "查看详情", icon: "ℹ", onClick: () => void useStudioStore.getState().openResultDetail(currentImage) },
+      { label: "另存为", icon: "💾", onClick: () => void useStudioStore.getState().saveCurrentImageAs() },
+      {
+        label: modeLabelForMenu(currentImage),
+        icon: "→",
+        onClick: () => void useStudioStore.getState().reuseAsSource(currentImage),
+      },
+    ] : []),
+    { separatorBefore: !!currentImage, label: "清空画板", icon: "✕", onClick: clearCanvasBoard },
+  ];
 
   function onMouseMove() {
+    const stage = stageRef.current;
+    const p = stage?.getPointerPosition();
+    if (middlePanRef.current && p) {
+      const last = middlePanRef.current;
+      middlePanRef.current = p;
+      setView({ ...view, x: view.x + p.x - last.x, y: view.y + p.y - last.y });
+      return;
+    }
     if (!image) return;
     const local = stagePointerToImageCoord();
     if (!local) return;
@@ -322,6 +363,7 @@ export function CanvasStage() {
   }
 
   function onMouseUp() {
+    middlePanRef.current = null;
     if (effectiveTool === "mask" && drawingRef.current.active && drawingRef.current.current) {
       const finished = drawingRef.current.current;
       drawingRef.current = { active: false, current: null };
@@ -385,8 +427,17 @@ export function CanvasStage() {
     setMaskDataURL(hasWhite ? "__PENDING_MASK__" : null);
   }, [strokes, image, maskDataURL, setMaskDataURL]);
 
-  function resetView() {
-    setUserView(null);
+  const resetView = useCallback(() => {
+    setCanvasViewport(canvasNodes.length ? fitCanvasView(canvasNodes, hostSize.w, hostSize.h) : null);
+  }, [canvasNodes, hostSize.w, hostSize.h, setCanvasViewport]);
+
+  function deleteCanvasNode(id: string) {
+    removeCanvasNode(id);
+    if (currentImage?.id === id) setField("currentImage", null);
+  }
+
+  function clearCanvasBoard() {
+    clearCanvas();
   }
 
   // Expose helpers via window for the toolbar reset buttons.
@@ -395,7 +446,7 @@ export function CanvasStage() {
     return () => {
       delete (window as any).__canvasResetView;
     };
-  }, [fit.scale, fit.x, fit.y]);
+  }, [resetView]);
 
   useCanvasShortcuts({
     brushSize,
@@ -438,6 +489,19 @@ export function CanvasStage() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      if (t?.tagName === "INPUT" || t?.tagName === "TEXTAREA" || t?.isContentEditable) return;
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId && !selectedAnnotationId) {
+        e.preventDefault();
+        deleteCanvasNode(selectedNodeId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedNodeId, selectedAnnotationId, removeCanvasNode]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
       const isTyping = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
       if (isTyping) return;
       if (e.code === "Space" && !e.repeat) {
@@ -465,9 +529,9 @@ export function CanvasStage() {
       <div
         ref={hostRef}
         className="stage-host"
-        style={{ cursor: !currentImage ? "default" : (effectiveTool === "pan" ? (spacePan ? "grabbing" : "grab") : "crosshair") }}
+        style={{ cursor: canvasNodes.length === 0 ? "default" : (effectiveTool === "pan" ? (spacePan ? "grabbing" : "grab") : "crosshair") }}
       >
-        {!currentImage && !showingResultGrid && <EmptyState />}
+        {!currentImage && canvasNodes.length === 0 && !showingResultGrid && <EmptyState />}
         {streamPreview && currentImage && !showingLiveBatchGrid ? (
           <div className="stream-preview-overlay">
             <StreamPreviewBadge />
@@ -506,7 +570,7 @@ export function CanvasStage() {
             bLabel={compareB.id.startsWith("source-preview:") ? "参考图" : "对比图"}
           />
         )}
-        {!showingResultGrid && currentImage && !compareB && hostSize.w > 0 && hostSize.h > 0 && (
+        {!showingResultGrid && !compareB && (currentImage || canvasNodes.length > 0) && hostSize.w > 0 && hostSize.h > 0 && (
         // The Stage canvas is wrapped in an absolutely positioned container so
         // its (potentially very large) layout footprint cannot push back on the
         // stage-host's grid-derived width. stage-host stays bounded by the grid
@@ -531,10 +595,28 @@ export function CanvasStage() {
           onContextMenu={openCanvasMenu}
         >
           <Layer ref={imageLayerRef}>
-            {image && <KonvaImage image={image} listening={false} />}
+            {canvasNodes.map((node) => (
+              <CanvasNodeShape
+                key={node.id}
+                node={node}
+                source={history.find((entry) => entry.id === node.id) ? historyFullSrc(history.find((entry) => entry.id === node.id)!, null) : null}
+                selected={selectedNodeId === node.id}
+                onSelect={() => {
+                  selectCanvasNode(node.id);
+                  if (node.type === "video") setField("currentImage", null);
+                  else {
+                    const item = history.find((entry) => entry.id === node.id);
+                    if (item) setField("currentImage", item);
+                  }
+                }}
+                onMove={(x, y) => moveCanvasNode(node.id, x, y)}
+                onDelete={() => deleteCanvasNode(node.id)}
+              />
+            ))}
           </Layer>
 
           <Layer ref={maskLayerRef}>
+            <Group x={selectedCanvasNode?.x ?? 0} y={selectedCanvasNode?.y ?? 0} scaleX={selectedCanvasNode && image ? selectedCanvasNode.width / image.width : 1} scaleY={selectedCanvasNode && image ? selectedCanvasNode.height / image.height : 1}>
             {image && importedMaskImage ? (
               <KonvaImage
                 image={importedMaskImage}
@@ -574,9 +656,11 @@ export function CanvasStage() {
                 globalCompositeOperation={drawingRef.current.current.erase ? "destination-out" : "source-over"}
               />
             )}
+            </Group>
           </Layer>
 
           <Layer>
+            <Group x={selectedCanvasNode?.x ?? 0} y={selectedCanvasNode?.y ?? 0} scaleX={selectedCanvasNode && image ? selectedCanvasNode.width / image.width : 1} scaleY={selectedCanvasNode && image ? selectedCanvasNode.height / image.height : 1}>
             {annotations.map((a) => (
               <AnnotationShape
                 key={a.id}
@@ -620,12 +704,13 @@ export function CanvasStage() {
                 listening={false}
               />
             )}
+            </Group>
           </Layer>
         </Stage>
         </div>
         )}
       </div>
-      {canvasMenu && currentImage ? (
+      {canvasMenu && canvasNodes.length > 0 ? (
         <ContextMenu
           x={canvasMenu.x}
           y={canvasMenu.y}

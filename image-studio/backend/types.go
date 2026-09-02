@@ -119,6 +119,34 @@ type ProbeUpstreamResult struct {
 	ResponsesTransportError string                    `json:"responsesTransportError,omitempty"`
 }
 
+// VideoOptions is the explicit external-video request contract. The backend
+// never infers or substitutes a video model.
+type VideoOptions struct {
+	BaseURL      string `json:"baseURL"`
+	APIKey       string `json:"apiKey"`
+	VideoModelID string `json:"videoModelID"`
+	EndpointPath string `json:"endpointPath,omitempty"`
+	Prompt       string `json:"prompt"`
+	Seconds      int    `json:"seconds,omitempty"`
+	Size         string `json:"size,omitempty"`
+	Quality      string `json:"quality,omitempty"`
+}
+
+type VideoPollOptions struct {
+	BaseURL      string `json:"baseURL"`
+	APIKey       string `json:"apiKey"`
+	VideoID      string `json:"videoID"`
+	EndpointPath string `json:"endpointPath,omitempty"`
+}
+
+type VideoResult struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	URL     string `json:"url,omitempty"`
+	B64JSON string `json:"b64_json,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 type UpstreamModelDescriptor struct {
 	ID          string `json:"id"`
 	Object      string `json:"object,omitempty"`

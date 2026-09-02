@@ -188,3 +188,46 @@ html[data-platform="windows"][data-ui-family="fluent"] .footer-bar {
   background: color-mix(in srgb, var(--bg-2) 92%, transparent);
   border-top: 1px solid var(--border);
 }
+
+/* Warm Windows compatibility layer: compact WinUI geometry remains intact. */
+html[data-platform="windows"][data-ui-family="fluent"] {
+  --accent: #c96442; --accent-2: #b65335; --accent-soft: rgb(201 100 66 / .13);
+  --bg: #f5f4ed; --window-titlebar-bg: rgb(245 244 237 / .82); --bg-2: #ece9df;
+  --panel: rgb(255 255 252 / .7); --panel-2: rgb(250 249 245 / .78);
+  --surface: rgb(255 255 252 / .62); --surface-2: rgb(236 233 224 / .78);
+  --sidebar: rgb(255 255 252 / .64); --inspector: rgb(255 255 252 / .6); --toolbar: rgb(255 255 252 / .66);
+  --border: rgb(70 64 54 / .13); --border-2: rgb(70 64 54 / .21);
+  --text: #141413; --text-muted: rgb(77 76 72 / .82); --text-dim: rgb(94 93 89 / .62);
+  --tool-hover-bg: rgb(201 100 66 / .1); --tool-hover-text: #9d4128;
+  --window-blur: blur(18px) saturate(135%);
+  --shadow-card: 0 10px 28px rgb(49 42 32 / .08), 0 2px 6px rgb(49 42 32 / .05);
+  --shadow-card-hover: 0 16px 40px rgb(49 42 32 / .12), 0 4px 10px rgb(49 42 32 / .07);
+  --shadow-flyout: 0 18px 46px rgb(49 42 32 / .16), 0 4px 12px rgb(49 42 32 / .08);
+}
+html.dark[data-platform="windows"][data-ui-family="fluent"] {
+  --accent: #d97757; --accent-2: #e58a6b; --accent-soft: rgb(217 119 87 / .18);
+  --bg: #141413; --window-titlebar-bg: rgb(20 20 19 / .82); --bg-2: #1b1b19;
+  --panel: rgb(36 35 32 / .72); --panel-2: rgb(43 42 39 / .8);
+  --surface: rgb(255 252 245 / .08); --surface-2: rgb(255 252 245 / .12);
+  --sidebar: rgb(29 28 26 / .74); --inspector: rgb(27 26 24 / .74); --toolbar: rgb(30 29 27 / .72);
+  --border: rgb(255 248 235 / .1); --border-2: rgb(255 248 235 / .18);
+  --text: #f5f4ed; --text-muted: rgb(232 230 220 / .76); --text-dim: rgb(208 204 193 / .54);
+  --tool-hover-bg: rgb(217 119 87 / .15); --tool-hover-text: #f3b29a;
+}
+html[data-platform="windows"][data-ui-family="fluent"] body {
+  background-image: radial-gradient(circle at 20% 0%, rgb(201 100 66 / .09), transparent 28rem), linear-gradient(135deg, #faf9f4, #f0eee6 58%, #f5f4ed);
+}
+html.dark[data-platform="windows"][data-ui-family="fluent"] body {
+  background-image: radial-gradient(circle at 20% 0%, rgb(217 119 87 / .11), transparent 28rem), linear-gradient(135deg, #141413, #1d1c19 56%, #171614);
+}
+html[data-platform="windows"][data-ui-family="fluent"] .control-panel,
+html[data-platform="windows"][data-ui-family="fluent"] .history-rail,
+html[data-platform="windows"][data-ui-family="fluent"] .platform-card,
+html[data-platform="windows"][data-ui-family="fluent"] .fluent-surface {
+  -webkit-backdrop-filter: var(--window-blur); backdrop-filter: var(--window-blur);
+}
+html[data-platform="windows"][data-ui-family="fluent"] .platform-card,
+html[data-platform="windows"][data-ui-family="fluent"] .fluent-surface {
+  background: linear-gradient(145deg, rgb(255 255 255 / .34), transparent 50%), var(--surface-elevated);
+  box-shadow: inset 0 1px 0 var(--window-outline), var(--shadow-card);
+}
