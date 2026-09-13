@@ -93,11 +93,7 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 ### 赞助商
 
 <p align="center">
-  <a href="https://www.fhl.mom"><img src="./docs/picture/%E8%B5%9E%E5%8A%A9-www.FHL.mom.png" alt="赞助商 · www.fhl.mom" width="720"></a>
-  <br /><br />
-  <a href="https://gptcodex.top"><img src="./docs/picture/%E8%B5%9E%E5%8A%A9-GPTCODEX.top.png" alt="赞助商 · gptcodex.top" width="720"></a>
-  <br /><br />
-  <a href="https://muxueai.pro"><img src="./docs/picture/%E8%B5%9E%E5%8A%A9-muxueai.pro.png" alt="赞助商 · muxueai.pro" width="720"></a>
+  <img src="./docs/picture/sponsor-token-subsidy.jpg" alt="赞助商 · 百亿 Token 补贴 · QQ 群 681680552" width="720" />
 </p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=BGMYE/XAI&type=Date)](https://star-history.com/#BGMYE/XAI&Date)
