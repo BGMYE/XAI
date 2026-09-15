@@ -14,6 +14,7 @@ import { androidSaveHint, androidTarget } from "../../platform/android/bridge";
 import { BeginNativeFileDrag, getHostCapabilities, ChooseDirectory } from "../../platform/runtime/host";
 import { usePlatform } from "../../platform/context";
 import { Modal } from "./Modal";
+import "./save-prompt.css";
 
 export function SavePromptModal() {
   const request = useStudioStore((s) => s.savePromptRequest);
@@ -109,8 +110,8 @@ export function SavePromptModal() {
     }
 
     return (
-      <Modal open onClose={closeSavePrompt} title="是否另存这张图片?" width={isAndroidPhone ? 420 : 520}>
-        <div className="space-y-4">
+      <Modal open onClose={closeSavePrompt} title="是否另存这张图片？" width={isAndroidPhone ? 420 : 560} cardClassName="xai-save-prompt" bodyClassName="save-prompt-body">
+        <div className="save-prompt-content">
           <div className="grid gap-3 sm:grid-cols-[132px_minmax(0,1fr)]">
             <div
               draggable={!!dragSpec}
@@ -132,10 +133,10 @@ export function SavePromptModal() {
             </div>
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                图片已生成并保存在默认输出目录。
+                图片已保存到默认目录。
               </p>
               <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
-                需要放到项目、相册或其他目录时，可以现在选择目标位置另存一份。
+                也可以选择其他位置，另存一份。
               </p>
               {singleItem?.savedPath ? (
                 <p className={`font-mono-token break-all border border-black/[0.06] bg-[var(--surface)] px-2.5 py-2 text-[11px] text-zinc-500 dark:border-white/[0.04] ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`}>
@@ -148,8 +149,9 @@ export function SavePromptModal() {
           {androidTarget.isAndroid ? (
             <p className="text-[11px] leading-relaxed text-zinc-500">{androidSaveHint()}</p>
           ) : null}
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+        </div>
+        <div className="save-prompt-footer">
+          <label className="save-prompt-suppress">
             <input
               type="checkbox"
               checked={suppressed}
@@ -159,11 +161,11 @@ export function SavePromptModal() {
             以后不再提示
           </label>
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="save-prompt-actions">
             <button
               type="button"
               onClick={closeSavePrompt}
-              className={`platform-action-btn border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+              className="save-prompt-secondary"
             >
               稍后
             </button>
@@ -171,10 +173,10 @@ export function SavePromptModal() {
               type="button"
               onClick={saveSingleAs}
               disabled={saving}
-              className={`liquid-primary-button inline-flex items-center justify-center gap-1.5 bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:opacity-60 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+              className="save-prompt-primary"
             >
               <FolderOpen className="h-4 w-4" />
-              {saving ? "保存中..." : "保存到指定位置"}
+              <span>{saving ? "保存中…" : "选择位置另存"}</span>
             </button>
           </div>
         </div>
@@ -191,14 +193,14 @@ export function SavePromptModal() {
       onClose={closeSavePrompt}
       title={`本次结果 · ${batchItems.length} 张`}
       width={isAndroidPhone ? 420 : 860}
-      cardClassName={!isAndroidPhone ? "max-w-[92vw]" : ""}
-      bodyClassName="flex min-h-0 flex-col gap-4"
+      cardClassName={`xai-save-prompt ${!isAndroidPhone ? "max-w-[92vw]" : ""}`}
+      bodyClassName="save-prompt-body"
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="save-prompt-content save-prompt-batch-content">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-1">
             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              单次任务只弹这一次。勾选需要的图片后，再统一另存为到目标目录。
+              选择喜欢的图片，统一另存到目标目录。
             </p>
             <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
               当前已选 {selectedBatchItems.length} / {batchItems.length} 张。
@@ -253,7 +255,9 @@ export function SavePromptModal() {
           </p>
         ) : null}
 
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+      </div>
+      <div className="save-prompt-footer">
+        <label className="save-prompt-suppress">
           <input
             type="checkbox"
             checked={suppressed}
@@ -263,11 +267,11 @@ export function SavePromptModal() {
           以后不再提示
         </label>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="save-prompt-actions">
           <button
             type="button"
             onClick={closeSavePrompt}
-            className={`platform-action-btn border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+            className="save-prompt-secondary"
           >
             稍后
           </button>
@@ -275,10 +279,10 @@ export function SavePromptModal() {
             type="button"
             onClick={saveBatchAs}
             disabled={saving || selectedBatchItems.length === 0 || !canBatchSaveToDirectory}
-            className={`liquid-primary-button inline-flex items-center justify-center gap-1.5 bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:opacity-60 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+            className="save-prompt-primary"
           >
             <FolderOpen className="h-4 w-4" />
-            {saving ? "保存中..." : `另存选中项 (${selectedBatchItems.length})`}
+            <span>{saving ? "保存中…" : `另存所选 · ${selectedBatchItems.length} 张`}</span>
           </button>
         </div>
       </div>

@@ -3,6 +3,60 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const nodes = await import("../src/state/canvasNodes.ts");
+const { buildImageMaskPNGDataURL } = await import("../src/state/canvasMask.ts");
+
+test("native URL images produce a hand-painted mask at their full canvas image size", () => {
+  const previousDocument = globalThis.document;
+  const paths = [];
+  const canvas = {
+    width: 0, height: 0,
+    getContext: () => ({
+      fillRect: (...rect) => paths.push(["fill", ...rect]),
+      beginPath() {}, moveTo: (...point) => paths.push(["start", ...point]),
+      lineTo: (...point) => paths.push(["line", ...point]), stroke() {},
+    }),
+    toDataURL: (mime) => { assert.equal(mime, "image/png"); return "data:image/png;base64,encoded-mask"; },
+  };
+  globalThis.document = { createElement: (tag) => { assert.equal(tag, "canvas"); return canvas; } };
+  try {
+    const image = { id: "native-a", fullUrl: "/media/full/native-a", previewWidth: 384, previewHeight: 288 };
+    const result = buildImageMaskPNGDataURL([{ points: [1500, 900, 1700, 1100], size: 24 }], image, [
+      nodes.createCanvasNode({ id: "unrelated", type: "image", width: 512, height: 512 }),
+      nodes.createCanvasNode({ id: image.id, type: "image", width: 2048, height: 1536 }),
+    ]);
+    assert.equal(result, "data:image/png;base64,encoded-mask");
+    assert.deepEqual([canvas.width, canvas.height], [2048, 1536]);
+    assert.deepEqual(paths, [["fill", 0, 0, 2048, 1536], ["start", 1500, 900], ["line", 1700, 1100]]);
+  } finally { globalThis.document = previousDocument; }
+});
+
+test("mask sizing never substitutes a thumbnail, another image, or a video node", () => {
+  const image = { id: "native-a", fullUrl: "/media/full/native-a", previewWidth: 384, previewHeight: 288 };
+  const strokes = [{ points: [10, 10, 20, 20], size: 12 }];
+  assert.equal(buildImageMaskPNGDataURL(strokes, image, []), null);
+  assert.equal(buildImageMaskPNGDataURL(strokes, image, [nodes.createCanvasNode({ id: "unrelated", type: "image" })]), null);
+  assert.equal(buildImageMaskPNGDataURL(strokes, image, [nodes.createCanvasNode({ id: image.id, type: "video" })]), null);
+});
+
+test("a reference layer keeps its editable image after another image replaces active sources", () => {
+  const node = nodes.createCanvasNode({
+    id: "source-preview:C:\\images\\original-a.png", type: "image", mediaId: "asset-a",
+    src: "/media/full/asset-a", width: 640, height: 480, createdAt: 123,
+  });
+  const image = nodes.sourceHistoryItemForCanvasNode(node);
+  assert.equal(image.savedPath, "C:\\images\\original-a.png");
+  assert.equal(image.id, node.id);
+  assert.equal(image.imageId, "asset-a");
+  assert.equal(image.fullUrl, "/media/full/asset-a");
+  assert.equal(image.mode, "edit");
+  assert.deepEqual([image.previewWidth, image.previewHeight, image.createdAt], [640, 480, 123]);
+});
+
+test("source layer recovery never invents a path for generated images or video nodes", () => {
+  assert.equal(nodes.sourceHistoryItemForCanvasNode(nodes.createCanvasNode({ id: "generated", type: "image" })), undefined);
+  assert.equal(nodes.sourceHistoryItemForCanvasNode(nodes.createCanvasNode({ id: "source-preview:/movie.mp4", type: "video" })), undefined);
+  assert.equal(nodes.sourceHistoryItemForCanvasNode(nodes.createCanvasNode({ id: "source-preview:", type: "image" })), undefined);
+});
 
 test("canvas node reducer supports selection, movement, deletion, and preserves other nodes", () => {
   const image = nodes.createCanvasNode({ id: "img-1", type: "image", mediaId: "h-1", x: 10, y: 20 });

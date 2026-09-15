@@ -1,0 +1,117 @@
+.xai-save-prompt .batch-grid {
+  gap: 14px;
+}
+
+.xai-save-prompt .batch-grid-tile.selection-mode {
+  border-color: #cbd5e1;
+  border-radius: 12px;
+  background: #f4f5f7;
+  box-shadow: none;
+}
+
+.xai-save-prompt .batch-grid-tile.selection-mode:hover {
+  border-color: #246bc0;
+  transform: none;
+}
+
+.xai-save-prompt .batch-grid-tile.selection-mode.selected {
+  border-color: #246bc0;
+  box-shadow: inset 0 0 0 1px #246bc0;
+}
+
+.xai-save-prompt .selection-mode .batch-grid-tile-button {
+  display: flex;
+  padding: 6px;
+}
+
+.xai-save-prompt .selection-mode .batch-grid-media {
+  height: 100%;
+  border-radius: 7px;
+  background: #f4f5f7;
+}
+
+.xai-save-prompt .selection-mode img {
+  object-fit: contain;
+  background: #f4f5f7;
+}
+
+.xai-save-prompt .batch-grid-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  right: 12px;
+  bottom: 12px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 16%);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+  backdrop-filter: none;
+}
+
+.xai-save-prompt .batch-grid-check::before {
+  content: "";
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.xai-save-prompt .selected .batch-grid-check {
+  border-color: #246bc0;
+  background: #246bc0;
+  color: #fff;
+}
+
+.xai-save-prompt .selected .batch-grid-check::before {
+  content: "✓";
+}
+
+.xai-save-prompt .batch-grid-tile-button:focus-visible {
+  outline: 3px solid #246bc0;
+  outline-offset: -4px;
+  border-radius: 11px;
+}
+
+html.dark .xai-save-prompt .batch-grid-tile.selection-mode {
+  border-color: #505050;
+}
+
+html.dark .xai-save-prompt .batch-grid-tile.selection-mode:is(:hover, .selected) {
+  border-color: #8bc2ff;
+}
+
+html.dark .xai-save-prompt .batch-grid-tile.selection-mode.selected {
+  box-shadow: inset 0 0 0 1px #8bc2ff;
+}
+
+html.dark .xai-save-prompt :is(.batch-grid-tile.selection-mode, .selection-mode .batch-grid-media, .selection-mode img) {
+  background: #202020;
+}
+
+html.dark .xai-save-prompt .batch-grid-check {
+  border-color: #606060;
+  background: #242424;
+  color: #e5e5e5;
+}
+
+html.dark .xai-save-prompt .selected .batch-grid-check {
+  border-color: #8bc2ff;
+  background: #8bc2ff;
+  color: #172b43;
+}
+
+html.dark .xai-save-prompt .batch-grid-tile-button:focus-visible {
+  outline-color: #8bc2ff;
+}

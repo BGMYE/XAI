@@ -17,6 +17,7 @@ import { TimelinePromptStackGroup } from "./TimelinePromptStackGroup";
 import { buildHistoryPromptEntries, type HistoryPromptEntry } from "./historyPromptGroups";
 import { useHistoryContextMenu } from "./useHistoryContextMenu";
 import { toPreviewOnlyHistoryItem } from "../../state/studioStore.runtime";
+import "./history-surfaces.css";
 
 type ModeFilter = "all" | Mode;
 type DateFilter = TimelineHistoryDateFilter;
@@ -124,7 +125,7 @@ export function HistoryTimelineModal() {
   if (!historyTimelineOpen) return null;
 
   return (
-    <Modal open onClose={closeHistoryTimeline} title="更多历史" width={920}>
+    <Modal open onClose={closeHistoryTimeline} title="更多历史" width={920} cardClassName="history-surface-modal">
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-[minmax(0,1fr)_140px_140px] gap-2">
           <label className={`flex items-center gap-2 border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 dark:border-white/[0.08] ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`}>
@@ -175,7 +176,7 @@ export function HistoryTimelineModal() {
             <div className="flex flex-col gap-5">
               {groups.map(([day, entries]) => (
                 <section key={day} className="flex flex-col gap-3">
-                  <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-[var(--bg)]/90 px-1 py-1 backdrop-blur-sm">
+                  <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-[var(--bg)] px-1 py-1">
                     <CalendarDays className="h-4 w-4 text-[var(--accent)]" />
                     <div className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100">{day}</div>
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{entries.length} 组</div>

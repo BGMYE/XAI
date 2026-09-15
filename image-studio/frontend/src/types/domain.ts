@@ -30,6 +30,8 @@ export interface UpstreamProfile {
   baseURL: string;
   textModelID: string;
   imageModelID: string;
+  /** Model ids discovered from /v1/models or entered manually for this upstream. */
+  modelIDs?: string[];
   // 外部视频接口必须显式指定；空值表示未配置视频能力。
   videoModelID: string;
   reasoningEffort: ReasoningEffortValue;

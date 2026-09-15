@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bell, Download, Folder, FolderEdit, Github, Info, KeyRound,
-  MessageSquare, Monitor, Moon, Network, RotateCw, Save, Sun, Trash2, Upload,
+  MessageSquare, Monitor, Moon, Network, Plug, RotateCw, Save, Sun, Trash2, Upload,
 } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import {
   GetOutputDir, OpenOutputDir, OpenExternalURL, ChooseOutputDir, SetOutputDir,
+  GetStoredAPIKey,
 } from "../../platform/runtime/host";
+import * as HostRuntime from "../../platform/runtime/host";
 import type { KernelRuntimeMode, ProxyMode, SystemNotificationPermissionState } from "../../types/domain";
-import { DEFAULT_AUTO_RETRY_COUNT, MAX_AUTO_RETRY_COUNT } from "../../../../../shared/kernel/requestModel.js";
+import { MAX_AUTO_RETRY_COUNT } from "../../../../../shared/kernel/requestModel.js";
 import { Modal } from "../common/Modal";
 import { rememberTrustedOutputRoot } from "../../lib/storage";
 import { scheduleCompatibilityExport } from "../../lib/compatState";
@@ -24,6 +26,11 @@ import {
   SettingsSegButton,
 } from "./settingsPrimitives";
 import { importCompletionSoundFile } from "../../lib/completionSound";
+import { keyringUserFor } from "../../lib/profiles";
+import type { UpstreamProfile } from "../../types/domain";
+import { buildUpstreamModelCatalog, type UpstreamModelCatalog } from "../../lib/upstreamModels.ts";
+import "../../styles/_xai-typography.css";
+import "./settings-navigation.css";
 
 const REPO_URL = "https://github.com/BGMYE/XAI";
 const RELEASES_URL = "https://github.com/BGMYE/XAI/releases";
@@ -41,37 +48,30 @@ type DesktopSettingsSectionId =
 const DESKTOP_SETTINGS_SECTIONS: ReadonlyArray<{
   id: DesktopSettingsSectionId;
   title: string;
-  description: string;
 }> = [
   {
     id: "runtime",
-    title: "运行与网络",
-    description: "内核、代理、自动重试与流式预览策略",
+    title: "行旅 · 运行与网络",
   },
   {
     id: "files",
-    title: "输出与缓存",
-    description: "保存位置、保存提示、日志与退出清理",
+    title: "归处 · 输出与缓存",
   },
   {
     id: "alerts",
-    title: "通知与提示",
-    description: "完成提示音与系统通知权限",
+    title: "回响 · 通知与提示",
   },
   {
     id: "appearance",
-    title: "外观与字号",
-    description: "主题切换与界面字体缩放",
+    title: "光影 · 外观与字号",
   },
   {
     id: "data",
-    title: "数据与重置",
-    description: "历史导入导出、本地清理与安全重置",
+    title: "旧页 · 数据与重置",
   },
   {
     id: "about",
-    title: "关于与反馈",
-    description: "版本入口、仓库反馈与许可证信息",
+    title: "来处 · 关于与反馈",
   },
 ];
 
@@ -91,7 +91,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     setTheme, setFontScale,
     pushToast,
     apiKey, baseURL, apiMode,
-    profiles, activeProfileId, setActiveProfile,
+    profiles, activeProfileId, setActiveProfile, createProfile, updateProfile,
     openUpstreamConfig, testAPIKey, isTestingKey,
     savePromptSuppressed, setSavePromptSuppressed,
     keepLogs, setKeepLogs,
@@ -111,15 +111,13 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   const [outputDir, setOutputDir] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
   const [activeDesktopSection, setActiveDesktopSection] = useState<DesktopSettingsSectionId>(DESKTOP_SETTINGS_SECTIONS[0].id);
-  const desktopScrollBodyRef = useRef<HTMLDivElement | null>(null);
-  const desktopSectionRefs = useRef<Record<DesktopSettingsSectionId, HTMLElement | null>>({
-    runtime: null,
-    files: null,
-    alerts: null,
-    appearance: null,
-    data: null,
-    about: null,
-  });
+  const [upstreamDraft, setUpstreamDraft] = useState<UpstreamProfile | null>(null);
+  const [upstreamDraftKey, setUpstreamDraftKey] = useState("");
+  const [upstreamSaving, setUpstreamSaving] = useState(false);
+  const [inlineModelCatalog, setInlineModelCatalog] = useState<UpstreamModelCatalog | null>(null);
+  const [inlineModelsLoading, setInlineModelsLoading] = useState(false);
+  const [customModelID, setCustomModelID] = useState("");
+  const desktopContentRef = useRef<HTMLDivElement | null>(null);
   const { isMac, usesFluentUI, isAndroid, isAndroidPad } = usePlatform();
 
   useEffect(() => {
@@ -130,63 +128,114 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   useEffect(() => {
     if (!open || isAndroid) return;
     setActiveDesktopSection(DESKTOP_SETTINGS_SECTIONS[0].id);
-    if (desktopScrollBodyRef.current) desktopScrollBodyRef.current.scrollTop = 0;
+    if (desktopContentRef.current) desktopContentRef.current.scrollTop = 0;
   }, [isAndroid, open]);
 
   useEffect(() => {
-    if (!open || isAndroid) return;
-    const container = desktopScrollBodyRef.current;
-    if (!container) return;
+    const profile = profiles.find((item) => item.id === activeProfileId) ?? null;
+    setUpstreamDraft(profile);
+    setUpstreamDraftKey("");
+    setInlineModelCatalog(profile?.modelIDs?.length ? buildUpstreamModelCatalog(profile.modelIDs.map((id) => ({ id }))) : null);
+    setCustomModelID("");
+    if (profile) {
+      GetStoredAPIKey(keyringUserFor(profile.id)).then((key) => setUpstreamDraftKey(key ?? "")).catch(() => undefined);
+    }
+  }, [activeProfileId, profiles]);
 
-    const syncActiveSection = () => {
-      const scrollTop = container.scrollTop + 96;
-      let currentSection = DESKTOP_SETTINGS_SECTIONS[0].id;
-      for (const section of DESKTOP_SETTINGS_SECTIONS) {
-        const sectionNode = desktopSectionRefs.current[section.id];
-        if (sectionNode && sectionNode.offsetTop <= scrollTop) {
-          currentSection = section.id;
-        }
-      }
-      setActiveDesktopSection((previous) => (previous === currentSection ? previous : currentSection));
-    };
+  async function loadInlineModels() {
+    if (!upstreamDraft || !upstreamDraft.baseURL.trim() || !upstreamDraftKey.trim()) {
+      pushToast("请先填写 Base URL 与 API Key，再获取上游模型", "warn");
+      return;
+    }
+    setInlineModelsLoading(true);
+    try {
+      const state = useStudioStore.getState();
+      const result = await HostRuntime.probeCurrentUpstream(
+        upstreamDraft.baseURL,
+        upstreamDraftKey,
+        state.proxyMode,
+        state.proxyURL,
+        upstreamDraft.apiMode,
+        upstreamDraft.responsesTransport ?? "sse",
+        upstreamDraft.allowInsecureConnection === true,
+      );
+      const catalog = buildUpstreamModelCatalog(result.models ?? []);
+      const modelIDs = Array.from(new Set([...(upstreamDraft.modelIDs ?? []), ...catalog.all.map((model) => model.id)]));
+      setInlineModelCatalog(buildUpstreamModelCatalog(modelIDs.map((id) => ({ id }))));
+      setUpstreamDraft((current) => current ? { ...current, modelIDs } : current);
+      pushToast(`已获取 ${catalog.all.length} 个上游模型`, catalog.all.length ? "success" : "warn");
+    } catch (error: any) {
+      pushToast(`模型目录获取失败：${error?.message ?? error}`, "error", 6000);
+    } finally {
+      setInlineModelsLoading(false);
+    }
+  }
 
-    syncActiveSection();
-    container.addEventListener("scroll", syncActiveSection, { passive: true });
-    window.addEventListener("resize", syncActiveSection);
-    return () => {
-      container.removeEventListener("scroll", syncActiveSection);
-      window.removeEventListener("resize", syncActiveSection);
-    };
-  }, [isAndroid, open]);
+  function addInlineCustomModel() {
+    const id = customModelID.trim();
+    if (!id) return;
+    setUpstreamDraft((current) => {
+      if (!current) return current;
+      const modelIDs = Array.from(new Set([...(current.modelIDs ?? []), id]));
+      setInlineModelCatalog(buildUpstreamModelCatalog(modelIDs.map((value) => ({ id: value }))));
+      return { ...current, modelIDs };
+    });
+    setCustomModelID("");
+  }
+
+  async function saveInlineUpstream() {
+    if (!upstreamDraft) return;
+    setUpstreamSaving(true);
+    try {
+      const ok = await updateProfile(upstreamDraft.id, {
+        name: upstreamDraft.name,
+        apiMode: upstreamDraft.apiMode,
+        requestPolicy: upstreamDraft.requestPolicy,
+        baseURL: upstreamDraft.baseURL,
+        imageModelID: upstreamDraft.imageModelID,
+        textModelID: upstreamDraft.textModelID,
+        modelIDs: upstreamDraft.modelIDs,
+        apiKey: upstreamDraftKey,
+      });
+      if (ok) pushToast("上游连接与凭据已保存", "success");
+    } finally {
+      setUpstreamSaving(false);
+    }
+  }
+
+  async function createInlineUpstream() {
+    const id = await createProfile({ apiMode: "images", requestPolicy: "openai", setActive: true });
+    if (id) pushToast("已添入 Images 上游，请继续填写连接信息", "success");
+  }
 
   async function clearAPIKey() {
-    if (!confirm("确定清除已保存的 API Key 吗?")) return;
+    if (!confirm("要清除当前上游在本机保存的 API Key 吗？清除后需重新填写才能生成。")) return;
     try {
       await setAPIKey("");
-      pushToast("已清除安全存储中的 API Key", "success");
+      pushToast("当前上游在本机凭据存储中的 API Key 已清除", "success");
     } catch (e: any) {
-      pushToast(`清除失败:${e?.message ?? e}`, "error", 5000);
+      pushToast(`未能清除：${e?.message ?? e}`, "error", 5000);
     }
   }
 
   async function clearHistory() {
-    if (!confirm("确定删除全部历史记录吗?\n\n此操作会清空本地数据库中的所有历史，且无法撤销。")) return;
+    if (!confirm("要删除全部历史记录吗？\n\n本地数据库中的所有历史都会被清空，此操作无法撤销。")) return;
     try {
       const removed = await clearStoredHistory();
-      pushToast(removed > 0 ? `已删除全部 ${removed} 条历史` : "已清空全部历史", "success");
+      pushToast(removed > 0 ? `全部 ${removed} 条本地历史已删除` : "全部本地历史已清空", "success");
     } catch (error) {
-      pushToast(`清空历史失败:${error instanceof Error ? error.message : String(error)}`, "error", 5000);
+      pushToast(`未能清空历史：${error instanceof Error ? error.message : String(error)}`, "error", 5000);
     }
   }
 
   async function pruneHistory(days: number) {
     const removed = await pruneHistoryOlderThanDays(days);
-    if (removed > 0) pushToast(`已清理 ${removed} 条 ${days} 天前的历史`, "success");
-    else pushToast(`没有 ${days} 天前的历史需要清理`, "info");
+    if (removed > 0) pushToast(`已删除 ${days} 天前的 ${removed} 条历史记录`, "success");
+    else pushToast(`${days} 天前没有待清理的旧记录`, "info");
   }
 
   function openOutputLocation() {
-    openOutputLocationForPlatform(OpenOutputDir).catch((e) => pushToast(e?.message ?? "无法打开保存位置", "warn"));
+    openOutputLocationForPlatform(OpenOutputDir).catch((e) => pushToast(e?.message ?? "暂时无法抵达作品保存的位置", "warn"));
   }
 
   function openExternal(url: string) {
@@ -196,18 +245,18 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   function updateSavePromptSuppressed(value: boolean) {
     setSavePromptSuppressed(value);
     scheduleCompatibilityExport(useStudioStore.getState());
-    pushToast(value ? "已关闭生成后保存提示" : "已开启生成后保存提示", "success");
+    pushToast(value ? "作品落定后，将不再弹出另存提醒" : "作品落定后，会提醒你选择另存位置", "success");
   }
 
   async function updateKeepLogs(value: boolean) {
     await setKeepLogs(value);
-    pushToast(value ? "已开启日志保留" : "已关闭日志保留，退出应用后会自动清理 log", "success");
+    pushToast(value ? "运行日志将留存，便于日后回看" : "日志不再长期留存，退出应用时会清理 log", "success");
   }
 
   async function updateCleanupPreviewCacheOnExit(value: boolean) {
     await setCleanupPreviewCacheOnExit(value);
     pushToast(
-      value ? "已开启退出时清理预览缓存" : "已关闭退出时清理预览缓存",
+      value ? "退出应用时，将清理可重建的预览缓存" : "预览缓存将保留，供下次打开时使用",
       "success",
     );
   }
@@ -228,9 +277,9 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         try {
           const imported = await importCompletionSoundFile(file);
           setCompletionSoundCustom(imported);
-          pushToast(`已设置自定义提示音: ${imported.name}`, "success");
+          pushToast(`完成时的回响已换为：${imported.name}`, "success");
         } catch (e: any) {
-          pushToast(e?.message ?? "导入提示音失败", "error", 5000);
+          pushToast(e?.message ?? "这段声音暂未能导入", "error", 5000);
         }
       })();
     }, { once: true });
@@ -238,43 +287,43 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   }
 
   function systemNotificationPermissionLabel(permission: SystemNotificationPermissionState): string {
-    if (permission === "granted") return "已允许";
-    if (permission === "denied") return "已拒绝";
-    if (permission === "unsupported") return "当前平台不支持";
-    return "尚未授权";
+    if (permission === "granted") return "通知已获允许";
+    if (permission === "denied") return "通知权限已拒绝";
+    if (permission === "unsupported") return "此平台暂不支持";
+    return "等待你的授权";
   }
 
   async function updateCompletionNotificationEnabled(value: boolean) {
     const permission = await setCompletionNotificationEnabled(value);
     if (!value) {
-      pushToast("已关闭系统通知", "success");
+      pushToast("完成消息将留在应用内，不再发送系统通知", "success");
       return;
     }
     if (permission === "granted") {
-      pushToast("已开启系统通知", "success");
+      pushToast("离开窗口时，系统通知会带来完成消息", "success");
       return;
     }
     if (permission === "unsupported") {
-      pushToast("当前平台不支持系统通知", "warn", 5000);
+      pushToast("此平台暂时无法送出系统通知", "warn", 5000);
       return;
     }
     if (permission === "denied") {
-      pushToast("系统通知权限已被拒绝，请在系统设置中允许后重试", "warn", 6000);
+      pushToast("系统通知尚被阻止；请到系统设置中允许，再试一次", "warn", 6000);
       return;
     }
-    pushToast("请先允许系统通知权限", "warn");
+    pushToast("请先允许系统通知，完成消息才能送达", "warn");
   }
 
   async function askCompletionNotificationPermission() {
     const permission = await requestCompletionNotificationPermission();
     if (permission === "granted") {
-      pushToast("系统通知权限已授权", "success");
+      pushToast("系统通知已获授权，完成消息可以送达", "success");
     } else if (permission === "denied") {
-      pushToast("系统通知权限已被拒绝，请在系统设置中允许后重试", "warn", 6000);
+      pushToast("系统通知尚被阻止；请到系统设置中允许，再试一次", "warn", 6000);
     } else if (permission === "unsupported") {
-      pushToast("当前平台不支持系统通知", "warn", 5000);
+      pushToast("此平台暂时无法送出系统通知", "warn", 5000);
     } else {
-      pushToast("系统通知权限仍未授权", "warn");
+      pushToast("系统通知仍在等待授权", "warn");
     }
   }
 
@@ -283,19 +332,9 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     onClose();
   }
 
-  function setDesktopSectionRef(id: DesktopSettingsSectionId) {
-    return (node: HTMLElement | null) => {
-      desktopSectionRefs.current[id] = node;
-    };
-  }
-
-  function scrollToDesktopSection(id: DesktopSettingsSectionId) {
-    const container = desktopScrollBodyRef.current;
-    const sectionNode = desktopSectionRefs.current[id];
-    if (!container || !sectionNode) return;
-    sectionNode.scrollIntoView({ block: "start", behavior: "smooth" });
-    container.scrollTop = Math.max(sectionNode.offsetTop - 8, 0);
+  function selectDesktopSection(id: DesktopSettingsSectionId) {
     setActiveDesktopSection(id);
+    if (desktopContentRef.current) desktopContentRef.current.scrollTop = 0;
   }
 
   const outputLabel = androidTarget.isAndroid ? platformOutputRootLabel() : (outputDir || "...");
@@ -330,7 +369,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
       onPreviewCompletionSound={() => void previewCompletionSound()}
       onResetCompletionSound={() => {
         resetCompletionSoundCustom();
-        pushToast("已恢复默认提示音", "success");
+        pushToast("已恢复最初的内置提示音", "success");
       }}
       onSelectCompletionSound={() => void chooseCompletionSoundFile()}
       onSetActiveProfile={(id) => {
@@ -338,24 +377,24 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
       }}
       onSetCompletionSoundEnabled={(value) => {
         setCompletionSoundEnabled(value);
-        pushToast(value ? "已开启完成提示音" : "已关闭完成提示音", "success");
+        pushToast(value ? "作品落定时，会响起一声提醒" : "作品落定时，将保持安静", "success");
       }}
       onSetCompletionSoundMode={(value) => {
         setCompletionSoundMode(value);
-        pushToast(value === "custom" ? "已切换到自定义提示音" : "已切换到默认提示音", "success");
+        pushToast(value === "custom" ? "完成时将奏响你选定的声音" : "完成时将响起内置提示音", "success");
       }}
       onSetFontScale={setFontScale}
       onSetKernelRuntimeMode={(value) => setField("kernelRuntimeMode", value)}
       onSetAutoRetryEnabled={(value) => {
         setField("autoRetryEnabled", value);
         scheduleCompatibilityExport(useStudioStore.getState());
-        pushToast(value ? "已开启自动重试" : "已关闭自动重试", "success");
+        pushToast(value ? "遇到可重试的波折，会自动再试" : "自动重试已停用，失败后等待你的下一步", "success");
       }}
       onSetAutoRetryCount={(value) => setField("autoRetryCount", value)}
       onSetProtectStreamPreview={(value) => {
         setField("protectStreamPreview", value);
         scheduleCompatibilityExport(useStudioStore.getState());
-        pushToast(value ? "已开启流式预览保护" : "已关闭流式预览保护", "success");
+        pushToast(value ? "预览保护已启用，优先守住最终图的完整" : "预览保护已停用，将遵循设定的预览帧数", "success");
       }}
       onSetCleanupPreviewCacheOnExit={(value) => void updateCleanupPreviewCacheOnExit(value)}
       onSetProxyConfig={setProxyConfig}
@@ -378,41 +417,153 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   ) : null;
 
   const desktopSettings = (
-    <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="settings-category-layout">
       <SettingsAnchorNav
         sections={DESKTOP_SETTINGS_SECTIONS}
         activeId={activeDesktopSection}
-        onSelect={(id) => scrollToDesktopSection(id as DesktopSettingsSectionId)}
+        onSelect={(id) => selectDesktopSection(id as DesktopSettingsSectionId)}
       />
 
-      <div className="min-w-0 flex flex-col gap-6">
+      <div ref={desktopContentRef} className="settings-category-content">
         <SettingsSection
           id="settings-runtime"
-          ref={setDesktopSectionRef("runtime")}
-          title="运行与网络"
-          description="把请求链路相关的设置放在一起，方便快速切换内核、代理和自动重试策略。"
+          active={activeDesktopSection === "runtime"}
+          title="行旅 · 运行与网络"
         >
-          <SettingsRow label="内核执行">
+          <SettingsRow label="内核 · 创作在哪里运行">
             <select
               value={kernelRuntimeMode}
               onChange={(e) => setField("kernelRuntimeMode", e.target.value as KernelRuntimeMode)}
               className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 ${isMac ? "min-h-[44px] py-3 text-[14px]" : "py-2.5 text-[12px]"} text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`}
             >
-              <option value="auto">auto(按宿主自动选择)</option>
-              <option value="local">local(桌面 Go/Wails)</option>
-              <option value="remote">remote(共享远程内核)</option>
+              <option value="auto">自动择路（auto）</option>
+              <option value="local">留在本机（local · Go/Wails）</option>
+              <option value="remote">交给远端（remote · 共享内核）</option>
             </select>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              桌面可切到 remote 验证与 Android / Worker 是否走同一套共享请求内核。
+              remote 与 Android / Worker 共用远程内核。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="代理服务器">
+          <SettingsRow label="上游 · 连接与凭据">
+            {upstreamDraft ? (
+              <div className="space-y-2 rounded-[12px] border border-black/[0.08] bg-[var(--surface)] p-3 dark:border-white/[0.08]">
+                <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">上游名称
+                  <input
+                    aria-label="上游名称"
+                    value={upstreamDraft.name}
+                    onChange={(event) => setUpstreamDraft({ ...upstreamDraft, name: event.target.value })}
+                    placeholder="配置名称"
+                    className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">API 形态
+                    <select
+                      aria-label="API 形态"
+                      value={upstreamDraft.apiMode}
+                      onChange={(event) => setUpstreamDraft({ ...upstreamDraft, apiMode: event.target.value as UpstreamProfile["apiMode"] })}
+                      className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`}
+                    >
+                      <option value="images">Images API</option>
+                      <option value="responses">Responses API</option>
+                    </select>
+                  </label>
+                  <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">请求策略
+                    <select
+                      aria-label="请求策略"
+                      value={upstreamDraft.requestPolicy}
+                      onChange={(event) => setUpstreamDraft({ ...upstreamDraft, requestPolicy: event.target.value as UpstreamProfile["requestPolicy"] })}
+                      className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`}
+                    >
+                      <option value="openai">OpenAI 标准</option>
+                      <option value="compat">扩展兼容</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">Base URL
+                  <input aria-label="Base URL" value={upstreamDraft.baseURL} onChange={(event) => setUpstreamDraft({ ...upstreamDraft, baseURL: event.target.value })} placeholder="https://api.example.com" className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] font-mono-token text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
+                </label>
+                <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">图像模型
+                  <input aria-label="图像模型" value={upstreamDraft.imageModelID} onChange={(event) => setUpstreamDraft({ ...upstreamDraft, imageModelID: event.target.value })} placeholder="gpt-image-2.5-sunburst" className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
+                </label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300">上游模型目录</span>
+                    <button type="button" onClick={() => void loadInlineModels()} disabled={inlineModelsLoading} className="text-[11px] font-medium text-[var(--accent)] disabled:opacity-50">
+                      {inlineModelsLoading ? "获取中…" : "获取上游模型"}
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input aria-label="自定义模型 ID" value={customModelID} onChange={(event) => setCustomModelID(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addInlineCustomModel(); } }} placeholder="自定义模型 ID，可添加多个" className={`focus-ring min-w-0 flex-1 border border-black/[0.08] bg-transparent px-3 py-2 text-[12px] font-mono-token text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
+                    <button type="button" onClick={addInlineCustomModel} className={`${actionButtonSecondaryClassName} shrink-0`}>添加</button>
+                  </div>
+                  {inlineModelCatalog && inlineModelCatalog.all.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {inlineModelCatalog.all.map((model) => (
+                        <button key={model.id} type="button" onClick={() => setUpstreamDraft({ ...upstreamDraft, imageModelID: model.id })} className={`max-w-full truncate border px-2 py-1 text-[10px] ${model.id === upstreamDraft.imageModelID ? "border-[color:var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent)]" : "border-black/[0.08] text-zinc-600 dark:border-white/[0.08] dark:text-zinc-300"} ${usesFluentUI ? "rounded-[6px]" : "rounded-full"}`} title={model.id}>{model.id}</button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">获取目录后会自动保存在当前上游；也可手动添加多个模型并点击模型标签切换。</p>
+                </div>
+                <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">API Key
+                  <input aria-label="API Key" type="password" value={upstreamDraftKey} onChange={(event) => setUpstreamDraftKey(event.target.value)} placeholder="仅保存至系统凭据存储" className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] font-mono-token text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
+                </label>
+                <button type="button" onClick={() => void saveInlineUpstream()} disabled={upstreamSaving || !upstreamDraft.baseURL.trim() || !upstreamDraftKey.trim()} className={`w-full ${actionButtonPrimaryClassName} disabled:cursor-not-allowed disabled:opacity-50`}>
+                  {upstreamSaving ? "正在保存…" : "保存连接与凭据"}
+                </button>
+              </div>
+            ) : <button type="button" onClick={() => void createInlineUpstream()} className={`w-full ${actionButtonPrimaryClassName}`}>添入 Images 上游配置</button>}
+            <div className="flex items-center gap-2 rounded-[12px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 dark:border-white/[0.08]">
+              <Plug className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-zinc-800 dark:text-zinc-100">
+                  {activeProfile ? activeProfile.name : "尚待添入一处可用上游"}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-zinc-500 dark:text-zinc-300">
+                  {activeProfile
+                    ? `${apiMode === "images" ? "Images API" : "Responses API"} · ${upstreamReady ? "凭据已就绪" : "等待填写 API Key 与地址"}`
+                    : "在这里添加并管理 API Key、模型和请求地址"}
+                </span>
+              </div>
+              <span className={`shrink-0 text-[11px] font-semibold ${upstreamReady ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-500 dark:text-zinc-400"}`}>
+                {upstreamReady ? "已就绪" : "待配置"}
+              </span>
+            </div>
+            {profiles.length > 0 ? (
+              <select
+                aria-label="当前上游配置"
+                value={activeProfileId}
+                onChange={(event) => void setActiveProfile(event.target.value)}
+                className={`focus-ring mt-2 w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-[12px] text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name} · {profile.apiMode === "images" ? "Images" : "Responses"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="mt-2 flex gap-1.5">
+              <button onClick={() => openUpstreamConfig("settings")} className={`flex-1 ${actionButtonPrimaryClassName}`}>
+                <Plug className="w-3 h-3" /> 打理上游配置
+              </button>
+              <button onClick={() => void testAPIKey()} disabled={!upstreamReady || isTestingKey} className={`flex-1 ${actionButtonSecondaryClassName}`}>
+                {isTestingKey ? "正在探路…" : "探测连接"}
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
+              API Key 仅保存在系统凭据存储；模型、地址与接口形态可在上游配置中调整。
+            </p>
+          </SettingsRow>
+
+          <SettingsRow label="代理 · 请求的途经之地">
             <div className={segmentedControlClassName}>
               {([
-                ["none", "不使用"],
-                ["system", "系统配置"],
-                ["custom", "自定义"],
+                ["none", "直接连接"],
+                ["system", "沿用系统"],
+                ["custom", "自行指定"],
               ] as Array<[ProxyMode, string]>).map(([value, label]) => (
                 <SettingsSegButton key={value} active={proxyMode === value} onClick={() => setProxyConfig(value)}>
                   {value === "custom" ? <Network className="w-3 h-3" /> : null}
@@ -429,29 +580,29 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
               />
             ) : null}
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认使用系统配置；自定义地址支持 http:// 和 https://。
+              自定义代理支持 http://、https:// 地址。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="失败自动重试">
+          <SettingsRow label="重试 · 遇到波折再出发">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={autoRetryEnabled} onClick={() => {
                 setField("autoRetryEnabled", true);
                 scheduleCompatibilityExport(useStudioStore.getState());
-                pushToast("已开启自动重试", "success");
+                pushToast("遇到可重试的波折，会自动再试", "success");
               }}>
-                开启
+                启用
               </SettingsSegButton>
               <SettingsSegButton active={!autoRetryEnabled} onClick={() => {
                 setField("autoRetryEnabled", false);
                 scheduleCompatibilityExport(useStudioStore.getState());
-                pushToast("已关闭自动重试", "success");
+                pushToast("自动重试已停用，失败后等待你的下一步", "success");
               }}>
-                关闭
+                停用
               </SettingsSegButton>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认开启。当前会对 403 / 502 / 503 / 504 / 524 以及可重试网络抖动自动重发请求；关闭后只保留第一次结果。
+              遇到 403 / 502 / 503 / 504 / 524 或可重试的网络错误时，自动重试。
             </p>
             <div className="mt-2 flex items-center gap-3">
               <input
@@ -464,12 +615,12 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                 onMouseUp={() => {
                   const value = useStudioStore.getState().autoRetryCount;
                   scheduleCompatibilityExport(useStudioStore.getState());
-                  pushToast(`自动重试次数已设为 ${value} 次`, "success");
+                  pushToast(`遇到波折时，最多再试 ${value} 次`, "success");
                 }}
                 onTouchEnd={() => {
                   const value = useStudioStore.getState().autoRetryCount;
                   scheduleCompatibilityExport(useStudioStore.getState());
-                  pushToast(`自动重试次数已设为 ${value} 次`, "success");
+                  pushToast(`遇到波折时，最多再试 ${value} 次`, "success");
                 }}
                 className="focus-ring flex-1"
               />
@@ -478,47 +629,46 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认 {DEFAULT_AUTO_RETRY_COUNT} 次，不含首次请求。
+              重试次数不含首次请求。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="流式预览保护">
+          <SettingsRow label="预览 · 守护完整成图">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={protectStreamPreview} onClick={() => {
                 setField("protectStreamPreview", true);
                 scheduleCompatibilityExport(useStudioStore.getState());
-                pushToast("已开启流式预览保护", "success");
+                pushToast("预览保护已启用，优先守住最终图的完整", "success");
               }}>
-                开启
+                启用
               </SettingsSegButton>
               <SettingsSegButton active={!protectStreamPreview} onClick={() => {
                 setField("protectStreamPreview", false);
                 scheduleCompatibilityExport(useStudioStore.getState());
-                pushToast("已关闭流式预览保护", "success");
+                pushToast("预览保护已停用，将遵循设定的预览帧数", "success");
               }}>
-                关闭
+                停用
               </SettingsSegButton>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认开启。高并发或 Android 大尺寸任务时，会自动关闭流式预览，优先保证最终图完整；关闭后严格按你设置的预览帧数请求。
+              高并发或 Android 大尺寸任务会暂停流式预览；停用后按设定帧数预览。
             </p>
           </SettingsRow>
         </SettingsSection>
 
         <SettingsSection
           id="settings-files"
-          ref={setDesktopSectionRef("files")}
-          title="输出与缓存"
-          description="统一管理结果保存路径、保存确认和退出时的清理行为。"
+          active={activeDesktopSection === "files"}
+          title="归处 · 输出与缓存"
         >
-          <SettingsRow label="输出目录">
+          <SettingsRow label="作品归处 · 保存目录">
             <div className={`flex items-center gap-1 border border-black/[0.08] bg-[var(--surface)] px-3 ${isMac ? "py-3" : "py-2.5"} dark:border-white/[0.08] ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`}>
               <span title={outputDir} className={`flex-1 truncate font-mono-token text-zinc-700 dark:text-zinc-200 ${isMac ? "text-[13px]" : "text-[12px]"}`}>
                 {outputDir || "..."}
               </span>
               <button
                 onClick={openOutputLocation}
-                title="在系统文件管理器中打开"
+                title="在系统文件管理器中前往作品归处"
                 className={`p-1 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${usesFluentUI ? "rounded-[6px]" : "rounded-full"}`}
               >
                 <Folder className="w-3.5 h-3.5" />
@@ -534,15 +684,15 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                       rememberTrustedOutputRoot(chosen);
                       setOutputDir(chosen);
                       scheduleCompatibilityExport(useStudioStore.getState());
-                      pushToast(`输出目录已切换:${chosen}`, "success");
+                      pushToast(`作品的保存位置已换为：${chosen}`, "success");
                     }
                   } catch (e: any) {
-                    pushToast(`切换失败:${e?.message ?? e}`, "error", 5000);
+                    pushToast(`未能切换保存位置：${e?.message ?? e}`, "error", 5000);
                   }
                 }}
                 className={`flex-1 ${actionButtonPrimaryClassName}`}
               >
-                <FolderEdit className="w-3 h-3" /> 修改
+                <FolderEdit className="w-3 h-3" /> 另择位置
               </button>
               <button
                 onClick={async () => {
@@ -553,92 +703,88 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                     rememberTrustedOutputRoot(def);
                     setOutputDir(def);
                     scheduleCompatibilityExport(useStudioStore.getState());
-                    pushToast("已恢复默认输出目录", "success");
+                    pushToast("已恢复最初的作品保存目录", "success");
                   } catch (e: any) {
-                    pushToast(`重置失败:${e?.message ?? e}`, "error", 5000);
+                    pushToast(`未能恢复默认目录：${e?.message ?? e}`, "error", 5000);
                   }
                 }}
-                title={`清除自定义路径,回到 ${platformOutputRootLabel()}/images`}
+                title={`清除自选保存路径，恢复到 ${platformOutputRootLabel()}/images`}
                 className={actionButtonSecondaryClassName}
               >
-                <RotateCw className="w-3 h-3" /> 默认
+                <RotateCw className="w-3 h-3" /> 恢复默认
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              当前目录下会保存原图、结果图以及必要的会话输出。
+              源图、成图及会话输出保存在此。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="生成后保存提示">
+          <SettingsRow label="落定之后 · 另存提醒">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={!savePromptSuppressed} onClick={() => updateSavePromptSuppressed(false)}>
-                <Save className="w-3 h-3" /> 提示
+                <Save className="w-3 h-3" /> 轻声提醒
               </SettingsSegButton>
               <SettingsSegButton active={savePromptSuppressed} onClick={() => updateSavePromptSuppressed(true)}>
-                不提示
+                不再提醒
               </SettingsSegButton>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              生成完成后询问是否另存到指定位置。
-            </p>
           </SettingsRow>
 
-          <SettingsRow label="日志保留">
+          <SettingsRow label="运行札记 · 日志保留">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={!keepLogs} onClick={() => void updateKeepLogs(false)}>
-                关闭
+                停用
               </SettingsSegButton>
               <SettingsSegButton active={keepLogs} onClick={() => void updateKeepLogs(true)}>
-                开启
+                启用
               </SettingsSegButton>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认关闭。关闭时当前会话仍可查看原始响应，退出应用后会自动清理输出目录中的 log。
+              停用后，退出时清理输出目录内的 log；当前会话仍可查看原始响应。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="退出时清理预览缓存">
+          <SettingsRow label="离开时 · 清理预览缓存">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={!cleanupPreviewCacheOnExit} onClick={() => void updateCleanupPreviewCacheOnExit(false)}>
-                关闭
+                停用
               </SettingsSegButton>
               <SettingsSegButton active={cleanupPreviewCacheOnExit} onClick={() => void updateCleanupPreviewCacheOnExit(true)}>
-                开启
+                启用
               </SettingsSegButton>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              默认关闭。开启后，退出应用时会删除可重建的预览图和缩略图缓存；源图、结果图和历史记录不会删除。
+              退出时删除可重建的预览与缩略图缓存，保留源图、成图和历史。
             </p>
           </SettingsRow>
         </SettingsSection>
 
         <SettingsSection
           id="settings-alerts"
-          ref={setDesktopSectionRef("alerts")}
-          title="通知与提示"
-          description="完成整批生成时的声音和系统级通知统一放在这里。"
+          active={activeDesktopSection === "alerts"}
+          title="回响 · 通知与提示"
         >
-          <SettingsRow label="完成提示音">
+          <SettingsRow label="成图回响 · 提示音">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={completionSound.enabled} onClick={() => {
                 setCompletionSoundEnabled(true);
-                pushToast("已开启完成提示音", "success");
+                pushToast("作品落定时，会响起一声提醒", "success");
               }}>
-                <Bell className="w-3 h-3" /> 开启
+                <Bell className="w-3 h-3" /> 启用
               </SettingsSegButton>
               <SettingsSegButton active={!completionSound.enabled} onClick={() => {
                 setCompletionSoundEnabled(false);
-                pushToast("已关闭完成提示音", "success");
+                pushToast("作品落定时，将保持安静", "success");
               }}>
-                关闭
+                停用
               </SettingsSegButton>
             </div>
             <div className={`mt-2 ${segmentedControlClassName}`}>
               <SettingsSegButton active={completionSound.mode === "default"} onClick={() => {
                 setCompletionSoundMode("default");
-                pushToast("已切换到默认提示音", "success");
+                pushToast("完成时将响起内置提示音", "success");
               }}>
-                默认音
+                内置回响
               </SettingsSegButton>
               <SettingsSegButton active={completionSound.mode === "custom"} onClick={() => {
                 if (!completionSound.customDataURL) {
@@ -646,78 +792,77 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                   return;
                 }
                 setCompletionSoundMode("custom");
-                pushToast("已切换到自定义提示音", "success");
+                pushToast("完成时将奏响你选定的声音", "success");
               }}>
-                自定义
+                自选声音
               </SettingsSegButton>
             </div>
             <div className="mt-2 flex gap-1.5">
               <button onClick={() => void previewCompletionSound()} className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                试听
+                听听回响
               </button>
               <button onClick={() => void chooseCompletionSoundFile()} className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                导入音频
+                选入音频
               </button>
               <button
                 onClick={() => {
                   resetCompletionSoundCustom();
-                  pushToast("已恢复默认提示音", "success");
+                  pushToast("已恢复最初的内置提示音", "success");
                 }}
                 className={actionButtonSecondaryClassName}
               >
-                默认
+                恢复内置音
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              整批生成全部完成后只播放一次。当前 {completionSound.mode === "custom" && completionSound.customName ? `使用 ${completionSound.customName}` : "使用内置默认音"}。
+              整批完成后响一次。当前：{completionSound.mode === "custom" && completionSound.customName ? `${completionSound.customName}` : "内置提示音"}。
             </p>
           </SettingsRow>
 
-          <SettingsRow label="系统通知">
+          <SettingsRow label="远处来信 · 系统通知">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={completionNotification.enabled} onClick={() => void updateCompletionNotificationEnabled(true)}>
-                <Bell className="w-3 h-3" /> 开启
+                <Bell className="w-3 h-3" /> 启用
               </SettingsSegButton>
               <SettingsSegButton active={!completionNotification.enabled} onClick={() => void updateCompletionNotificationEnabled(false)}>
-                关闭
+                停用
               </SettingsSegButton>
             </div>
             <div className="mt-2 flex gap-1.5">
               <button onClick={() => void askCompletionNotificationPermission()} className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                {completionNotificationPermission === "granted" ? "重新检查权限" : "申请权限"}
+                {completionNotificationPermission === "granted" ? "再查看通知权限" : "允许完成消息送达"}
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              整批任务全部完成后，仅在窗口不在前台时发送系统通知。当前权限：{systemNotificationPermissionLabel(completionNotificationPermission)}。
+              整批完成且窗口在后台时通知。权限：{systemNotificationPermissionLabel(completionNotificationPermission)}。
             </p>
           </SettingsRow>
         </SettingsSection>
 
         <SettingsSection
           id="settings-appearance"
-          ref={setDesktopSectionRef("appearance")}
-          title="外观与字号"
-          description="界面主题和显示密度放在一起，切换后更容易感知整体变化。"
+          active={activeDesktopSection === "appearance"}
+          title="光影 · 外观与字号"
         >
-          <SettingsRow label="主题">
+          <SettingsRow label="界面光色">
             <div className={segmentedControlClassName}>
               <SettingsSegButton active={theme === "system"} onClick={() => setTheme("system")}>
-                <Monitor className="w-3 h-3" /> 系统
+                <Monitor className="w-3 h-3" /> 随系统
               </SettingsSegButton>
               <SettingsSegButton active={theme === "dark"} onClick={() => setTheme("dark")}>
-                <Moon className="w-3 h-3" /> 深色
+                <Moon className="w-3 h-3" /> 夜色 · 深色
               </SettingsSegButton>
               <SettingsSegButton active={theme === "light"} onClick={() => setTheme("light")}>
-                <Sun className="w-3 h-3" /> 浅色
+                <Sun className="w-3 h-3" /> 晨光 · 浅色
               </SettingsSegButton>
             </div>
           </SettingsRow>
 
-          <SettingsRow label={`字号 ${Math.round(fontScale * 100)}%`}>
+          <SettingsRow label={`文字尺度 · ${Math.round(fontScale * 100)}%`}>
             <div className={segmentedControlClassName}>
               {[0.85, 1, 1.15].map((v) => (
                 <SettingsSegButton key={v} active={Math.abs(fontScale - v) < 0.01} onClick={() => setFontScale(v)}>
-                  {v === 0.85 ? "小" : v === 1 ? "中" : "大"}
+                  {v === 0.85 ? "小巧" : v === 1 ? "适中" : "舒展"}
                 </SettingsSegButton>
               ))}
             </div>
@@ -726,69 +871,61 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
 
         <SettingsSection
           id="settings-data"
-          ref={setDesktopSectionRef("data")}
-          title="数据与重置"
-          description="导入导出历史、清理旧数据和重置本地凭据都集中在这一组。"
+          active={activeDesktopSection === "data"}
+          title="旧页 · 数据与重置"
         >
-          <SettingsRow label="历史记录">
+          <SettingsRow label="创作旧页 · 历史记录">
             <div className="flex gap-1.5">
-              <button onClick={exportHistory} title="导出全部历史为 JSON" className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                <Upload className="w-3 h-3" /> 导出历史
+              <button onClick={exportHistory} title="将全部创作历史备份为 JSON" className={`flex-1 ${actionButtonPrimaryClassName}`}>
+                <Upload className="w-3 h-3" /> 备份历史
               </button>
-              <button onClick={importHistory} title="从 JSON 文件导入" className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                <Download className="w-3 h-3" /> 导入历史
+              <button onClick={importHistory} title="从 JSON 文件带回创作历史" className={`flex-1 ${actionButtonPrimaryClassName}`}>
+                <Download className="w-3 h-3" /> 读入历史
               </button>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              可导出本地历史做备份，或从 JSON 文件恢复到当前设备。
-            </p>
           </SettingsRow>
 
-          <SettingsRow label="清理与重置">
+          <SettingsRow label="明确清理 · 本地数据">
             <div className="flex gap-1.5">
               <button onClick={clearAPIKey} className={`flex-1 ${actionButtonDangerClassName}`}>
-                <KeyRound className="w-3 h-3" /> 清除 API Key
+                <KeyRound className="w-3 h-3" /> 清除当前 API Key
               </button>
               <button onClick={clearHistory} className={`flex-1 ${actionButtonDangerClassName}`}>
-                <Trash2 className="w-3 h-3" /> 清空历史
+                <Trash2 className="w-3 h-3" /> 删除全部历史
               </button>
             </div>
             <div className="mt-1.5 flex gap-1.5">
               <button onClick={() => pruneHistory(3)} className={`flex-1 ${actionButtonSecondaryClassName}`}>
-                清理 3 天前
+                删除 3 天前历史
               </button>
               <button onClick={() => pruneHistory(7)} className={`flex-1 ${actionButtonSecondaryClassName}`}>
-                清理 7 天前
+                删除 7 天前历史
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              清除 API Key 只影响本机安全存储；历史清理会同步删除本地数据库记录。
+              仅清除当前上游的本机 API Key；历史清理会删除本地数据库记录，无法撤销。
             </p>
           </SettingsRow>
         </SettingsSection>
 
         <SettingsSection
           id="settings-about"
-          ref={setDesktopSectionRef("about")}
-          title="关于与反馈"
-          description="项目说明、更新入口和问题反馈分开陈列，避免和日常设置混在一起。"
+          active={activeDesktopSection === "about"}
+          title="来处 · 关于与反馈"
         >
-          <SettingsRow label="关于 Image Studio">
+          <SettingsRow label="认识 Image Studio">
             <button onClick={() => setAboutOpen(true)} className={actionButtonSecondaryClassName}>
-              <Info className="w-3 h-3" /> 查看关于信息
+              <Info className="w-3 h-3" /> 翻开项目简介
             </button>
-            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              查看版本信息、许可证说明以及项目简介。
-            </p>
           </SettingsRow>
 
-          <SettingsRow label="支持与反馈">
+          <SettingsRow label="新章与回音">
             <div className="flex gap-1.5">
               <button onClick={() => openExternal(RELEASES_URL)} className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                <Github className="w-3 h-3" /> 更新
+                <Github className="w-3 h-3" /> 看看新版本
               </button>
               <button onClick={() => openExternal(ISSUES_URL)} className={`flex-1 ${actionButtonPrimaryClassName}`}>
-                <MessageSquare className="w-3 h-3" /> 反馈
+                <MessageSquare className="w-3 h-3" /> 留下反馈
               </button>
             </div>
           </SettingsRow>
@@ -802,13 +939,12 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
       <Modal
         open={open}
         onClose={closeSettings}
-        title="设置"
+        title="创作偏好"
         width={isAndroidPad ? 1040 : (isAndroid ? 540 : 920)}
         backdropClassName={isAndroid ? "android-settings-modal-backdrop" : ""}
-        cardClassName={isAndroid ? "android-settings-modal-card" : "max-w-[calc(100vw-40px)]"}
+        cardClassName={isAndroid ? "android-settings-modal-card" : "xai-settings-panel max-w-[calc(100vw-40px)]"}
         headerClassName={isAndroid ? "android-settings-modal-header" : ""}
-        bodyClassName={isAndroid ? "android-settings-modal-body" : ""}
-        bodyRef={isAndroid ? undefined : desktopScrollBodyRef}
+        bodyClassName={isAndroid ? "android-settings-modal-body" : "settings-category-body"}
       >
         {androidSettings ?? desktopSettings}
       </Modal>

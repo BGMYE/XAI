@@ -42,6 +42,36 @@ test("blank responses profile defaults reasoning effort to xhigh", () => {
   assert.equal(profiles.makeBlankProfile("responses").reasoningEffort, "xhigh");
 });
 
+test("new Images profiles target Sunburst with OpenAI standard requests", () => {
+  const profile = profiles.makeBlankProfile("images");
+  assert.equal(profile.baseURL, "https://img.740414025.xyz");
+  assert.equal(profile.imageModelID, "gpt-image-2.5-sunburst");
+  assert.deepEqual(profile.modelIDs, ["gpt-image-2.5-sunburst"]);
+  assert.equal(profile.apiMode, "images");
+  assert.equal(profile.requestPolicy, "openai");
+  assert.equal(profile.imagesNewAPICompat, false);
+  assert.equal(Object.hasOwn(profile, "apiKey"), false);
+});
+
+test("profile parsing keeps multiple custom model IDs while trimming and deduplicating", () => {
+  const parsed = profiles.tryParseProfile({
+    ...makeProfile("custom-models"),
+    modelIDs: [" custom-image-a ", "custom-image-b", "custom-image-a", "", 42, "  "],
+  });
+  assert.deepEqual(parsed?.modelIDs, ["custom-image-a", "custom-image-b"]);
+});
+
+test("profile parsing omits malformed custom model metadata", () => {
+  const parsed = profiles.tryParseProfile({ ...makeProfile("malformed-models"), modelIDs: "custom-image" });
+  assert.equal(parsed?.modelIDs, undefined);
+});
+
+test("profile parsing strips credentials from persisted metadata", () => {
+  const profile = profiles.tryParseProfile({ ...makeProfile("sunburst"), apiKey: "test-secret" });
+  assert.equal(Object.hasOwn(profile, "apiKey"), false);
+  assert.equal(JSON.stringify(profile).includes("test-secret"), false);
+});
+
 test("legacy profiles without reasoningEffort normalize to xhigh", () => {
   const parsed = profiles.tryParseProfile({
     id: "p1",

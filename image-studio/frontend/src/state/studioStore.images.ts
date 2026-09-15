@@ -5,6 +5,7 @@ import {
   OpenImageDialog,
   ImportImageFromB64,
   RegisterImportedImageAsset,
+  ReadImageAsBase64,
   SaveImageAs,
   SaveImagePathAs,
 } from "../platform/runtime/host";
@@ -23,6 +24,7 @@ import {
 import { patchWorkspaceRuntime } from "./workspaceRuntime";
 import { genId } from "./studioStore.shared";
 import { buildHistoryCleanupPatch, waitForActiveHistoryLoad } from "./historyCleanup";
+import { restoreHistorySources } from "./historyRegeneration";
 
 type StateAdapter = {
   getState: () => StudioState;
@@ -225,8 +227,42 @@ export function createImageActions(store: StateAdapter) {
     },
 
     async regenerateFromHistory(item: HistoryItem) {
+      const initial = store.getState();
+      if (initial.isRunning) {
+        initial.pushToast("请等待当前生成任务完成后重试", "info");
+        return;
+      }
+      let sources: SourceImage[];
+      try {
+        sources = await restoreHistorySources(item, initial.history, async (path) => {
+          const ref = await RegisterImportedImageAsset(path);
+          const imageB64 = ref.previewUrl ? undefined : await ReadImageAsBase64(path);
+          if (!ref.previewUrl && !imageB64) throw new Error("empty source image");
+          return {
+            path: ref.savedPath || path,
+            name: path.split(/[\\/]/).pop() || "参考图",
+            size: 0,
+            previewUrl: ref.previewUrl,
+            previewWidth: ref.previewWidth,
+            previewHeight: ref.previewHeight,
+            imageB64,
+          };
+        }, (parent) => materializeHistoryItem(parent, {
+          setState: (fn) => store.setState((state) => fn(state)),
+        }));
+      } catch (error: any) {
+        const message = error?.message || "无法恢复原参考图，已停止重新生成";
+        store.setState({ errorMessage: message, errorCanRetry: false, errorRawPath: null });
+        store.getState().pushToast(message, "error", 6000);
+        return;
+      }
+      if (store.getState().activeWorkspaceId !== initial.activeWorkspaceId || store.getState().isRunning) {
+        store.getState().pushToast("工作区或生成状态已改变，请重新选择历史结果", "info");
+        return;
+      }
       this.applyHistoryParams(item);
-      await Promise.resolve();
+      store.setState({ sources, editSourceMode: "manual" });
+      store.getState().setField("currentImage", sources[0] ? buildSourceCanvasItem(sources[0]) : null);
       await store.getState().submit();
     },
 

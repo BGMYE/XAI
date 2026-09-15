@@ -5,7 +5,7 @@ import {
   RegisterTrustedOutputDir,
 } from "../platform/runtime/host";
 import type { ThemeMode, HistoryItem, Annotation } from "../types/domain";
-import type { ModeConfig, Stroke } from "./studioStore.types";
+import type { ModeConfig } from "./studioStore.types";
 import { isWindows } from "../platform";
 import { ACTIVE_PROFILE_LS_KEY, PROFILES_LS_KEY, tryParseProfile } from "../lib/profiles";
 export { loadStoredAIProfileId, persistAIProfileId } from "../lib/profiles";
@@ -96,7 +96,8 @@ export function loadModeConfig(mode: "responses" | "images"): ModeConfig {
 }
 
 export function persistProfiles(list: UpstreamProfile[]) {
-  try { localStorage.setItem(PROFILES_LS_KEY, JSON.stringify(list)); } catch {}
+  const profiles = list.map(tryParseProfile).filter((profile): profile is UpstreamProfile => profile !== null);
+  try { localStorage.setItem(PROFILES_LS_KEY, JSON.stringify(profiles)); } catch {}
 }
 
 export function persistActiveProfileId(id: string) {
@@ -147,34 +148,6 @@ export function tempDataURLFromB64(b64: string): string {
 export function stripDataURLPrefix(dataURL: string): string {
   const idx = dataURL.indexOf(",");
   return idx >= 0 ? dataURL.slice(idx + 1) : dataURL;
-}
-
-export function buildMaskPNGDataURL(strokes: Stroke[], dims: { w: number; h: number } | null): string | null {
-  if (!dims || strokes.length === 0) return null;
-  const c = document.createElement("canvas");
-  c.width = dims.w;
-  c.height = dims.h;
-  const ctx = c.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  let hasWhite = false;
-  for (const s of strokes) {
-    ctx.strokeStyle = s.erase ? "#000" : "#fff";
-    ctx.lineWidth = s.size;
-    ctx.beginPath();
-    for (let i = 0; i < s.points.length; i += 2) {
-      const x = s.points[i];
-      const y = s.points[i + 1];
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    if (!s.erase) hasWhite = true;
-  }
-  return hasWhite ? c.toDataURL("image/png") : null;
 }
 
 export async function registerTrustedOutputRoots(roots: string[]): Promise<void> {

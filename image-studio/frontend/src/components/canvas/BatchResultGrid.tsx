@@ -1,6 +1,7 @@
 import type { HistoryItem } from "../../types/domain";
 import { historyPreviewSrc, useBlobURL } from "../../lib/images";
 import { DragExportHandle } from "./DragExportHandle";
+import "./batch-result-grid.css";
 
 export type BatchGridSlot =
   | { type: "result"; item: HistoryItem }
@@ -143,6 +144,7 @@ function BatchGridTile({
           if (!preview) void onSelect(item);
         }}
         disabled={preview}
+        aria-pressed={selectionMode && !preview ? selected : undefined}
       >
         <span className="batch-grid-media">
           <img

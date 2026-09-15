@@ -1,0 +1,50 @@
+/* History dialogs render in a portal and need their own opaque surfaces. */
+html[data-ui-family] .app-modal-card.history-surface-modal {
+  --bg: #f5f8fc;
+  --surface: #fff;
+  --surface-2: #edf2f7;
+  --surface-elevated: #fff;
+  --border: #d3dce7;
+  --text: #243e57;
+  --text-muted: #53677c;
+  --text-dim: #53677c;
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html.dark[data-ui-family] .app-modal-card.history-surface-modal {
+  --bg: #181818;
+  --surface: #242424;
+  --surface-2: #303030;
+  --surface-elevated: #242424;
+  --border: #3c3c3c;
+  --text: #e5e5e5;
+  --text-muted: #b5b5b5;
+  --text-dim: #a8a8a8;
+  --accent-soft: #303030;
+}
+
+html[data-ui-family] .history-surface-modal :is(.app-modal-header, .platform-card, .timeline-prompt-stack-card) {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html[data-ui-family] .history-surface-modal .app-modal-body {
+  background: var(--bg);
+}
+
+.history-surface-modal :is(.text-zinc-700, .text-zinc-800, .text-zinc-900) {
+  color: var(--text);
+}
+
+.history-surface-modal :is(.text-zinc-400, .text-zinc-500, .text-zinc-600):not(:where(button:hover)) {
+  color: var(--text-muted);
+}
+
+.history-surface-modal :is(input, textarea)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}

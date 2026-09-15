@@ -160,7 +160,6 @@ import { buildMacWorkspacePreview, buildWindowsRightRailPreview, readPreviewScen
 import {
   applyTheme,
   augmentPromptWithAnnotations,
-  buildMaskPNGDataURL,
   clearLegacyModeLocalStorage,
   genId,
   imageDims,
@@ -202,6 +201,7 @@ import {
 import type { GenerateOptionsLike } from "../platform/runtime/hostTypes";
 import type { CanvasNode } from "./canvasNodes";
 import { createCanvasNode, upsertCanvasNodeList } from "./canvasNodes";
+import { buildImageMaskPNGDataURL } from "./canvasMask";
 import type { CanvasViewport } from "./canvasNodes";
 
 type RuntimeGenerateOptions = GenerateOptionsLike & {
@@ -1118,9 +1118,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       if (typeof console !== "undefined") console.warn("setAPIKey: 没有 active profile,丢弃");
       return;
     }
-    // 顶层镜像立即更新,UI 立即响应;keyring 写入异步
+    try {
+      await SetStoredAPIKey(keyringUserFor(activeId), trimmed);
+    } catch {
+      throw new Error("系统凭据存储写入失败，API Key 未更改");
+    }
     set({ apiKey: trimmed });
-    await SetStoredAPIKey(keyringUserFor(activeId), trimmed);
   },
 
   createProfile: async (input) => profileActions.createProfile(input),
@@ -1304,7 +1307,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const importedMaskDataURL = s.maskDataURL && s.maskDataURL !== "__PENDING_MASK__" ? s.maskDataURL : null;
     const maskDataURL = s.mode === "edit"
       ? (s.strokes.length > 0
-        ? buildMaskPNGDataURL(s.strokes, s.currentImage?.imageB64 ? imageDims(s.currentImage.imageB64) : null)
+        ? buildImageMaskPNGDataURL(s.strokes, s.currentImage, s.canvasNodes)
         : importedMaskDataURL)
       : null;
     const maskB64 = maskDataURL ? stripDataURLPrefix(maskDataURL) : "";
@@ -1554,7 +1557,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       setKernelRuntimeMode("auto");
       const workspaceState = preview.workspace;
       set({
-        apiKey: "sk-preview",
+        apiKey: "",
         mode: workspaceState.mode,
         prompt: workspaceState.prompt,
         negativePrompt: workspaceState.negativePrompt,
@@ -2199,8 +2202,18 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     };
   }),
   moveCanvasNode: (id, x, y) => set((state) => {
-    const canvasNodes = state.canvasNodes.map((n) => n.id === id ? { ...n, x, y } : n);
-    return { canvasNodes, workspaces: state.workspaces.map((w) => w.id === state.activeWorkspaceId ? { ...w, canvasNodes } : w) };
+    const node = state.canvasNodes.find((item) => item.id === id);
+    if (!node || (node.x === x && node.y === y)) return {};
+    const positionPatch = (current: StudioState, nextX: number, nextY: number) => {
+      const canvasNodes = current.canvasNodes.map((item) => item.id === id ? { ...item, x: nextX, y: nextY } : item);
+      return { canvasNodes, workspaces: current.workspaces.map((workspace) => workspace.id === current.activeWorkspaceId ? { ...workspace, canvasNodes } : workspace) };
+    };
+    const entry: UndoEntry = {
+      label: "移动图层",
+      undo: (current) => positionPatch(current, node.x, node.y),
+      redo: (current) => positionPatch(current, x, y),
+    };
+    return { ...positionPatch(state, x, y), undoStack: [...state.undoStack, entry], redoStack: [] };
   }),
   removeCanvasNode: (id) => set((state) => {
     const canvasNodes = state.canvasNodes.filter((n) => n.id !== id);
@@ -2274,6 +2287,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         s.pushToast(`基础连接 OK，但 Responses WebSocket 不可用:${result.responsesTransportError || "未返回具体原因"}`, "warn", 7000);
       } else if (result.responsesTransport === "websocket") {
         s.pushToast("连接 OK · /v1/models 可访问，Responses WebSocket 可用", "success");
+      } else if (s.apiMode === "images" && s.imageModelID.trim()) {
+        const modelID = s.imageModelID.trim();
+        const modelAvailable = (result.models ?? []).some((model) => model.id === modelID);
+        s.pushToast(
+          modelAvailable
+            ? `连接 OK · 返回 ${result.modelCount} 个模型，包含 ${modelID}`
+            : `连接 OK · 返回 ${result.modelCount} 个模型，但未找到 ${modelID}`,
+          modelAvailable ? "success" : "warn",
+          6000,
+        );
       } else {
         s.pushToast("连接 OK · 上游 models 列表可访问", "success");
       }
@@ -2605,6 +2628,7 @@ async function launchOneJob(
             quality: snapshot.quality,
             outputFormat: snapshot.outputFormat,
             parentId,
+            sourcePaths: mode === "edit" ? [...(payload.imagePaths ?? [])] : undefined,
             createdAt: Date.now(),
             seed: payload.seed || undefined,
             negativePrompt: payload.negativePrompt || undefined,

@@ -1,4 +1,3 @@
-import { forwardRef } from "react";
 import { usePlatform } from "../../platform/context";
 
 export function SettingsRow({
@@ -60,7 +59,6 @@ export function SettingsFact({
 export type SettingsAnchorItem = {
   id: string;
   title: string;
-  description: string;
 };
 
 export function SettingsAnchorNav({
@@ -75,15 +73,9 @@ export function SettingsAnchorNav({
   const { usesFluentUI } = usePlatform();
 
   return (
-    <aside className="lg:sticky lg:top-0">
+    <aside className="settings-category-nav" aria-label="设置分类">
       <div className={`settings-anchor-panel px-3.5 py-3.5 ${usesFluentUI ? "rounded-[12px]" : "rounded-[24px]"}`}>
-        <div className="settings-anchor-copy px-1">
-          <div className="text-[10px] font-semibold tracking-[0.14em] text-zinc-500 dark:text-zinc-400">快捷定位</div>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-            点选分组，右侧会平滑跳到对应设置。
-          </p>
-        </div>
-        <div className="settings-anchor-list mt-3 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
+        <div className="settings-anchor-list grid gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
           {sections.map((section, index) => {
             const active = section.id === activeId;
             return (
@@ -92,6 +84,7 @@ export function SettingsAnchorNav({
                 type="button"
                 aria-pressed={active}
                 aria-current={active ? "true" : undefined}
+                aria-controls={`settings-${section.id}`}
                 onClick={() => onSelect(section.id)}
                 className={`settings-anchor-item group w-full px-4 py-3 text-left ${
                   active ? "is-active text-zinc-900 dark:text-zinc-100" : "text-zinc-600 dark:text-zinc-300"
@@ -108,9 +101,6 @@ export function SettingsAnchorNav({
                   />
                   <span className="min-w-0">
                     <span className="block text-[12px] font-semibold leading-5">{section.title}</span>
-                    <span className={`mt-0.5 block text-[11px] leading-[1.45] transition-opacity duration-300 ${active ? "opacity-100" : "opacity-75 group-hover:opacity-95"}`}>
-                      {section.description}
-                    </span>
                   </span>
                 </span>
               </button>
@@ -122,26 +112,26 @@ export function SettingsAnchorNav({
   );
 }
 
-export const SettingsSection = forwardRef<HTMLElement, {
-  id: string;
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}>(function SettingsSection({
+export function SettingsSection({
   id,
   title,
-  description,
+  active,
   children,
-}, ref) {
+}: {
+  id: string;
+  title: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  if (!active) return null;
   return (
-    <section id={id} ref={ref} className="scroll-mt-4">
+    <section id={id} aria-labelledby={`${id}-title`}>
       <div className="px-1">
-        <h4 className="text-[14px] font-semibold tracking-[-0.01em] text-zinc-900 dark:text-zinc-100">{title}</h4>
-        <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">{description}</p>
+        <h4 id={`${id}-title`} className="text-[14px] font-semibold tracking-[-0.01em] text-zinc-900 dark:text-zinc-100">{title}</h4>
       </div>
       <div className="mt-3 flex flex-col gap-3">
         {children}
       </div>
     </section>
   );
-});
+}

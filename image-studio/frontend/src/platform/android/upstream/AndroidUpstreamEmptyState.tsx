@@ -15,8 +15,8 @@ export function AndroidUpstreamEmptyState({
         <RadioTower className="h-5 w-5" />
       </div>
       <div className="android-upstream-empty-copy">
-        <h4>添加第一个上游</h4>
-        <p>保存中转站根地址和 API Key 后，可分别指定生图渠道与 AI 优化 / 图片反推渠道。</p>
+        <h4>先为创作找到一处源头</h4>
+        <p>从一条可用配置开始。生图与 AI 辅助可各择上游；图片反推与提示词润色交由 Responses API。</p>
       </div>
       <div className="android-upstream-create-grid">
         <button type="button" onClick={() => void onQuickImport()} className="android-upstream-quick-import-card">
@@ -24,8 +24,8 @@ export function AndroidUpstreamEmptyState({
             <ClipboardPaste className="h-4 w-4" />
           </span>
           <span>
-            <strong>粘贴 JSON 快捷导入</strong>
-            <small>支持 `newapi_channel_conn`、OpenCode `provider` 和本应用导出文件。</small>
+            <strong>从 JSON 带入配置</strong>
+            <small>可读入本应用备份、`newapi_channel_conn` 或 OpenCode `provider` 模板。</small>
           </span>
           <Plus className="h-4 w-4" />
         </button>

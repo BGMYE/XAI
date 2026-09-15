@@ -6,6 +6,7 @@ import {
 import type { APIMode, ReasoningEffortValue, RequestPolicy, UpstreamProfile } from "../types/domain";
 import type { StudioState } from "./studioStore.types";
 import {
+  DEFAULT_IMAGES_PROFILE,
   duplicateProfile as cloneProfile,
   genProfileId,
   keyringUserFor,
@@ -36,6 +37,7 @@ export function createProfileActions(store: StateAdapter) {
       allowInsecureConnection?: boolean;
       textModelID?: string;
       imageModelID?: string;
+      modelIDs?: string[];
       videoModelID?: string;
       reasoningEffort?: ReasoningEffortValue;
       concurrencyLimit?: number;
@@ -52,9 +54,10 @@ export function createProfileActions(store: StateAdapter) {
         requestPolicy: input.requestPolicy ?? "openai",
         imagesNewAPICompat: input.imagesNewAPICompat === true,
         allowInsecureConnection: input.allowInsecureConnection === true,
-        baseURL: cleanBaseURL(input.baseURL ?? ""),
+        baseURL: cleanBaseURL(input.baseURL ?? (input.apiMode === "images" ? DEFAULT_IMAGES_PROFILE.baseURL : "")),
         textModelID: (input.textModelID ?? "").trim(),
-        imageModelID: (input.imageModelID ?? "").trim(),
+        imageModelID: (input.imageModelID ?? (input.apiMode === "images" ? DEFAULT_IMAGES_PROFILE.imageModelID : "")).trim(),
+        modelIDs: Array.from(new Set((input.modelIDs ?? []).map((value) => value.trim()).filter(Boolean))),
         videoModelID: (input.videoModelID ?? "").trim(),
         reasoningEffort: input.reasoningEffort ?? "xhigh",
         concurrencyLimit: normalizeConcurrencyLimit(input.concurrencyLimit ?? 0),
@@ -63,8 +66,9 @@ export function createProfileActions(store: StateAdapter) {
       };
       if ((input.apiKey ?? "").trim()) {
         try { await SetStoredAPIKey(keyringUserFor(id), input.apiKey!.trim()); }
-        catch (e: any) {
-          if (typeof console !== "undefined") console.error("写 keyring 失败", e);
+        catch {
+          store.getState().pushToast("API Key 未能写入系统凭据存储，配置未保存。请使用桌面应用并检查凭据存储权限。", "error", 6000);
+          return "";
         }
       }
       const next = [...list, profile];
@@ -98,6 +102,9 @@ export function createProfileActions(store: StateAdapter) {
         baseURL: patch.baseURL !== undefined ? cleanBaseURL(patch.baseURL) : current.baseURL,
         textModelID: patch.textModelID !== undefined ? patch.textModelID.trim() : current.textModelID,
         imageModelID: patch.imageModelID !== undefined ? patch.imageModelID.trim() : current.imageModelID,
+        modelIDs: patch.modelIDs !== undefined
+          ? Array.from(new Set(patch.modelIDs.map((value) => value.trim()).filter(Boolean)))
+          : current.modelIDs,
         videoModelID: patch.videoModelID !== undefined ? patch.videoModelID.trim() : current.videoModelID,
         reasoningEffort: patch.reasoningEffort ?? current.reasoningEffort ?? "xhigh",
         concurrencyLimit: patch.concurrencyLimit !== undefined
@@ -105,6 +112,13 @@ export function createProfileActions(store: StateAdapter) {
         fallbackProfileId: patch.fallbackProfileId !== undefined ? patch.fallbackProfileId || undefined : current.fallbackProfileId,
         lastUsedAt: patch.lastUsedAt ?? current.lastUsedAt,
       };
+      if (patch.apiKey !== undefined) {
+        try { await SetStoredAPIKey(keyringUserFor(id), patch.apiKey); }
+        catch {
+          store.getState().pushToast("API Key 未能写入系统凭据存储，配置未保存。请使用桌面应用并检查凭据存储权限。", "error", 6000);
+          return false;
+        }
+      }
       const nextList = list.map((profile, idx) => (idx === index ? next : profile));
       persistProfiles(nextList);
       const aiProfile = pickAIProfile(nextList, store.getState().aiProfileId, store.getState().activeProfileId);
@@ -112,12 +126,6 @@ export function createProfileActions(store: StateAdapter) {
         persistAIProfileId(aiProfile?.id ?? "");
       }
       store.setState({ profiles: nextList, aiProfileId: aiProfile?.id ?? "" });
-      if (patch.apiKey !== undefined) {
-        try { await SetStoredAPIKey(keyringUserFor(id), patch.apiKey); }
-        catch (e: any) {
-          if (typeof console !== "undefined") console.error("写 keyring 失败", e);
-        }
-      }
       if (id === store.getState().activeProfileId) {
         const apiKey = patch.apiKey !== undefined ? patch.apiKey.trim() : store.getState().apiKey;
         store.setState({
@@ -142,8 +150,8 @@ export function createProfileActions(store: StateAdapter) {
       const nextList = list.filter((_, i) => i !== index);
       persistProfiles(nextList);
       try { await DeleteStoredAPIKey(keyringUserFor(id)); }
-      catch (e: any) {
-        if (typeof console !== "undefined") console.warn("删 keyring 项失败(继续)", e);
+      catch {
+        store.getState().pushToast("上游配置已删除，但系统凭据清理失败。请在系统凭据管理器中移除对应条目。", "warn", 6000);
       }
       const aiProfile = pickAIProfile(nextList, store.getState().aiProfileId === id ? "" : store.getState().aiProfileId, store.getState().activeProfileId);
       persistAIProfileId(aiProfile?.id ?? "");
@@ -179,11 +187,14 @@ export function createProfileActions(store: StateAdapter) {
       if (!current) return null;
       const cloned = cloneProfile(current);
       try {
-        const existingKey = await GetStoredAPIKey(keyringUserFor(id)).catch(() => "");
+        const existingKey = await GetStoredAPIKey(keyringUserFor(id));
         if (existingKey) {
           await SetStoredAPIKey(keyringUserFor(cloned.id), existingKey);
         }
-      } catch {}
+      } catch {
+        store.getState().pushToast("系统凭据复制失败，上游配置未复制。", "error", 6000);
+        return null;
+      }
       const next = [...store.getState().profiles, cloned];
       persistProfiles(next);
       store.setState({ profiles: next });

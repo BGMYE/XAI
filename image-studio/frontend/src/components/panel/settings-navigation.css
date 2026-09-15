@@ -1,0 +1,14 @@
+.xai-settings-panel.app-modal-card-desktop { height: min(720px, 86vh); }
+.xai-settings-panel > .app-modal-header { flex-shrink: 0; }
+.xai-settings-panel .settings-category-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.xai-settings-panel .settings-category-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; width: 100%; min-height: 0; }
+.xai-settings-panel .settings-category-nav { min-width: 0; min-height: 0; overflow-y: auto; }
+.xai-settings-panel .settings-anchor-panel { overflow: clip; }
+.xai-settings-panel .settings-anchor-list { grid-template-columns: minmax(0, 1fr); }
+.xai-settings-panel .settings-category-content { min-width: 0; min-height: 0; overflow-y: auto; overflow-anchor: none; padding: 2px 8px 12px 2px; scrollbar-gutter: stable; }
+
+@media (max-width: 760px) {
+  .xai-settings-panel .settings-category-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .xai-settings-panel .settings-category-nav { max-height: min(220px, 32vh); }
+  .xai-settings-panel .settings-anchor-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

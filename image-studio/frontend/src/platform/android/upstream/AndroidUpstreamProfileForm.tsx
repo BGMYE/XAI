@@ -63,11 +63,11 @@ export function AndroidUpstreamProfileForm({
   return (
     <section className="android-upstream-form" aria-label="编辑上游配置">
       <div className="android-upstream-section-head">
-        <span>编辑</span>
-        {isActive ? <strong>当前启用</strong> : <button type="button" onClick={onSetActive}>设为当前</button>}
+        <span>记下这处源头</span>
+        {isActive ? <strong>生图已启用</strong> : <button type="button" onClick={onSetActive}>交给它生图</button>}
       </div>
 
-      <AndroidField label="名称" required>
+      <AndroidField label="为上游命名" required>
         <input
           type="text"
           value={draft.name}
@@ -77,7 +77,7 @@ export function AndroidUpstreamProfileForm({
         />
       </AndroidField>
 
-      <AndroidField label="API 形态">
+      <AndroidField label="接口形态 · API">
         <div className="android-upstream-option-grid two">
           {ANDROID_API_MODE_OPTIONS.map((option) => (
             <button
@@ -93,7 +93,7 @@ export function AndroidUpstreamProfileForm({
         </div>
       </AndroidField>
 
-      <AndroidField label="参数策略">
+      <AndroidField label="请求约定 · 参数策略">
         <div className="android-upstream-option-grid two">
           {ANDROID_REQUEST_POLICY_OPTIONS.map((option) => (
             <button
@@ -109,7 +109,7 @@ export function AndroidUpstreamProfileForm({
         </div>
       </AndroidField>
 
-      <AndroidField label="上游 BASE_URL" required hint="填写站点根地址，应用会按 API 形态自动拼接 /v1 路径。">
+      <AndroidField label="请求去处 · BASE_URL" required hint="写下站点根地址，应用会接好当前 API 的请求路径。">
         <input
           type="text"
           value={draft.baseURL}
@@ -121,7 +121,7 @@ export function AndroidUpstreamProfileForm({
         {baseURLError ? <p className="android-upstream-error">{baseURLError}</p> : null}
       </AndroidField>
 
-      <AndroidField label="连接安全" hint="仅在可信网络中使用；API Key、提示词和图片可能被窃听或篡改。">
+      <AndroidField label="连接边界 · 安全" hint="仅适用于可信网络。启用后，API Key、提示词与图片可能被窃听或篡改。">
         <button
           type="button"
           role="switch"
@@ -130,49 +130,49 @@ export function AndroidUpstreamProfileForm({
           onClick={() => onPatchDraft({ allowInsecureConnection: !(draft.allowInsecureConnection === true) })}
         >
           <span>
-            <strong>允许不安全连接</strong>
-            <small>允许远程 HTTP，并忽略 HTTPS / WSS 证书错误。</small>
+            <strong>允许不安全连接（有风险）</strong>
+            <small>启用后允许远程 HTTP，并跳过 HTTPS / WSS 证书错误。</small>
           </span>
-          <em>{draft.allowInsecureConnection ? "已开启" : "已关闭"}</em>
+          <em>{draft.allowInsecureConnection ? "已启用" : "已停用"}</em>
         </button>
       </AndroidField>
 
-      <AndroidField label="API Key" required hint="密钥写入系统凭据存储，不进入 localStorage。">
+      <AndroidField label="API Key" required hint="API Key 由系统凭据存储保管，不会留在 localStorage。">
         <div className="android-upstream-secret">
           <input
             type={showKey ? "text" : "password"}
             value={draftKey}
             onChange={(event) => onChangeDraftKey(event.target.value)}
-            placeholder={savedKeyLoaded ? "sk-..." : "加载中..."}
+            placeholder={savedKeyLoaded ? "sk-..." : "正在取回…"}
             autoComplete="off"
             className="focus-ring android-upstream-input font-mono-token"
             spellCheck={false}
           />
-          <button type="button" onClick={onToggleShowKey} title={showKey ? "隐藏密钥" : "显示密钥"}>
+          <button type="button" onClick={onToggleShowKey} title={showKey ? "遮住 API Key" : "查看 API Key"}>
             {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </AndroidField>
 
       <AndroidField
-        label="上游模型列表"
-        hint="通过宿主侧请求 /v1/models 获取模型列表，避免 WebView 跨域差异。"
+        label="模型目录 · 上游提供"
+        hint="由宿主向 /v1/models 取回模型目录，减少 WebView 跨域差异带来的阻碍。"
       >
         <button type="button" className="android-upstream-load-models" onClick={() => void onLoadModels()} disabled={loadingModels}>
           <RefreshCw className={`h-4 w-4 ${loadingModels ? "animate-spin" : ""}`} />
-          <span>{loadingModels ? "拉取中..." : "拉取并解析上游模型"}</span>
+          <span>{loadingModels ? "正在取回…" : "取回上游模型目录"}</span>
         </button>
-        {modelCatalog ? <p className="android-upstream-hint">已识别 {modelCatalog.all.length} 个模型。</p> : null}
+        {modelCatalog ? <p className="android-upstream-hint">已收录 {modelCatalog.all.length} 个模型。</p> : null}
         {modelCatalogError ? <p className="android-upstream-error">{modelCatalogError}</p> : null}
       </AndroidField>
 
       {draft.apiMode === "responses" ? (
         <>
-          <AndroidField label="Responses 传输" hint="这是 Responses API 的传输方式，不是 Realtime API。">
+          <AndroidField label="Responses · 传输方式" hint="此处选择 Responses API 的传输方式，与 Realtime API 无关。">
             <div className="android-upstream-option-grid two">
               {[
-                { id: "sse", title: "HTTP SSE", meta: "默认，兼容性更稳" },
-                { id: "websocket", title: "WebSocket", meta: "需要上游支持" },
+                { id: "sse", title: "HTTP SSE", meta: "初始选择，兼容性更稳妥" },
+                { id: "websocket", title: "WebSocket", meta: "需上游为此开启支持" },
               ].map((option) => (
                 <button
                   key={option.id}
@@ -187,12 +187,12 @@ export function AndroidUpstreamProfileForm({
             </div>
           </AndroidField>
 
-          <AndroidField label="文本模型 ID">
+          <AndroidField label="文字所托 · 文本模型 ID">
             <input
               type="text"
               value={draft.textModelID}
               onChange={(event) => onPatchDraft({ textModelID: event.target.value })}
-              placeholder="留空 = 默认 gpt-5.5"
+              placeholder="留白则使用 gpt-5.5"
               className="focus-ring android-upstream-input font-mono-token"
               spellCheck={false}
             />
@@ -205,7 +205,7 @@ export function AndroidUpstreamProfileForm({
             ) : null}
           </AndroidField>
 
-          <AndroidField label="推理强度" hint="默认 xhigh。低强度在部分模型或中转上可能导致工具调用失败。">
+          <AndroidField label="思考深浅 · 推理强度" hint="初始为 xhigh。部分模型或中转在低强度下可能无法完成工具调用。">
             <div className="android-upstream-option-grid two">
               {ANDROID_REASONING_EFFORT_OPTIONS.map((option) => (
                 <button
@@ -223,12 +223,12 @@ export function AndroidUpstreamProfileForm({
         </>
       ) : null}
 
-      <AndroidField label="图像模型 ID">
+      <AndroidField label="画面所托 · 图像模型 ID">
         <input
           type="text"
           value={draft.imageModelID}
           onChange={(event) => onPatchDraft({ imageModelID: event.target.value })}
-          placeholder="留空 = 默认 gpt-image-2"
+          placeholder="留白则使用 gpt-image-2"
           className="focus-ring android-upstream-input font-mono-token"
           spellCheck={false}
         />
@@ -241,12 +241,12 @@ export function AndroidUpstreamProfileForm({
         ) : null}
       </AndroidField>
 
-      <AndroidField label="视频模型 ID" hint="必须显式填写；不会使用文本或图像模型替代。也可直接手填上游要求的模型 ID。">
+      <AndroidField label="流动画面 · 视频模型 ID" hint="视频需要明确的模型 ID，没有默认值，也不会借用文本或图像模型；请按上游要求填写。">
         <input
           type="text"
           value={draft.videoModelID}
           onChange={(event) => onPatchDraft({ videoModelID: event.target.value })}
-          placeholder="例如 sora-2"
+          placeholder="请明确填写，如 sora-2"
           className="focus-ring android-upstream-input font-mono-token"
           spellCheck={false}
         />
@@ -259,12 +259,12 @@ export function AndroidUpstreamProfileForm({
         ) : null}
       </AndroidField>
 
-      <AndroidField label="并发数量限制" hint="0 表示不限制；正整数会限制同一配置跨标签页的并发任务。">
+      <AndroidField label="同行任务 · 并发上限" hint="0 表示不设上限；填写正整数后，这处上游跨标签页同时运行的任务数将不超过此值。">
         <div className="android-upstream-stepper">
           <button
             type="button"
             onClick={() => onPatchDraft({ concurrencyLimit: Math.max(0, draft.concurrencyLimit - 1) })}
-            title="减少"
+            title="减少并发上限"
           >
             <Minus className="h-4 w-4" />
           </button>
@@ -273,14 +273,14 @@ export function AndroidUpstreamProfileForm({
             value={draft.concurrencyLimit || ""}
             min={0}
             step={1}
-            placeholder="不限"
+            placeholder="不设上限"
             onChange={(event) => onPatchDraft({ concurrencyLimit: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
             className="focus-ring android-upstream-input font-mono-token"
           />
           <button
             type="button"
             onClick={() => onPatchDraft({ concurrencyLimit: Math.max(0, draft.concurrencyLimit) + 1 })}
-            title="增加"
+            title="增加并发上限"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -289,8 +289,8 @@ export function AndroidUpstreamProfileForm({
 
       {draft.apiMode === "images" ? (
         <AndroidField
-          label="Images API 中转兼容"
-          hint="默认关闭，只有默认标准参数无法生图时，再尝试开启。"
+          label="中转适配 · Images API"
+          hint="默认停用，沿用 OpenAI 标准 Images API；标准参数无法成图时，再尝试这一适配。"
         >
           <button
             type="button"
@@ -298,10 +298,10 @@ export function AndroidUpstreamProfileForm({
             onClick={() => onPatchDraft({ imagesNewAPICompat: !(draft.imagesNewAPICompat === true) })}
           >
             <span>
-              <strong>开启此开关可能可以解决newapi生图问题</strong>
-              <small>开启后会强制使用 b64_json，并关闭 stream / partial_images。</small>
+              <strong>NewAPI 生成受阻时，可尝试兼容模式</strong>
+              <small>启用后固定使用 b64_json，并停用 stream / partial_images。</small>
             </span>
-            <em>{draft.imagesNewAPICompat ? "已开启" : "已关闭"}</em>
+            <em>{draft.imagesNewAPICompat ? "已启用" : "已停用"}</em>
           </button>
         </AndroidField>
       ) : null}
@@ -309,19 +309,19 @@ export function AndroidUpstreamProfileForm({
       <div className="android-upstream-actions">
         <button type="button" onClick={() => void onSave()} disabled={!canSave || busy}>
           <Save className="h-4 w-4" />
-          {saving ? "保存中" : "保存"}
+          {saving ? "正在保存…" : "保存这份配置"}
         </button>
         <button type="button" onClick={() => void onSaveAndSetActive()} disabled={!canSave || busy}>
           <Check className="h-4 w-4" />
-          保存并启用
+          保存并用于生图
         </button>
         <button type="button" className="primary" onClick={() => void onSaveAndTest()} disabled={!canSave || busy}>
           <Plug className={`h-4 w-4 ${isTestingKey ? "animate-spin" : ""}`} />
-          {isTestingKey ? "测试中" : "保存并测试"}
+          {isTestingKey ? "正在探测…" : "保存后探测连接"}
         </button>
       </div>
 
-      {!canSave ? <p className="android-upstream-save-hint">名称、BASE_URL 和 API Key 填齐后才能保存。</p> : null}
+      {!canSave ? <p className="android-upstream-save-hint">请补齐名称、BASE_URL 与 API Key，再保存这处创作源头。</p> : null}
     </section>
   );
 }

@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import "./upstream-config.css";
+import "../../styles/_xai-typography.css";
 import { ClipboardPaste, Eye, EyeOff, HelpCircle, Info, Plug, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { useStudioStore } from "../../state/studioStore";
@@ -120,7 +122,7 @@ export function UpstreamConfigModal({
       let syncedId = existing?.id ?? "";
 
       if (existing) {
-        await updateProfile(existing.id, {
+        const saved = await updateProfile(existing.id, {
           name,
           apiMode: "responses",
           requestPolicy: "openai",
@@ -132,6 +134,7 @@ export function UpstreamConfigModal({
           concurrencyLimit: existing.concurrencyLimit,
           apiKey: imported.apiKey,
         });
+        if (!saved) return;
         await setActiveProfile(existing.id);
         syncedId = existing.id;
       } else {
@@ -143,6 +146,7 @@ export function UpstreamConfigModal({
           apiKey: imported.apiKey,
           setActive: true,
         });
+        if (!syncedId) return;
       }
 
       const syncedProfile = useStudioStore.getState().profiles.find((profile) => profile.id === syncedId) ?? null;
@@ -151,9 +155,9 @@ export function UpstreamConfigModal({
       setDraftKey(imported.apiKey);
       setSavedKeyLoaded(true);
       setShowKey(false);
-      pushToast(`已同步 ${name}`, "success");
+      pushToast(`已接入 Codex 配置：${name}`, "success");
     } catch (error: any) {
-      pushToast(`同步 Codex 配置失败:${error?.message ?? error}`, "error", 6000);
+      pushToast(`未能带入 Codex 配置：${error?.message ?? error}`, "error", 6000);
     } finally {
       setSyncingCodexConfig(false);
     }
@@ -163,18 +167,15 @@ export function UpstreamConfigModal({
     try {
       const currentProfiles = useStudioStore.getState().profiles;
       if (currentProfiles.length === 0) {
-        pushToast("当前没有可导出的上游配置", "warn");
+        pushToast("尚无上游配置可供备份", "warn");
         return;
       }
-      const apiKeysById = Object.fromEntries(await Promise.all(
-        currentProfiles.map(async (profile) => [profile.id, await GetStoredAPIKey(keyringUserFor(profile.id)).catch(() => "")] as const),
-      ));
       const currentState = useStudioStore.getState();
-      const payload = buildUpstreamConfigExportFile(currentProfiles, currentState.activeProfileId, apiKeysById, currentState.aiProfileId);
+      const payload = buildUpstreamConfigExportFile(currentProfiles, currentState.activeProfileId, currentState.aiProfileId);
       const dst = await ExportUpstreamConfigToFile(JSON.stringify(payload, null, 2));
       if (dst) pushToast(`已导出上游配置 → ${dst.split(/[\\/]/).pop()}`, "success");
     } catch (error: any) {
-      pushToast(`导出上游配置失败:${error?.message ?? error}`, "error", 6000);
+      pushToast(`上游配置未能备份：${error?.message ?? error}`, "error", 6000);
     }
   }
 
@@ -182,13 +183,13 @@ export function UpstreamConfigModal({
     try {
       const raw = await ImportUpstreamConfigFromFile();
       if (!raw) return;
-      await handleImportFromRawJSON(raw, "已导入");
+      await handleImportFromRawJSON(raw, "已读入");
     } catch (error: any) {
-      pushToast(`导入上游配置失败:${error?.message ?? error}`, "error", 6000);
+      pushToast(`上游配置未能读入：${error?.message ?? error}`, "error", 6000);
     }
   }
 
-  async function handleImportFromRawJSON(raw: string, successPrefix = "已导入") {
+  async function handleImportFromRawJSON(raw: string, successPrefix = "已读入") {
     const parsed = parseUpstreamConfigImportFile(raw);
     const result = await applyParsedUpstreamConfigImport(parsed, {
       getProfiles: () => useStudioStore.getState().profiles,
@@ -207,31 +208,31 @@ export function UpstreamConfigModal({
       setDraftKey(await GetStoredAPIKey(keyringUserFor(selectedProfile.id)).catch(() => ""));
       setSavedKeyLoaded(true);
     }
-    pushToast(`${successPrefix} ${result.importedCount} 组上游配置`, "success");
+    pushToast(`${successPrefix} ${result.importedCount} 组上游配置记录`, "success");
   }
 
   async function handleQuickImport() {
     const raw = quickImportText.trim();
     if (!raw) {
-      pushToast("先粘贴 JSON 模板", "warn");
+      pushToast("请先贴入一份 JSON 配置模板", "warn");
       return;
     }
     try {
-      await handleImportFromRawJSON(raw, "已快捷导入");
+      await handleImportFromRawJSON(raw, "已从 JSON 读入");
       setQuickImportOpen(false);
       setQuickImportText("");
     } catch (error: any) {
-      pushToast(`快捷导入失败:${error?.message ?? error}`, "error", 6000);
+      pushToast(`这份配置未能读入：${error?.message ?? error}`, "error", 6000);
     }
   }
 
-  async function handleNew(apiMode: APIMode = "responses") {
+  async function handleNew(apiMode: APIMode = "images") {
     const id = await createProfile({
       apiMode,
       requestPolicy: "openai",
       setActive: profiles.length === 0, // 第一个自动 active,后续手动切
     });
-    setSelectedId(id);
+    if (id) setSelectedId(id);
   }
 
   async function handleDuplicate() {
@@ -251,24 +252,24 @@ export function UpstreamConfigModal({
   }
 
   async function handleSave() {
-    if (!draft) return;
-        await updateProfile(draft.id, {
-          name: draft.name,
-          apiMode: draft.apiMode,
-          responsesTransport: draft.responsesTransport ?? "sse",
-          requestPolicy: draft.requestPolicy,
-          imagesNewAPICompat: draft.imagesNewAPICompat === true,
-          allowInsecureConnection: draft.allowInsecureConnection === true,
-          baseURL: draft.baseURL,
-          textModelID: draft.textModelID,
-          imageModelID: draft.imageModelID,
-          videoModelID: draft.videoModelID,
-          reasoningEffort: draft.reasoningEffort,
-          concurrencyLimit: draft.concurrencyLimit,
-          fallbackProfileId: draft.fallbackProfileId,
-          apiKey: draftKey,
-        });
-    // 如果当前 selected 不是 active,问要不要切;不弹了,直接什么都不做
+    if (!draft) return false;
+    return updateProfile(draft.id, {
+      name: draft.name,
+      apiMode: draft.apiMode,
+      responsesTransport: draft.responsesTransport ?? "sse",
+      requestPolicy: draft.requestPolicy,
+      imagesNewAPICompat: draft.imagesNewAPICompat === true,
+      allowInsecureConnection: draft.allowInsecureConnection === true,
+      baseURL: draft.baseURL,
+      textModelID: draft.textModelID,
+      imageModelID: draft.imageModelID,
+      modelIDs: draft.modelIDs,
+      videoModelID: draft.videoModelID,
+      reasoningEffort: draft.reasoningEffort,
+      concurrencyLimit: draft.concurrencyLimit,
+      fallbackProfileId: draft.fallbackProfileId,
+      apiKey: draftKey,
+    });
   }
 
   async function handleSetActive() {
@@ -279,23 +280,23 @@ export function UpstreamConfigModal({
   async function handleSetAI() {
     if (!draft) return;
     if (draft.apiMode !== "responses") {
-      pushToast("AI 优化与图片反推需要 Responses API 配置", "warn", 5000);
+      pushToast("提示词润色与图片反推，需由 Responses API 配置承接", "warn", 5000);
       return;
     }
     if (!canSave) {
-      pushToast("先补全并保存这条配置的 BASE_URL 与 API Key", "warn", 5000);
+      pushToast("请先补齐这处上游的 BASE_URL 与 API Key，并保存配置", "warn", 5000);
       return;
     }
-    await handleSave();
+    if (!await handleSave()) return;
     if (await setAIProfile(draft.id)) {
-      pushToast(`已将「${draft.name}」设为 AI 渠道`, "success");
+      pushToast(`「${draft.name}」已接手 AI 润色与图片反推`, "success");
     }
   }
 
   async function handleTest() {
     if (!draft || !canSave) return;
     // 先保存,再测;testAPIKey 读 active profile 的字段,所以要让它先切到 selected
-    await handleSave();
+    if (!await handleSave()) return;
     if (draft.id !== activeProfileId) {
       await setActiveProfile(draft.id);
     }
@@ -308,11 +309,11 @@ export function UpstreamConfigModal({
     const apiKey = draftKey.trim();
     const baseURL = draft.baseURL.trim();
     if (!apiKey) {
-      pushToast("先填入 API Key", "warn");
+      pushToast("请先添入 API Key，让请求有凭可行", "warn");
       return;
     }
     if (!baseURL) {
-      pushToast("先填入上游 BASE_URL", "warn");
+      pushToast("请先写下上游 BASE_URL，确定请求的去处", "warn");
       return;
     }
     setLoadingModels(true);
@@ -330,22 +331,27 @@ export function UpstreamConfigModal({
       );
       const catalog = buildUpstreamModelCatalog(result.models ?? []);
       setModelCatalog(catalog);
+      // Keep the discovered directory on the profile so it remains available
+      // after reopening settings and can be selected from the workspace.
+      const discoveredIDs = catalog.all.map((model) => model.id);
+      const nextModelIDs = Array.from(new Set([...(draft.modelIDs ?? []), ...discoveredIDs]));
+      setDraft((current) => current ? { ...current, modelIDs: nextModelIDs } : current);
       if (result.responsesTransport === "websocket" && result.responsesTransportOK === false) {
         pushToast(
-          `已拉取模型，但 Responses WebSocket 不可用:${result.responsesTransportError || "未返回具体原因"}`,
+          `模型目录已取回，但 Responses WebSocket 暂不可用：${result.responsesTransportError || "上游未说明原因"}`,
           "warn",
           7000,
         );
       } else {
         const message = result.responsesTransport === "websocket"
-          ? `已加载 ${catalog.all.length} 个模型，Responses WebSocket 可用`
+          ? `已收录 ${catalog.all.length} 个模型，Responses WebSocket 已连通`
           : catalog.all.length > 0
-            ? `已加载 ${catalog.all.length} 个模型`
-            : `已连接上游，共返回 ${result.modelCount} 个条目，但没有可识别的模型 ID`;
+            ? `已收录 ${catalog.all.length} 个可识别模型`
+            : `已抵达上游并取回 ${result.modelCount} 个条目，但其中没有可识别的模型 ID`;
         pushToast(message, catalog.all.length > 0 ? "success" : "warn");
       }
     } catch (error: any) {
-      const message = `加载模型失败:${error?.message ?? error}`;
+      const message = `模型目录未能取回：${error?.message ?? error}`;
       setModelCatalogError(message);
       pushToast(message, "error", 6000);
     } finally {
@@ -355,12 +361,14 @@ export function UpstreamConfigModal({
 
   if (profiles.length === 0) {
     return (
+      <>
       <Modal
         open={open}
         onClose={onClose}
-        title="上游配置"
-        width={760}
-        cardClassName="upstream-config-modal"
+        title="创作源头 · 上游配置"
+        width={1040}
+        cardClassName="upstream-config-modal upstream-redesign-modal xai-settings-panel"
+        headerClassName="upstream-config-modal-header"
         bodyClassName="upstream-config-modal-body"
       >
         <section className={`flex flex-col ${isAndroidPhone ? "gap-4" : "gap-5"}`}>
@@ -370,9 +378,9 @@ export function UpstreamConfigModal({
                 <Sparkles className="h-5 w-5 text-[var(--accent)]" />
               </div>
               <div className="min-w-0">
-                <h4 className={`text-zinc-900 dark:text-zinc-100 ${isAndroidPhone ? "text-[17px] font-semibold" : "text-[18px] font-semibold"}`}>先连上一个可用上游</h4>
+                <h4 className={`text-zinc-900 dark:text-zinc-100 ${isAndroidPhone ? "text-[17px] font-semibold" : "text-[18px] font-semibold"}`}>先为创作找到一处源头</h4>
                 <p className={`mt-1 text-zinc-500 dark:text-zinc-400 ${isAndroidPhone ? "text-[13px] leading-6" : "text-sm leading-6"}`}>
-                  先保存一条可用配置。生图与 AI 操作可以分别指定渠道，图片反推与提示词优化使用 Responses API。
+                  从一条可用配置开始。生图与 AI 辅助可各择上游；图片反推与提示词润色交由 Responses API。
                 </p>
               </div>
             </div>
@@ -387,8 +395,8 @@ export function UpstreamConfigModal({
                 className={`platform-card col-span-full flex items-center justify-between gap-3 border border-[color:var(--accent)]/25 bg-[var(--accent-soft)] px-4 py-3 text-left text-[13px] text-[var(--accent)] transition-colors hover:bg-[color:var(--accent)]/15 disabled:cursor-not-allowed disabled:opacity-60 ${usesFluentUI ? "rounded-[10px]" : "rounded-[18px]"}`}
               >
                 <span className="min-w-0">
-                <span className="block font-semibold">同步 Codex 配置</span>
-                  <span className="mt-1 block text-[11px] text-[var(--accent)]/80">自动读取当前电脑里的 Codex `base_url` 和 `OPENAI_API_KEY`。</span>
+                <span className="block font-semibold">沿用 Codex 配置</span>
+                  <span className="mt-1 block text-[11px] text-[var(--accent)]/80">沿用本机 Codex 中的 `base_url` 与 `OPENAI_API_KEY`，接续已有配置。</span>
                 </span>
                 <RefreshCw className={`h-4 w-4 shrink-0 ${syncingCodexConfig ? "animate-spin" : ""}`} />
               </button>
@@ -399,23 +407,23 @@ export function UpstreamConfigModal({
               className={`platform-card col-span-full flex items-center justify-between gap-3 border border-black/[0.08] bg-white/70 px-4 py-3 text-left text-[13px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:bg-[var(--accent-soft)]/60 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 ${usesFluentUI ? "rounded-[10px]" : "rounded-[18px]"}`}
             >
               <span className="min-w-0">
-                <span className="block font-semibold">粘贴 JSON 快捷导入</span>
-                <span className="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">支持本应用导出文件、`newapi_channel_conn`、OpenCode `provider` 模板。</span>
+                <span className="block font-semibold">从 JSON 带入配置</span>
+                <span className="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">可读入本应用备份、`newapi_channel_conn` 或 OpenCode `provider` 模板。</span>
               </span>
               <ClipboardPaste className="h-4 w-4 shrink-0 text-[var(--accent)]" />
             </button>
             {([
               {
-                id: "responses" as APIMode,
-                title: "Responses API",
-                sub: "首选。支持 SSE 保活，长任务更稳。",
-                note: "适合 GPT 图像链路和提示词优化。",
-              },
-              {
                 id: "images" as APIMode,
                 title: "Images API",
-                sub: "兼容性更广，接标准 generations / edits。",
-                note: "适合只想尽快接上常规生图接口。",
+                sub: "让 Sunburst 成图，沿用标准 generations / edits。",
+                note: "gpt-image-2.5-sunburst 与上游地址已为你填好。",
+              },
+              {
+                id: "responses" as APIMode,
+                title: "Responses API",
+                sub: "以 SSE 保活，让 Responses 工具调用持续同行。",
+                note: "用于润色提示词，也可从图片寻回描述。",
               },
             ]).map((item) => (
               <button
@@ -433,7 +441,7 @@ export function UpstreamConfigModal({
                 <p className="text-[12px] leading-5 text-zinc-600 dark:text-zinc-300">{item.sub}</p>
                 <p className="text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{item.note}</p>
                 <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent)] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}>
-                  <Plus className="h-3 w-3" /> 新建这类配置
+                  <Plus className="h-3 w-3" /> 添入这一类上游
                 </span>
               </button>
             ))}
@@ -441,10 +449,18 @@ export function UpstreamConfigModal({
 
           <div className={`flex items-start gap-2 border border-[color:var(--accent)]/18 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)] ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}>
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>保存后会写入系统凭据存储。之后你可以在这里继续新增多个上游配置，再按场景切换。</span>
+            <span>保存时，API Key 会安放进系统凭据存储。你可以继续添入多个上游，随创作所需切换。</span>
           </div>
         </section>
       </Modal>
+      <Modal open={quickImportOpen} onClose={() => setQuickImportOpen(false)} title="从 JSON 带入上游配置" width={620}>
+        <section className="flex flex-col gap-3">
+          <p className="m-0 text-[13px] leading-6 text-zinc-600 dark:text-zinc-300">将 JSON 模板贴在这里，可读入本应用备份、<code className="font-mono-token">newapi_channel_conn</code> 或 OpenCode <code className="font-mono-token">provider</code> 配置。</p>
+          <textarea value={quickImportText} onChange={(event) => setQuickImportText(event.target.value)} placeholder="把 JSON 配置贴在这里…" spellCheck={false} className="focus-ring min-h-[280px] w-full resize-y border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm font-mono-token" />
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setQuickImportOpen(false)} className="platform-action-btn px-4 py-2 text-sm">暂且返回</button><button type="button" onClick={() => void handleQuickImport()} className="liquid-primary-button bg-[var(--accent)] px-4 py-2 text-sm text-white">读入这份配置</button></div>
+        </section>
+      </Modal>
+      </>
     );
   }
 
@@ -453,12 +469,13 @@ export function UpstreamConfigModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="上游配置"
-      width={760}
-      cardClassName="upstream-config-modal"
+      title="创作源头 · 上游配置"
+      width={1040}
+      cardClassName="upstream-config-modal upstream-redesign-modal xai-settings-panel"
+      headerClassName="upstream-config-modal-header"
       bodyClassName="upstream-config-modal-body"
     >
-      <div className={`flex min-w-0 gap-4 ${isAndroidPhone ? "flex-col" : ""}`}>
+      <div className="upstream-redesign-layout flex min-w-0 gap-4">
         <UpstreamProfileList
           profiles={profiles}
           selectedId={selectedId}
@@ -482,10 +499,10 @@ export function UpstreamConfigModal({
         />
 
         {/* ---------------- 右侧编辑表单 ---------------- */}
-        <section className="flex-1 min-w-0">
+        <section className="upstream-redesign-panel flex-1 min-w-0">
           {!draft ? (
             <div className="grid h-full place-items-center py-10 text-sm text-zinc-500">
-              在左侧选一个配置,或新建一个。
+              从左侧选一处上游，或添入新的创作源头。
             </div>
           ) : (
             <UpstreamProfileEditor
@@ -508,7 +525,7 @@ export function UpstreamConfigModal({
               onLoadModels={handleLoadModels}
               onTest={handleTest}
               onClose={onClose}
-              onSaveAndClose={async () => { await handleSave(); onClose(); }}
+              onSaveAndClose={async () => { if (await handleSave()) onClose(); }}
             />
           )}
         </section>
@@ -518,23 +535,23 @@ export function UpstreamConfigModal({
     <Modal
       open={quickImportOpen}
       onClose={() => setQuickImportOpen(false)}
-      title="快捷导入上游配置"
+      title="从 JSON 带入上游配置"
       width={620}
     >
       <section className="flex flex-col gap-3">
         <p className="m-0 text-[13px] leading-6 text-zinc-600 dark:text-zinc-300">
-          直接粘贴对方提供的 JSON 模板。当前支持本应用导出文件、<code className="font-mono-token">newapi_channel_conn</code>、OpenCode <code className="font-mono-token">provider</code> 配置。
+          将已有的 JSON 模板贴在这里。可读入本应用备份、<code className="font-mono-token">newapi_channel_conn</code>、OpenCode <code className="font-mono-token">provider</code> 配置。
         </p>
         <textarea
           value={quickImportText}
           onChange={(event) => setQuickImportText(event.target.value)}
-          placeholder={"在这里粘贴 JSON...\n例如 {\"_type\":\"newapi_channel_conn\",...}"}
+          placeholder={"把 JSON 配置贴在这里…\n例如 {\"_type\":\"newapi_channel_conn\",...}"}
           spellCheck={false}
           className={`focus-ring min-h-[280px] w-full resize-y border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         />
         <div className="flex items-start gap-2 border border-[color:var(--accent)]/18 bg-[var(--accent-soft)] px-3 py-2 text-[11px] leading-5 text-[var(--accent)] rounded-[14px]">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>导入后会直接生成可用 profile，并把 API Key 写入系统凭据存储。若模板里自带 `/v1`，会自动适配成站点根地址。</span>
+          <span>读入后会建立上游配置，API Key 存入系统凭据存储；模板若带有 `/v1`，会自动整理为站点根地址。</span>
         </div>
         <div className="flex justify-end gap-2">
           <button
@@ -542,14 +559,14 @@ export function UpstreamConfigModal({
             onClick={() => setQuickImportOpen(false)}
             className={`platform-action-btn border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >
-            取消
+            暂且返回
           </button>
           <button
             type="button"
             onClick={() => void handleQuickImport()}
             className={`liquid-primary-button bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >
-            立即导入
+            读入这份配置
           </button>
         </div>
       </section>
@@ -565,10 +582,10 @@ export function UpstreamConfigModal({
       <div className="upstream-delete-confirm-shell">
         <div className="upstream-delete-confirm-copy rounded-[18px] border border-red-500/16 bg-red-500/[0.06] px-4 py-3 text-[13px] leading-6 text-zinc-700 dark:border-red-400/20 dark:bg-red-400/[0.08] dark:text-zinc-200">
           <p className="m-0">
-            确认删除「{draft?.name || "当前配置"}」?
+            要删除「{draft?.name || "当前配置"}」吗？
           </p>
           <p className="mt-1.5 mb-0 text-[12px] leading-5 text-zinc-500 dark:text-zinc-400">
-            这会同时清除这条配置对应的 API Key 凭据。删除后不可恢复。
+            这条配置及其 API Key 凭据会一并清除，删除后无法恢复。
           </p>
         </div>
         <div className="upstream-delete-confirm-actions">
@@ -577,14 +594,14 @@ export function UpstreamConfigModal({
             onClick={() => setDeleteConfirmOpen(false)}
             className={`platform-action-btn upstream-delete-confirm-btn upstream-delete-confirm-btn-secondary inline-flex items-center justify-center ${usesAppleUI ? "rounded-[14px]" : usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >
-            取消
+            暂且返回
           </button>
           <button
             type="button"
             onClick={() => void handleDelete()}
             className={`platform-action-btn upstream-delete-confirm-btn upstream-delete-confirm-btn-danger inline-flex items-center justify-center ${usesAppleUI ? "rounded-[14px]" : usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >
-            确认删除
+            删除配置及凭据
           </button>
         </div>
       </div>

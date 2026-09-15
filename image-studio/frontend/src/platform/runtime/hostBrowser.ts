@@ -14,18 +14,17 @@ export function saveByDownload(blob: Blob, suggestedName: string): string {
 
 export function browserStoredAPIKey(user: string): string {
   try {
-    return localStorage.getItem(browserKeyPrefix + user) ?? "";
-  } catch {
-    return "";
-  }
+    localStorage.removeItem(browserKeyPrefix + user);
+  } catch { /* ignore unavailable browser storage */ }
+  return "";
 }
 
 export function setBrowserStoredAPIKey(user: string, value: string) {
   try {
-    if (value.trim()) localStorage.setItem(browserKeyPrefix + user, value.trim());
-    else localStorage.removeItem(browserKeyPrefix + user);
-  } catch {
-    // ignore
+    localStorage.removeItem(browserKeyPrefix + user);
+  } catch { /* ignore unavailable browser storage */ }
+  if (value.trim()) {
+    throw new Error("浏览器不能写入系统凭据存储。请在桌面应用中保存 API Key。");
   }
 }
 

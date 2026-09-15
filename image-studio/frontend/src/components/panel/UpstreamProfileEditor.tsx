@@ -1,4 +1,4 @@
-import { CheckCircle2, Eye, EyeOff, HelpCircle, Info, Plug, RefreshCw } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, HelpCircle, Info, Plug, Plus, RefreshCw } from "lucide-react";
 import {
   REASONING_EFFORT_OPTIONS,
   type APIMode,
@@ -8,8 +8,10 @@ import {
 } from "../../types/domain";
 import { requestPolicyLabel } from "../../lib/profiles";
 import { usePlatform } from "../../platform/context";
+import { useState } from "react";
 import {
   formatUpstreamModelLabel,
+  buildUpstreamModelCatalog,
   preferredModelsForAPIMode,
   type UpstreamModelCatalog,
   type UpstreamModelDescriptor,
@@ -59,38 +61,45 @@ export function UpstreamProfileEditor({
   onSaveAndClose: () => void | Promise<void>;
 }) {
   const { isAndroidPhone, usesFluentUI } = usePlatform();
+  const [customModelID, setCustomModelID] = useState("");
   const apiModeOptions = [
-    { id: "responses" as APIMode, title: "Responses API", sub: "SSE 保活(CF 超时推荐)" },
-    { id: "images" as APIMode, title: "Images API", sub: "标准 generations / edits" },
+    { id: "responses" as APIMode, title: "Responses API", sub: "以 SSE 保活，应对 CF 超时" },
+    { id: "images" as APIMode, title: "Images API", sub: "沿用标准 generations / edits" },
   ];
   const requestPolicyOptions = [
-    { id: "openai" as RequestPolicy, title: requestPolicyLabel("openai"), sub: "默认。只发送 OpenAI 官方公开字段。" },
-    { id: "compat" as RequestPolicy, title: requestPolicyLabel("compat"), sub: "兼容部分 relay 扩展字段，例如 seed / negative_prompt。" },
+    { id: "openai" as RequestPolicy, title: requestPolicyLabel("openai"), sub: "初始选择，仅携带 OpenAI 官方公开字段。" },
+    { id: "compat" as RequestPolicy, title: requestPolicyLabel("compat"), sub: "为部分 relay 添上扩展字段，如 seed / negative_prompt。" },
   ];
   const responsesTransportOptions = [
-    { id: "sse" as ResponsesTransport, title: "HTTP SSE", sub: "默认，兼容性更稳" },
-    { id: "websocket" as ResponsesTransport, title: "WebSocket mode", sub: "需要上游支持" },
+    { id: "sse" as ResponsesTransport, title: "HTTP SSE", sub: "初始选择，兼容性更稳妥" },
+    { id: "websocket" as ResponsesTransport, title: "WebSocket mode", sub: "需上游为此开启支持" },
   ];
-  const selectedAPIMode = apiModeOptions.find((option) => option.id === draft.apiMode) ?? apiModeOptions[0];
   const selectedRequestPolicy = requestPolicyOptions.find((option) => option.id === draft.requestPolicy) ?? requestPolicyOptions[0];
-  const selectedReasoningEffort = REASONING_EFFORT_OPTIONS.find((option) => option.value === draft.reasoningEffort) ?? REASONING_EFFORT_OPTIONS[0];
-  const preferredModels = modelCatalog ? preferredModelsForAPIMode(modelCatalog, draft.apiMode) : null;
+  const persistedCatalog = buildUpstreamModelCatalog((draft.modelIDs ?? []).map((id) => ({ id })));
+  const mergedCatalog = modelCatalog
+    ? buildUpstreamModelCatalog([...modelCatalog.all, ...persistedCatalog.all])
+    : persistedCatalog;
+  const preferredModels = mergedCatalog.all.length > 0 ? preferredModelsForAPIMode(mergedCatalog, draft.apiMode) : null;
   const fallbackCandidates = profiles.filter((profile) => profile.id !== draft.id && profile.baseURL.trim());
 
   return (
-    <div className={`upstream-profile-editor flex min-w-0 flex-col ${isAndroidPhone ? "gap-3" : "gap-3.5"}`}>
-      <div className="flex items-center justify-end">
+    <div className={`upstream-profile-editor upstream-editor flex min-w-0 flex-col ${isAndroidPhone ? "gap-3" : "gap-3.5"}`}><div className="upstream-editor-panel">
+      <div className="upstream-editor-toolbar flex items-center justify-between">
+        <span className="upstream-editor-title">连接配置</span>
         <button
           type="button"
           onClick={onOpenFAQ}
           className={`inline-flex items-center gap-1 text-[11px] text-zinc-500 transition-colors hover:text-[var(--accent)] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <HelpCircle className="h-3.5 w-3.5" /> 接口说明
+          <HelpCircle className="h-3.5 w-3.5" /> 读读接口说明
         </button>
       </div>
 
-      <Field label="名称">
+      <div className="upstream-editor-section upstream-editor-section-connection">
+        <div className="upstream-editor-section-header"><span>连接配置</span><span className="upstream-editor-section-note">基础字段</span></div>
+      <Field label="为上游命名">
         <input
+          aria-label="配置名称"
           type="text"
           value={draft.name}
           onChange={(e) => onPatchDraft({ name: e.target.value })}
@@ -102,8 +111,7 @@ export function UpstreamProfileEditor({
       <Field
         label={(
           <span className="flex items-center justify-between gap-3">
-            <span>API 形态</span>
-            <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">已选 {selectedAPIMode.title}</span>
+            <span>接口形态 · API</span>
           </span>
         )}
       >
@@ -124,41 +132,14 @@ export function UpstreamProfileEditor({
         </div>
         <Hint>
           {draft.apiMode === "responses"
-            ? "需要 key 绑定到「拥有 gpt-5.5 模型的分组」。SSE 保活可防 Cloudflare 524。"
-            : "使用标准 Images API,key 用 image-2 / image API 分组,兼容性最广。"}
+            ? "请让 API Key 对应可用 gpt-5.5 的分组；SSE 保活有助于应对 Cloudflare 524。"
+            : "沿标准 Images API 成图，API Key 需具备 image-2 / image API 分组权限。"}
         </Hint>
       </Field>
 
-      <Field
-        label={(
-          <span className="flex items-center justify-between gap-3">
-            <span>参数策略</span>
-            <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">已选 {selectedRequestPolicy.title}</span>
-          </span>
-        )}
-      >
-        <div className="grid gap-2">
-          {requestPolicyOptions.map((option) => {
-            const active = draft.requestPolicy === option.id;
-            return (
-              <OptionCard
-                key={option.id}
-                active={active}
-                usesFluentUI={usesFluentUI}
-                title={option.title}
-                sub={option.sub}
-                onClick={() => onPatchDraft({ requestPolicy: option.id })}
-              />
-            );
-          })}
-        </div>
-        <Hint>
-          `OpenAI 标准` 更适合直连 OpenAI 或严格兼容实现。`兼容中转扩展` 会额外发送一些 relay 常见扩展字段。
-        </Hint>
-      </Field>
-
-      <Field label={<>上游 BASE_URL <Req /></>}>
+      <Field label={<>请求去处 · BASE_URL <Req /></>}>
         <input
+          aria-label="上游 BASE_URL"
           type="text"
           value={draft.baseURL}
           placeholder="https://your-relay.example.com"
@@ -168,11 +149,11 @@ export function UpstreamProfileEditor({
         />
         {baseURLError ? <Hint>{baseURLError}</Hint> : null}
         <Hint>
-          中转站只填站点根地址，应用会自动拼接当前 API 路径；Google 官方 Images 配置填写 <code className="font-mono-token">https://generativelanguage.googleapis.com/v1beta/openai</code>。除该官方兼容地址外，<strong>不要</strong>手动贴入具体接口路径。
+          为中转站填写根地址即可，应用会接好当前 API 路径；Google 官方入口的 Images 入口请填写 <code className="font-mono-token">https://generativelanguage.googleapis.com/v1beta/openai</code>。除这处官方兼容入口外，<strong>不要</strong>附上具体接口路径。
         </Hint>
       </Field>
 
-      <Field label="连接安全">
+      <Field label="连接边界 · 安全">
         <button
           type="button"
           role="switch"
@@ -185,9 +166,9 @@ export function UpstreamProfileEditor({
           } ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         >
           <span className="min-w-0">
-            <span className="block font-medium">允许不安全连接</span>
+            <span className="block font-medium">允许不安全连接（有风险）</span>
             <span className="mt-1 block break-words text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-              允许远程 <code className="font-mono-token">http://</code>，并忽略 HTTPS / WSS 的自签名、过期或域名不匹配证书。
+              启用后允许远程 <code className="font-mono-token">http://</code>，并跳过 HTTPS / WSS 的自签名、过期及域名不匹配证书校验。
             </span>
           </span>
           <span
@@ -197,18 +178,19 @@ export function UpstreamProfileEditor({
                 : "border-black/[0.08] bg-black/[0.04] text-zinc-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-zinc-300"
             } ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >
-            {draft.allowInsecureConnection ? "已开启" : "已关闭"}
+            {draft.allowInsecureConnection ? "已启用" : "已停用"}
           </span>
         </button>
-        <Hint>仅在可信网络中使用。开启后 API Key、提示词和图片可能被窃听或篡改。</Hint>
+        <Hint>仅适用于可信网络。启用后，API Key、提示词与图片可能被窃听或篡改。</Hint>
       </Field>
 
       <Field label={<>API Key <Req /></>}>
-        <div className="relative min-w-0">
+        <div className="upstream-key-control relative min-w-0">
           <input
+            aria-label="API Key"
             type={showKey ? "text" : "password"}
             value={draftKey}
-            placeholder={savedKeyLoaded ? "sk-..." : "(加载中...)"}
+            placeholder={savedKeyLoaded ? "sk-..." : "(正在取回…)"}
             onChange={(e) => onChangeDraftKey(e.target.value)}
             spellCheck={false}
             autoComplete="off"
@@ -217,21 +199,25 @@ export function UpstreamProfileEditor({
           <button
             type="button"
             onClick={onToggleShowKey}
-            title={showKey ? "隐藏" : "显示"}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${usesFluentUI ? "rounded-[6px]" : "rounded-full"}`}
+            title={showKey ? "遮住 API Key" : "查看 API Key"}
+            className={`upstream-key-toggle absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${usesFluentUI ? "rounded-[6px]" : "rounded-full"}`}
           >
             {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
         </div>
-        <Hint>API Key 保存到系统凭据存储(Keychain / Credential Manager / Secret Service),不在 localStorage 中明文存放。</Hint>
+        <Hint>API Key 由系统凭据存储保管（Keychain / Credential Manager / Secret Service），不会以明文留在 localStorage。</Hint>
       </Field>
 
+      </div>
+
+      <div className="upstream-editor-section upstream-editor-section-models">
+        <div className="upstream-editor-section-header"><span>模型选择</span><span className="upstream-editor-section-note">自由填写 ID，目录仅作建议</span></div>
       <Field
         label={(
           <span className="flex items-center justify-between gap-3">
-            <span>上游模型列表</span>
-            {modelCatalog ? (
-              <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">已识别 {modelCatalog.all.length} 个模型</span>
+            <span>模型目录 · 上游提供</span>
+            {mergedCatalog.all.length > 0 ? (
+              <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">已收录 {mergedCatalog.all.length} 个模型</span>
             ) : null}
           </span>
         )}
@@ -243,10 +229,10 @@ export function UpstreamProfileEditor({
           className={`platform-action-btn inline-flex w-full items-center justify-center gap-2 border border-black/[0.08] px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loadingModels ? "animate-spin" : ""}`} />
-          {loadingModels ? "拉取中..." : "拉取并解析上游模型"}
+          {loadingModels ? "正在取回模型…" : "取回上游模型目录"}
         </button>
         <Hint>
-          通过宿主侧请求 <code className="font-mono-token">/v1/models</code> 获取模型列表，避免浏览器跨域或 WebView 差异影响结果。
+          由宿主向 <code className="font-mono-token">/v1/models</code> 取回模型目录，减少浏览器跨域与 WebView 差异带来的阻碍。
         </Hint>
         {modelCatalogError ? <Hint>{modelCatalogError}</Hint> : null}
       </Field>
@@ -256,10 +242,7 @@ export function UpstreamProfileEditor({
           <Field
             label={(
               <span className="flex items-center justify-between gap-3">
-                <span>Responses 传输</span>
-                <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">
-                  已选 {(draft.responsesTransport ?? "sse") === "websocket" ? "WebSocket mode" : "HTTP SSE"}
-                </span>
+                <span>Responses · 传输方式</span>
               </span>
             )}
           >
@@ -279,22 +262,23 @@ export function UpstreamProfileEditor({
               })}
             </div>
             <Hint>
-              这是 Responses API 的传输方式，不是 Realtime API。当前仅桌面本地内核与 Android 壳层支持 WebSocket mode。
+              此处选择 Responses API 的传输方式，与 Realtime API 无关；WebSocket mode 目前由桌面本地内核与 Android 壳层支持。
             </Hint>
           </Field>
 
-          <Field label="文本模型 ID">
+          <Field label="文字所托 · 文本模型 ID">
             <input
+              aria-label="文本模型 ID"
               type="text"
               value={draft.textModelID}
-              placeholder="留空=默认 gpt-5.5"
+              placeholder="留白则使用 gpt-5.5"
               onChange={(e) => onPatchDraft({ textModelID: e.target.value })}
               spellCheck={false}
               className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
             />
             {preferredModels && preferredModels.text.length > 0 ? (
               <ModelSuggestions
-                title="推荐文本模型"
+                title="可供选择的文本模型"
                 models={preferredModels.text}
                 selectedID={draft.textModelID}
                 usesFluentUI={usesFluentUI}
@@ -306,8 +290,7 @@ export function UpstreamProfileEditor({
           <Field
             label={(
               <span className="flex items-center justify-between gap-3">
-                <span>推理强度</span>
-                <span className="shrink-0 text-[11px] font-medium text-[var(--accent)]">已选 {selectedReasoningEffort.label}</span>
+                <span>思考深浅 · 推理强度</span>
               </span>
             )}
           >
@@ -326,24 +309,25 @@ export function UpstreamProfileEditor({
               })}
             </div>
             <Hint>
-              默认 <code className="font-mono-token">xhigh</code>。低强度在部分模型或中转上可能不触发 <code className="font-mono-token">image_generation</code> 工具调用，优先保持 <code className="font-mono-token">xhigh</code> 或 <code className="font-mono-token">high</code>。
+              初始为 <code className="font-mono-token">xhigh</code>。部分模型或中转在低强度下可能不调用 <code className="font-mono-token">image_generation</code>，建议留在 <code className="font-mono-token">xhigh</code> 或 <code className="font-mono-token">high</code>。
             </Hint>
           </Field>
         </>
       ) : null}
 
-      <Field label="图像模型 ID">
+      <Field label="画面所托 · 图像模型 ID">
         <input
+          aria-label="图像模型 ID"
           type="text"
           value={draft.imageModelID}
-          placeholder="留空=默认 gpt-image-2"
+          placeholder="留白则使用 gpt-image-2"
           onChange={(e) => onPatchDraft({ imageModelID: e.target.value })}
           spellCheck={false}
           className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         />
         {preferredModels && preferredModels.image.length > 0 ? (
           <ModelSuggestions
-            title="推荐图像模型"
+            title="可供选择的图像模型"
             models={preferredModels.image}
             selectedID={draft.imageModelID}
             usesFluentUI={usesFluentUI}
@@ -352,47 +336,112 @@ export function UpstreamProfileEditor({
         ) : null}
       </Field>
 
-      <Field label="视频模型 ID">
+      <Field label="自定义模型 · 可添加多个 ID">
+        <div className="flex gap-2">
+          <input
+            aria-label="自定义模型 ID"
+            type="text"
+            value={customModelID}
+            placeholder="例如 gpt-image-2.5-sunburst"
+            onChange={(event) => setCustomModelID(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              const id = customModelID.trim();
+              if (!id) return;
+              onPatchDraft({ modelIDs: Array.from(new Set([...(draft.modelIDs ?? []), id])) });
+              setCustomModelID("");
+            }}
+            className={`focus-ring min-w-0 flex-1 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const id = customModelID.trim();
+              if (!id) return;
+              onPatchDraft({ modelIDs: Array.from(new Set([...(draft.modelIDs ?? []), id])) });
+              setCustomModelID("");
+            }}
+            className={`platform-action-btn inline-flex shrink-0 items-center gap-1 border border-black/[0.08] px-3 py-2 text-sm text-zinc-700 dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+          >
+            <Plus className="h-3.5 w-3.5" /> 添加
+          </button>
+        </div>
+        {(draft.modelIDs ?? []).length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(draft.modelIDs ?? []).map((id) => (
+              <button
+                key={id}
+                type="button"
+                title="移除模型"
+                onClick={() => onPatchDraft({ modelIDs: (draft.modelIDs ?? []).filter((item) => item !== id) })}
+                className={`inline-flex items-center gap-1 border border-black/[0.08] bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-zinc-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
+              >
+                {id}<span aria-hidden="true">×</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <Hint>取回上游目录后会自动收录模型；也可以在这里手动添加多个模型，保存后下次仍可选择。</Hint>
+      </Field>
+
+      <Field label="流动画面 · 视频模型 ID">
         <input
+          aria-label="视频模型 ID"
           type="text"
           value={draft.videoModelID}
-          placeholder="必须显式填写，例如 sora-2"
+          placeholder="请明确填写，如 sora-2"
           onChange={(e) => onPatchDraft({ videoModelID: e.target.value })}
           spellCheck={false}
           className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         />
         {modelCatalog && modelCatalog.video.length > 0 ? (
           <ModelSuggestions
-            title="识别到的视频模型"
+            title="目录中的视频模型"
             models={modelCatalog.video}
             selectedID={draft.videoModelID}
             usesFluentUI={usesFluentUI}
             onSelect={(id) => onPatchDraft({ videoModelID: id })}
           />
         ) : null}
-        <Hint>视频生成不提供默认模型，也不会使用文本或图像模型替代；可直接手填上游要求的模型 ID。</Hint>
+        <Hint>视频需要明确的模型 ID，没有默认值，也不会借用文本或图像模型；请按上游要求填写。</Hint>
       </Field>
 
-      <Field label="并发数量限制">
+      </div>
+
+      <details className="upstream-editor-details upstream-editor-section">
+        <summary>高级设置 · 当前策略：{selectedRequestPolicy.title}</summary>
+        <div className="upstream-editor-details-body">
+      <Field label="请求约定 · 参数策略">
+        <div className="upstream-editor-option-grid">
+          {requestPolicyOptions.map((option) => (
+            <OptionCard key={option.id} active={draft.requestPolicy === option.id} usesFluentUI={usesFluentUI} title={option.title} sub={option.sub} onClick={() => onPatchDraft({ requestPolicy: option.id })} />
+          ))}
+        </div>
+        <Hint>OpenAI 标准仅携带公开字段；兼容中转会附加 relay 常见字段。</Hint>
+      </Field>
+
+      <Field label="同行任务 · 并发上限">
         <input
+          aria-label="并发上限"
           type="number"
           value={draft.concurrencyLimit || ""}
-          placeholder="留空=不限制"
+          placeholder="留白则不设上限"
           min={0}
           step={1}
           onChange={(e) => onPatchDraft({ concurrencyLimit: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
           className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         />
-        <Hint>0/留空 = 不限制。填正整数后,此 profile 跨所有标签页最多同时运行这么多任务。</Hint>
+        <Hint>0 或留白表示不设上限；填写正整数后，这处上游在所有标签页中同时运行的任务数将不超过此值。</Hint>
       </Field>
 
-      <Field label="失败重试路由到">
+      <Field label="另备一路 · 重试上游">
         <select
           value={draft.fallbackProfileId ?? ""}
           onChange={(e) => onPatchDraft({ fallbackProfileId: e.target.value || undefined })}
           className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         >
-          <option value="">不自动切备用上游</option>
+          <option value="">停留当前上游，不自动切换</option>
           {fallbackCandidates.map((profile) => (
             <option key={profile.id} value={profile.id}>
               {profile.name} · {profile.apiMode === "responses" ? "Responses" : "Images"}
@@ -400,12 +449,12 @@ export function UpstreamProfileEditor({
           ))}
         </select>
         <Hint>
-          当前上游自动重试仍失败后，可额外切到这里选定的备用 profile 再尝试一次。默认关闭。
+          当前上游重试后仍受阻，可沿这里选定的备用上游再试一次；初始不启用。
         </Hint>
       </Field>
 
       {draft.apiMode === "images" ? (
-        <Field label="Images API 中转兼容">
+        <Field label="中转适配 · Images API">
           <button
             type="button"
             role="switch"
@@ -414,9 +463,9 @@ export function UpstreamProfileEditor({
             className={`flex w-full items-center justify-between gap-3 border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-left text-sm text-zinc-900 transition-colors hover:border-[color:var(--accent)]/35 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
           >
             <span className="min-w-0">
-              <span className="block min-w-0 break-words font-medium">开启此开关可能可以解决newapi生图问题</span>
+              <span className="block min-w-0 break-words font-medium">NewAPI 生成受阻时，可尝试兼容模式</span>
               <span className="mt-1 block min-w-0 break-words text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                开启后会为 Images API 强制发送 <code className="font-mono-token">response_format=b64_json</code>，并关闭 <code className="font-mono-token">stream</code> / <code className="font-mono-token">partial_images</code>，更适合部分 NewAPI / Packy 风格中转站。
+                启用后，Images API 会固定携带 <code className="font-mono-token">response_format=b64_json</code>，并停用 <code className="font-mono-token">stream</code> / <code className="font-mono-token">partial_images</code>，用于适配部分 NewAPI / Packy 中转站。
               </span>
             </span>
             <span
@@ -426,15 +475,19 @@ export function UpstreamProfileEditor({
                   : "border-black/[0.08] bg-black/[0.04] text-zinc-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-zinc-300"
               } ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
             >
-              {draft.imagesNewAPICompat ? "已开启" : "已关闭"}
+              {draft.imagesNewAPICompat ? "已启用" : "已停用"}
             </span>
           </button>
           <Hint>
-            默认关闭，保持 OpenAI 标准 Images API 请求。只有默认标准参数用不了时，再尝试开启。
+            默认停用，沿用 OpenAI 标准 Images API；标准参数无法成图时，再尝试这一适配。
           </Hint>
         </Field>
       ) : null}
 
+        </div>
+      </details>
+
+      <div className="upstream-editor-actions">
       <button
         type="button"
         onClick={() => void onTest()}
@@ -442,7 +495,7 @@ export function UpstreamProfileEditor({
         className={`platform-action-btn w-full inline-flex items-center justify-center gap-2 border border-black/[0.08] px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
       >
         <Plug className={`h-3.5 w-3.5 ${isTestingKey ? "animate-spin" : ""}`} />
-        {isTestingKey ? "测试中..." : "保存并测试连接"}
+        {isTestingKey ? "正在探测连接…" : "保存后探测连接"}
       </button>
 
       <div className={`flex gap-2 pt-1 ${isAndroidPhone ? "sticky bottom-0 -mx-4 mt-1 border-t border-black/[0.06] bg-white/92 px-4 pb-4 pt-3 dark:border-white/[0.04] dark:bg-zinc-900/92" : "justify-end"}`}>
@@ -451,7 +504,7 @@ export function UpstreamProfileEditor({
           onClick={onClose}
           className={`platform-action-btn border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${isAndroidPhone ? "flex-1 rounded-full" : usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          关闭
+          返回创作
         </button>
         <button
           type="button"
@@ -459,26 +512,29 @@ export function UpstreamProfileEditor({
           disabled={!canSave}
           className={`liquid-primary-button bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500 dark:disabled:bg-zinc-800 ${isAndroidPhone ? "flex-[1.2] rounded-full" : usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          保存
+          保存这份配置
         </button>
       </div>
 
-      {!canSave ? <p className="min-w-0 break-words text-[11px] text-zinc-500 [overflow-wrap:anywhere]">BASE_URL 和 API Key 必须填齐才能保存。</p> : null}
+      </div>
+
+      {!canSave ? <p className="min-w-0 break-words text-[11px] text-zinc-500 [overflow-wrap:anywhere]">请补齐 BASE_URL 与 API Key，再保存这处创作源头。</p> : null}
 
       {draft.apiMode === "images" ? (
         <div className={`${usesAppleUI ? "liquid-glass-panel" : ""} flex items-start gap-2 border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)] ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}>
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 break-words [overflow-wrap:anywhere]">Images API 通常走标准 <code className="font-mono-token">/v1/images/generations</code> + <code className="font-mono-token">/v1/images/edits</code>；Google 官方 <code className="font-mono-token">gemini-3.1-flash-image</code> 例外走 Interactions API。两者都没有 SSE 保活。</span>
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">Images API 通常沿标准路径 <code className="font-mono-token">/v1/images/generations</code> + <code className="font-mono-token">/v1/images/edits</code>；Google 官方入口的 <code className="font-mono-token">gemini-3.1-flash-image</code> 则使用 Interactions API；两条路径均无 SSE 保活。</span>
         </div>
       ) : null}
     </div>
+      </div>
   );
 }
 
 function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="upstream-field min-w-0">
-      <label className="mb-1.5 block min-w-0 break-words text-xs text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-400">{label}</label>
+    <div className="upstream-field upstream-editor-field min-w-0">
+      <label className="upstream-editor-field-label mb-1.5 block min-w-0 break-words text-xs text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-400">{label}</label>
       {children}
     </div>
   );
@@ -486,7 +542,7 @@ function Field({ label, children }: { label: React.ReactNode; children: React.Re
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-1.5 min-w-0 break-words text-[11px] leading-relaxed text-zinc-500 [overflow-wrap:anywhere] dark:text-zinc-500">{children}</p>
+    <p className="upstream-editor-hint mt-1.5 min-w-0 break-words text-[11px] leading-relaxed text-zinc-500 [overflow-wrap:anywhere] dark:text-zinc-500">{children}</p>
   );
 }
 

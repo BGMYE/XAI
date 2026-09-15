@@ -1,0 +1,12 @@
+.xai-app .xai-traffic { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.xai-app .xai-window-control { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.xai-app .xai-window-control-dot { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 50%; }
+.xai-app .xai-window-control-dot.red { background: #ff665e; color: #651a14; }
+.xai-app .xai-window-control-dot.yellow { background: #ffbe2f; color: #654307; }
+.xai-app .xai-window-control-dot.green { background: #2acb55; color: #10481f; }
+.xai-app .xai-window-control svg { opacity: 0; pointer-events: none; }
+.xai-app .xai-traffic:hover .xai-window-control svg,
+.xai-app .xai-traffic:focus-within .xai-window-control svg { opacity: 1; }
+.xai-app .xai-window-control:hover { background: rgb(127 127 127 / 12%); }
+.xai-app .xai-window-control:focus-visible { outline: 2px solid var(--xai-blue, #398ff1); outline-offset: 1px; }
+.xai-app .xai-window-bar { user-select: none; }

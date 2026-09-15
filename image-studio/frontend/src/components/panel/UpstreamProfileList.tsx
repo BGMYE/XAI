@@ -46,10 +46,10 @@ export function UpstreamProfileList({
   const { usesFluentUI } = usePlatform();
 
   return (
-    <aside className={`upstream-profile-list flex min-w-0 shrink-0 flex-col gap-2 ${isAndroidPhone ? "w-full" : "w-[240px]"}`}>
+    <aside className={`upstream-redesign-rail upstream-profile-list flex min-w-0 shrink-0 flex-col gap-2 ${isAndroidPhone ? "w-full" : "w-[240px]"}`}>
       <div className={`flex-1 overflow-y-auto border border-black/[0.08] bg-[var(--surface)] p-1.5 dark:border-white/[0.06] ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`} style={{ maxHeight: isAndroidPhone ? 172 : 460 }}>
         {profiles.length === 0 ? (
-          <p className="px-2 py-3 text-[11px] text-zinc-500">还没有配置,点下方「+ 新建」开始。</p>
+          <p className="px-2 py-3 text-[11px] text-zinc-500">这里尚待一处创作源头，点「+ 添入上游」开始。</p>
         ) : (
           <div className={`flex ${isAndroidPhone ? "gap-2 overflow-x-auto pb-1" : "flex-col"}`}>
             {profiles.map((p) => {
@@ -68,13 +68,13 @@ export function UpstreamProfileList({
                   } ${isAndroidPhone ? "min-w-[208px]" : "mb-1 w-full"} ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`}
                 >
                   <span
-                    title={isActive ? "当前生图渠道" : "选择后可设为生图渠道"}
+                    title={isActive ? "此刻用于生图的上游" : "选中后，可将生图交给这处上游"}
                     className={`h-2 w-2 shrink-0 rounded-full ${isActive ? "bg-[var(--accent)] shadow-[0_0_5px_rgb(0_122_255_/_0.6)]" : "bg-zinc-300 dark:bg-zinc-700"}`}
                   />
-                  <span className="min-w-0 flex-1 truncate break-words text-[13px] font-medium [overflow-wrap:anywhere]">{p.name}</span>
-                  {isActive ? <span className="shrink-0 text-[9px] font-medium text-[var(--accent)]">生图</span> : null}
-                  {isAI ? <span className="shrink-0 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">AI</span> : null}
-                  <span className="shrink-0 text-[9px] uppercase tracking-wider opacity-70">
+                  <span className="upstream-profile-name min-w-0 flex-1 truncate break-words text-[13px] font-medium [overflow-wrap:anywhere]">{p.name}</span>
+                  {isActive ? <span className="upstream-profile-badge shrink-0 text-[9px] font-medium text-[var(--accent)]">用于生图</span> : null}
+                  {isAI ? <span className="upstream-profile-badge shrink-0 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">AI</span> : null}
+                  <span className="upstream-profile-badge shrink-0 text-[9px] uppercase tracking-wider opacity-70">
                     {p.apiMode === "responses" ? "R" : "I"}
                   </span>
                 </button>
@@ -91,7 +91,7 @@ export function UpstreamProfileList({
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-[color:var(--accent)]/28 bg-[var(--accent-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--accent)] transition-colors hover:bg-[color:var(--accent)]/15 disabled:cursor-not-allowed disabled:opacity-60 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
           <RefreshCw className={`h-3 w-3 ${isSyncingCodexConfig ? "animate-spin" : ""}`} />
-          {isSyncingCodexConfig ? "同步中..." : "同步 Codex 配置"}
+          {isSyncingCodexConfig ? "正在接续…" : "沿用 Codex 配置"}
         </button>
       ) : null}
       <div className="flex flex-wrap gap-1.5">
@@ -100,50 +100,50 @@ export function UpstreamProfileList({
           onClick={() => void onHandleNew()}
           className={`platform-action-btn inline-flex flex-1 items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <Plus className="h-3 w-3" /> 新建
+          <Plus className="h-3 w-3" /> 添入上游
         </button>
         <button
           type="button"
           onClick={() => void onHandleDuplicate()}
           disabled={!selectedId}
-          title="复制当前选中"
+          title="复制选中的上游配置"
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <Copy className="h-3 w-3" />
+          <Copy className="h-3 w-3" /> 复制
         </button>
         <button
           type="button"
           onClick={() => void onHandleImport()}
-          title="导入上游配置"
+          title="从文件读入上游配置"
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <Upload className="h-3 w-3" />
+          <Upload className="h-3 w-3" /> 导入
         </button>
         <button
           type="button"
           onClick={() => void onHandleQuickImport()}
-          title="粘贴 JSON 快捷导入"
+          title="从 JSON 带入配置"
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <ClipboardPaste className="h-3 w-3" />
+          <ClipboardPaste className="h-3 w-3" /> JSON
         </button>
         <button
           type="button"
           onClick={() => void onHandleExport()}
           disabled={profiles.length === 0}
-          title="导出上游配置"
+          title="把上游配置备份到文件"
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08] dark:text-zinc-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <Download className="h-3 w-3" />
+          <Download className="h-3 w-3" /> 导出
         </button>
         <button
           type="button"
           onClick={() => void onHandleDelete()}
           disabled={!selectedId}
-          title="删除当前选中(连同凭据)"
+          title="删除选中的上游配置及其 API Key 凭据"
           className={`platform-action-btn inline-flex items-center justify-center gap-1 border border-black/[0.08] px-2.5 py-1.5 text-[11px] text-zinc-500 transition-colors hover:border-red-400/45 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="h-3 w-3" /> 删除
         </button>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
@@ -153,16 +153,16 @@ export function UpstreamProfileList({
           disabled={!draftId || draftId === activeProfileId}
           className={`platform-action-btn inline-flex min-w-0 items-center justify-center border border-[color:var(--accent)]/30 bg-[var(--accent-soft)] px-2 py-1.5 text-[11px] font-medium text-[var(--accent)] transition-colors hover:bg-[color:var(--accent)]/15 disabled:cursor-default disabled:opacity-45 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          {draftId === activeProfileId ? "当前生图" : "设为生图"}
+          {draftId === activeProfileId ? "生图已启用" : "交给它生图"}
         </button>
         <button
           type="button"
           onClick={() => void onHandleSetAI()}
           disabled={!draftId || draftAPIMode !== "responses" || draftId === aiProfileId}
-          title={draftAPIMode === "responses" ? "用于 AI 优化与图片反推" : "AI 渠道必须使用 Responses API"}
+          title={draftAPIMode === "responses" ? "用于润色提示词与图片反推" : "AI 辅助需使用 Responses API"}
           className={`platform-action-btn inline-flex min-w-0 items-center justify-center border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 disabled:cursor-default disabled:opacity-45 dark:text-emerald-300 ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
         >
-          {draftId === aiProfileId ? "当前 AI" : "设为 AI"}
+          {draftId === aiProfileId ? "AI 已启用" : "用于 AI 辅助"}
         </button>
       </div>
     </aside>

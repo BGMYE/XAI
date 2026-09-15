@@ -13,6 +13,7 @@ export type UpstreamConfigExportProfile = {
   baseURL: string;
   textModelID: string;
   imageModelID: string;
+  modelIDs?: string[];
   videoModelID: string;
   reasoningEffort: ReasoningEffortValue;
   concurrencyLimit: number;
@@ -48,6 +49,7 @@ export type UpstreamConfigImportActions = {
     allowInsecureConnection?: boolean;
     textModelID?: string;
     imageModelID?: string;
+    modelIDs?: string[];
     videoModelID?: string;
     reasoningEffort?: ReasoningEffortValue;
     concurrencyLimit?: number;
@@ -69,7 +71,7 @@ export type AppliedUpstreamConfigImport = {
   importedProfileIds: string[];
 };
 
-function toProfileSnapshot(input: UpstreamConfigExportProfile, actualId: string): UpstreamProfile {
+function toProfileSnapshot(input: UpstreamProfile, actualId: string): UpstreamProfile {
   return {
     id: actualId,
     name: input.name,
@@ -81,6 +83,7 @@ function toProfileSnapshot(input: UpstreamConfigExportProfile, actualId: string)
     baseURL: input.baseURL,
     textModelID: input.textModelID,
     imageModelID: input.imageModelID,
+    modelIDs: input.modelIDs,
     videoModelID: input.videoModelID,
     reasoningEffort: input.reasoningEffort,
     concurrencyLimit: input.concurrencyLimit,
@@ -155,6 +158,9 @@ function parseExportProfile(raw: unknown): UpstreamConfigExportProfile | null {
   const id = typeof source.id === "string" ? source.id.trim() : "";
   const name = typeof source.name === "string" ? source.name.trim() : "";
   if (!id || !name) return null;
+  const modelIDs = Array.isArray(source.modelIDs)
+    ? Array.from(new Set(source.modelIDs.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)))
+    : undefined;
   return {
     id,
     name,
@@ -166,6 +172,7 @@ function parseExportProfile(raw: unknown): UpstreamConfigExportProfile | null {
     baseURL: normalizeImportedBaseURL(source.baseURL),
     textModelID: typeof source.textModelID === "string" ? source.textModelID.trim() : "",
     imageModelID: typeof source.imageModelID === "string" ? source.imageModelID.trim() : "",
+    ...(modelIDs ? { modelIDs } : {}),
     videoModelID: typeof source.videoModelID === "string" ? source.videoModelID.trim() : "",
     reasoningEffort: normalizeReasoningEffort(source.reasoningEffort),
     concurrencyLimit: normalizeConcurrencyLimit(source.concurrencyLimit),
@@ -290,7 +297,6 @@ function parseOpenCodeProviderTemplate(raw: Record<string, unknown>): ParsedUpst
 export function buildUpstreamConfigExportFile(
   profiles: UpstreamProfile[],
   activeProfileId: string,
-  apiKeysById: Record<string, string>,
   aiProfileId = "",
 ): UpstreamConfigExportFile {
   return {
@@ -299,11 +305,10 @@ export function buildUpstreamConfigExportFile(
     activeProfileId,
     ...(aiProfileId ? { aiProfileId } : {}),
     profiles: profiles.map((profile) => ({
-      ...profile,
+      ...toProfileSnapshot(profile, profile.id),
       responsesTransport: profile.responsesTransport === "websocket" ? "websocket" : "sse",
       imagesNewAPICompat: profile.imagesNewAPICompat === true,
       allowInsecureConnection: profile.allowInsecureConnection === true,
-      apiKey: (apiKeysById[profile.id] ?? "").trim(),
     })),
   };
 }
@@ -344,6 +349,7 @@ function buildProfilePatch(
     baseURL: incoming.baseURL,
     textModelID: incoming.textModelID,
     imageModelID: incoming.imageModelID,
+    modelIDs: incoming.modelIDs,
     videoModelID: incoming.videoModelID,
     reasoningEffort: incoming.reasoningEffort,
     concurrencyLimit: incoming.concurrencyLimit,
@@ -365,7 +371,9 @@ export async function applyParsedUpstreamConfigImport(
     const match = existingByName.get(incoming.name) ?? null;
     const patch = buildProfilePatch(incoming);
     if (match) {
-      await actions.updateProfile(match.id, patch);
+      if (!await actions.updateProfile(match.id, patch)) {
+        throw new Error("上游配置未能保存，请检查系统凭据存储");
+      }
       originalToActualID.set(incoming.id, match.id);
       importedProfileIds.push(match.id);
       fallbackLinks.push({ actualId: match.id, originalFallbackId: incoming.fallbackProfileId });
@@ -383,12 +391,14 @@ export async function applyParsedUpstreamConfigImport(
       baseURL: incoming.baseURL,
       textModelID: incoming.textModelID,
       imageModelID: incoming.imageModelID,
+      modelIDs: incoming.modelIDs,
       videoModelID: incoming.videoModelID,
       reasoningEffort: incoming.reasoningEffort,
       concurrencyLimit: incoming.concurrencyLimit,
       apiKey: incoming.apiKey,
       setActive: false,
     });
+    if (!newId) throw new Error("上游配置未能保存，请检查系统凭据存储");
     originalToActualID.set(incoming.id, newId);
     importedProfileIds.push(newId);
     fallbackLinks.push({ actualId: newId, originalFallbackId: incoming.fallbackProfileId });

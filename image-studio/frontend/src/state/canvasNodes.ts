@@ -1,3 +1,5 @@
+import type { HistoryItem } from "../types/domain";
+
 export type CanvasNodeType = "image" | "video";
 
 export interface CanvasNode {
@@ -25,6 +27,27 @@ export interface CanvasViewport {
 }
 
 export const DEFAULT_CANVAS_VIEWPORT: CanvasViewport = { x: 0, y: 0, scale: 1 };
+
+export function sourceHistoryItemForCanvasNode(node: CanvasNode | undefined): HistoryItem | undefined {
+  if (!node || node.type !== "image" || !node.id.startsWith("source-preview:")) return undefined;
+  const savedPath = node.id.slice("source-preview:".length);
+  if (!savedPath) return undefined;
+  return {
+    id: node.id,
+    imageId: node.mediaId,
+    savedPath,
+    previewUrl: node.src,
+    fullUrl: node.src,
+    previewWidth: node.width,
+    previewHeight: node.height,
+    prompt: node.label || `(参考图)${savedPath.split(/[\\/]/).pop()}`,
+    mode: "edit",
+    size: "auto",
+    quality: "medium",
+    createdAt: node.createdAt,
+    previewOnly: true,
+  };
+}
 
 export function clampCanvasScale(scale: number): number {
   return Math.max(0.05, Math.min(8, Number.isFinite(scale) ? scale : 1));

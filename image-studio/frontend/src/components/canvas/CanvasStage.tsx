@@ -17,7 +17,7 @@ import { streamPreviewItemsFromPreviews } from "../../state/studioStore.streamPr
 import { historyFullSrc, orderedNavigationItemsForCurrent, sortHistoryItemsByCreatedAtAsc } from "../../lib/images";
 import { DragExportHandle } from "./DragExportHandle";
 import { CanvasNodeShape } from "./CanvasNodeShape";
-import { clampCanvasScale, createCanvasNode, fitCanvasView, oneToOneCanvasView, type CanvasViewport } from "../../state/canvasNodes";
+import { clampCanvasScale, createCanvasNode, fitCanvasView, oneToOneCanvasView, sourceHistoryItemForCanvasNode, type CanvasViewport } from "../../state/canvasNodes";
 
 export function CanvasStage() {
   const {
@@ -585,7 +585,7 @@ export function CanvasStage() {
           scaleX={view.scale}
           scaleY={view.scale}
           draggable={effectiveTool === "pan"}
-          onDragEnd={(e) => setView({ ...view, x: e.target.x(), y: e.target.y() })}
+          onDragEnd={(e) => { if (e.target === stageRef.current) setView({ ...view, x: e.target.x(), y: e.target.y() }); }}
           onWheel={onWheel}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
@@ -601,13 +601,14 @@ export function CanvasStage() {
                 node={node}
                 source={history.find((entry) => entry.id === node.id) ? historyFullSrc(history.find((entry) => entry.id === node.id)!, null) : null}
                 selected={selectedNodeId === node.id}
+                draggable={effectiveTool === "pan" && !spacePan}
                 onSelect={() => {
-                  selectCanvasNode(node.id);
                   if (node.type === "video") setField("currentImage", null);
-                  else {
-                    const item = history.find((entry) => entry.id === node.id);
+                  else if (currentImage?.id !== node.id) {
+                    const item = history.find((entry) => entry.id === node.id) ?? sourceHistoryItemForCanvasNode(node);
                     if (item) setField("currentImage", item);
                   }
+                  selectCanvasNode(node.id);
                 }}
                 onMove={(x, y) => moveCanvasNode(node.id, x, y)}
                 onDelete={() => deleteCanvasNode(node.id)}

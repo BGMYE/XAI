@@ -11,7 +11,7 @@ export function applyMacWorkspacePreviewToStore(workspaceId = "preview-workspace
   document.documentElement.style.setProperty("--font-scale", "1");
 
   useStudioStore.setState({
-    apiKey: "sk-preview",
+    apiKey: "",
     mode: "edit",
     prompt: preview.currentImage.prompt,
     negativePrompt: preview.currentImage.negativePrompt ?? "",
@@ -104,7 +104,7 @@ export function applyWindowsRightRailPreviewToStore(workspaceId = "preview-works
   document.documentElement.style.setProperty("--font-scale", "1");
 
   useStudioStore.setState({
-    apiKey: "sk-preview",
+    apiKey: "",
     mode: "generate",
     prompt: preview.workspace.prompt,
     negativePrompt: preview.workspace.negativePrompt,

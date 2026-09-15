@@ -14,6 +14,7 @@ import { saveHistoryItemAs } from "../../lib/saveResultImage";
 import { Modal } from "../common/Modal";
 import { usePlatform } from "../../platform/context";
 import { qualityLabel, sizeLabel } from "../history/historyLabels";
+import "../history/history-surfaces.css";
 
 export function ResultDetailDrawer() {
   const item = useStudioStore((s) => s.resultDetail);
@@ -78,7 +79,7 @@ export function ResultDetailDrawer() {
   }
 
   return (
-    <Modal open onClose={close} title="生成详情" width={720}>
+    <Modal open onClose={close} title="生成详情" width={720} cardClassName="history-surface-modal">
       <div className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <section className={`platform-card border border-black/[0.05] bg-white/72 p-3 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${usesFluentUI ? "rounded-[12px]" : "rounded-[18px]"}`}>
           <div

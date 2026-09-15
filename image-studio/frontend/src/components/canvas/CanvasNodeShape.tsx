@@ -4,10 +4,11 @@ import type Konva from "konva";
 import type { CanvasNode } from "../../state/canvasNodes";
 import { useImageFromSource } from "./canvasImage";
 
-export function CanvasNodeShape({ node, selected, source, onSelect, onMove, onDelete }: {
+export function CanvasNodeShape({ node, selected, source, draggable, onSelect, onMove, onDelete }: {
   node: CanvasNode;
   selected: boolean;
   source?: string | null;
+  draggable: boolean;
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
   onDelete: () => void;
@@ -68,7 +69,7 @@ export function CanvasNodeShape({ node, selected, source, onSelect, onMove, onDe
   }, [node.type, node.src]);
   const toggleVideo = (e: Konva.KonvaEventObject<MouseEvent>) => { e.cancelBubble = true; const element = videoRef.current; if (!element || failed) return; if (element.paused) void element.play().catch(() => setFailed(true)); else element.pause(); };
   return (
-    <Group x={node.x} y={node.y} draggable onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }} onDragEnd={(e) => onMove(e.target.x(), e.target.y())}>
+    <Group x={node.x} y={node.y} draggable={draggable} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }} onDragEnd={(e) => { e.cancelBubble = true; onMove(e.target.x(), e.target.y()); }}>
       {node.type === "image" && image ? <KonvaImage image={image} width={node.width} height={node.height} /> : null}
       {node.type === "video" && video && !failed ? <KonvaImage ref={videoImageRef} image={video} width={node.width} height={node.height} /> : null}
       {(node.type === "video" && (!video || failed)) || (node.type === "image" && !image) ? <Rect width={node.width} height={node.height} fill="#eadfd8" /> : null}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("buildUpstreamConfigExportFile includes profile metadata and api keys", async () => {
+test("buildUpstreamConfigExportFile includes metadata and strips credentials", async () => {
   const mod = await import(`../src/lib/upstreamConfigTransfer.ts?upstream-config-transfer=${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const payload = mod.buildUpstreamConfigExportFile([
     {
@@ -18,13 +18,15 @@ test("buildUpstreamConfigExportFile includes profile metadata and api keys", asy
       concurrencyLimit: 3,
       createdAt: 1,
       lastUsedAt: 2,
+      apiKey: "test-secret",
     },
-  ], "p-1", { "p-1": "sk-live" }, "p-1");
+  ], "p-1", "p-1");
 
   assert.equal(payload.version, 1);
   assert.equal(payload.activeProfileId, "p-1");
   assert.equal(payload.aiProfileId, "p-1");
-  assert.equal(payload.profiles[0].apiKey, "sk-live");
+  assert.equal(Object.hasOwn(payload.profiles[0], "apiKey"), false);
+  assert.equal(JSON.stringify(payload).includes("test-secret"), false);
   assert.equal(payload.profiles[0].allowInsecureConnection, false);
   assert.equal(payload.profiles[0].videoModelID, "sora-2");
 });
@@ -268,4 +270,20 @@ test("applyParsedUpstreamConfigImport re-links fallback ids and active profile",
       { id: "p-2", name: "备用配置", fallbackProfileId: "p-1" },
     ],
   );
+});
+
+test("upstream import stops when credential-backed saving fails", async () => {
+  const mod = await import("../src/lib/upstreamConfigTransfer.ts");
+  const profile = { id: "source", name: "Sunburst", apiMode: "images", baseURL: "https://img.740414025.xyz" };
+  const parsed = mod.parseUpstreamConfigImportFile(JSON.stringify({ profiles: [profile], activeProfileId: "source" }));
+  for (const existing of [[], [{ ...profile, id: "existing" }]]) {
+    let activated = false;
+    await assert.rejects(mod.applyParsedUpstreamConfigImport(parsed, {
+      getProfiles: () => existing,
+      createProfile: async () => "",
+      updateProfile: async () => false,
+      setActiveProfile: async () => { activated = true; },
+    }), /系统凭据存储/);
+    assert.equal(activated, false);
+  }
 });

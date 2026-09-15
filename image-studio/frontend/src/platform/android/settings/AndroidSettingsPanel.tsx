@@ -78,27 +78,27 @@ export type AndroidSettingsPanelProps = {
 };
 
 const fontSizes = [
-  { label: "小", value: 0.85 },
-  { label: "中", value: 1 },
-  { label: "大", value: 1.15 },
+  { label: "小巧", value: 0.85 },
+  { label: "适中", value: 1 },
+  { label: "舒展", value: 1.15 },
 ] as const;
 
 function themeLabel(theme: ThemeMode) {
-  if (theme === "dark") return "深色";
-  if (theme === "light") return "浅色";
-  return "跟随系统";
+  if (theme === "dark") return "夜色 · 深色";
+  if (theme === "light") return "晨光 · 浅色";
+  return "随系统光色";
 }
 
 function runtimeLabel(mode: KernelRuntimeMode) {
-  if (mode === "local") return "本地";
-  if (mode === "remote") return "远程";
-  return "自动";
+  if (mode === "local") return "本机运行";
+  if (mode === "remote") return "远端运行";
+  return "自动择路";
 }
 
 function proxyLabel(mode: ProxyMode) {
-  if (mode === "none") return "不使用";
-  if (mode === "custom") return "自定义";
-  return "系统配置";
+  if (mode === "none") return "直接连接";
+  if (mode === "custom") return "自行指定";
+  return "沿用系统";
 }
 
 export function AndroidSettingsPanel({
@@ -150,19 +150,19 @@ export function AndroidSettingsPanel({
   upstreamReady,
 }: AndroidSettingsPanelProps) {
   const upstreamModeLabel = apiMode === "responses" ? "Responses API" : "Images API";
-  const historyCountLabel = `${historyCount} 条`;
+  const historyCountLabel = `${historyCount} 条记录`;
   const currentSummary = [
-    upstreamReady ? "上游已配置" : "上游未配置",
-    `代理 ${proxyLabel(proxyMode)}`,
-    `主题 ${themeLabel(theme)}`,
-    `字号 ${Math.round(fontScale * 100)}%`,
-    savePromptSuppressed ? "保存提示 关" : "保存提示 开",
-    cleanupPreviewCacheOnExit ? "预览缓存退出清理 开" : "预览缓存退出清理 关",
-    autoRetryEnabled ? "自动重试 开" : "自动重试 关",
-    `重试 ${autoRetryCount} 次`,
-    protectStreamPreview ? "预览保护 开" : "预览保护 关",
-    completionSound.enabled ? "提示音 开" : "提示音 关",
-    `${historyCount} 条历史`,
+    upstreamReady ? "上游已就绪" : "上游待配置",
+    `请求途经：${proxyLabel(proxyMode)}`,
+    `界面光色：${themeLabel(theme)}`,
+    `文字尺度：${Math.round(fontScale * 100)}%`,
+    savePromptSuppressed ? "另存提醒已停用" : "另存提醒已启用",
+    cleanupPreviewCacheOnExit ? "离开时清理预览缓存" : "离开时保留预览缓存",
+    autoRetryEnabled ? "自动重试已启用" : "自动重试已停用",
+    `最多再试 ${autoRetryCount} 次`,
+    protectStreamPreview ? "预览保护已启用" : "预览保护已停用",
+    completionSound.enabled ? "成图回响已启用" : "成图回响已停用",
+    `${historyCount} 条创作历史`,
   ];
 
   const heroSection = (
@@ -172,9 +172,9 @@ export function AndroidSettingsPanel({
       </div>
       <div className="min-w-0 flex-1">
         <div className="android-settings-kicker">Image Studio</div>
-        <h2>偏好设置</h2>
-        <p>{surface === "pad" ? "把运行、外观和本地数据分成左右两区，横屏触控不用来回滚动。" : "移动端常用控制集中在这里，上游配置仍保持独立入口。"}</p>
-        <div className="android-settings-summary-strip" aria-label="设置概览">
+        <h2>创作偏好</h2>
+        <p>{surface === "pad" ? "左边调好眼前的光色，右边安放运行与历史，让创作从容展开。" : "为随身创作调好节律；内核、光色与旧页，都在此安放。"}</p>
+        <div className="android-settings-summary-strip" aria-label="此刻的创作偏好">
           {currentSummary.map((item) => (
             <span key={item}>{item}</span>
           ))}
@@ -185,18 +185,18 @@ export function AndroidSettingsPanel({
 
   const runtimeSection = (
     <section className="android-settings-card android-settings-card-runtime">
-      <div className="android-settings-section-title">运行</div>
+      <div className="android-settings-section-title">行旅 · 运行与网络</div>
       <div className="android-settings-upstream-card">
         <div className="android-settings-upstream-head">
           <span className="android-settings-row-icon"><PlugZap className="h-4 w-4" /></span>
           <span className="min-w-0 flex-1">
-            <span className="android-settings-field-title">上游配置</span>
+            <span className="android-settings-field-title">创作源头 · 上游</span>
             <span className="android-settings-field-subtitle">
-              {activeProfile ? `${activeProfile.name} · ${upstreamModeLabel}` : "还没有可用上游配置"}
+              {activeProfile ? `${activeProfile.name} · ${upstreamModeLabel}` : "尚待添入一处可用上游"}
             </span>
           </span>
           <span className={`android-settings-status-pill ${upstreamReady ? "ready" : "missing"}`}>
-            {upstreamReady ? "已配置" : "未配置"}
+            {upstreamReady ? "已就绪" : "待配置"}
           </span>
         </div>
         {profiles.length > 0 ? (
@@ -213,19 +213,19 @@ export function AndroidSettingsPanel({
           </select>
         ) : null}
         <div className="android-settings-action-grid android-settings-upstream-actions">
-          <button type="button" onClick={onOpenUpstream}>管理配置</button>
+          <button type="button" onClick={onOpenUpstream}>打理上游配置</button>
           <button type="button" onClick={testAPIKey} disabled={!upstreamReady || isTestingKey}>
-            {isTestingKey ? "检查中..." : "测试连通性"}
+            {isTestingKey ? "正在探路…" : "探测连接"}
           </button>
         </div>
       </div>
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">内核执行</span>
-          <span className="android-settings-field-subtitle">当前 {runtimeLabel(kernelRuntimeMode)}，默认自动选择。</span>
+          <span className="android-settings-field-title">内核 · 创作在哪里运行</span>
+          <span className="android-settings-field-subtitle">此刻采用{runtimeLabel(kernelRuntimeMode)}，初始为自动择路。</span>
         </div>
-        <div className="android-settings-segmented android-settings-runtime-segmented" role="group" aria-label="内核执行">
+        <div className="android-settings-segmented android-settings-runtime-segmented" role="group" aria-label="内核 · 创作在哪里运行">
           {(["auto", "local", "remote"] as KernelRuntimeMode[]).map((value) => (
             <button
               key={value}
@@ -241,14 +241,14 @@ export function AndroidSettingsPanel({
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">代理服务器</span>
-          <span className="android-settings-field-subtitle">当前 {proxyLabel(proxyMode)}，默认使用系统配置。</span>
+          <span className="android-settings-field-title">代理 · 请求的途经之地</span>
+          <span className="android-settings-field-subtitle">此刻{proxyLabel(proxyMode)}，默认沿用系统的网络安排。</span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="代理服务器">
+        <div className="android-settings-segmented" role="group" aria-label="代理 · 请求的途经之地">
           {([
-            ["none", "不用"],
-            ["system", "系统"],
-            ["custom", "自定义"],
+            ["none", "直连"],
+            ["system", "随系统"],
+            ["custom", "自行指定"],
           ] as Array<[ProxyMode, string]>).map(([value, label]) => (
             <button
               key={value}
@@ -275,7 +275,7 @@ export function AndroidSettingsPanel({
       <button type="button" className="android-settings-row-action" onClick={openOutputLocation}>
         <span className="android-settings-row-icon"><Folder className="h-4 w-4" /></span>
         <span className="min-w-0 flex-1">
-          <span className="android-settings-field-title">保存位置</span>
+          <span className="android-settings-field-title">作品归处 · 保存位置</span>
           <span className="android-settings-field-subtitle truncate">{outputLabel}</span>
         </span>
         <ChevronRight className="h-4 w-4 text-zinc-400" />
@@ -284,50 +284,50 @@ export function AndroidSettingsPanel({
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">生成后保存提示</span>
+          <span className="android-settings-field-title">落定之后 · 另存提醒</span>
           <span className="android-settings-field-subtitle">
-            {savePromptSuppressed ? "当前不再弹出另存提醒。" : "生成完成后询问是否另存。"}
+            {savePromptSuppressed ? "作品落定后，将不再弹出另存提醒。" : "作品完成时，询问是否另选保存位置。"}
           </span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="生成后保存提示">
+        <div className="android-settings-segmented" role="group" aria-label="落定之后 · 另存提醒">
           <button
             type="button"
             className={!savePromptSuppressed ? "active" : ""}
             onClick={() => onSetSavePromptSuppressed(false)}
           >
-            <Save className="h-3.5 w-3.5" /> 提示
+            <Save className="h-3.5 w-3.5" /> 轻声提醒
           </button>
           <button
             type="button"
             className={savePromptSuppressed ? "active" : ""}
             onClick={() => onSetSavePromptSuppressed(true)}
           >
-            不提示
+            不再提醒
           </button>
         </div>
       </div>
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">失败自动重试</span>
+          <span className="android-settings-field-title">重试 · 遇到波折再出发</span>
           <span className="android-settings-field-subtitle">
-            {autoRetryEnabled ? "当前会对 403 / 502 / 503 / 504 / 524 和可重试网络错误自动再发请求。" : "当前不会自动重试，失败后只保留第一次结果。"}
+            {autoRetryEnabled ? "遇到 403 / 502 / 503 / 504 / 524 或可重试的网络波动时，会自动再试。" : "自动重试已停用；遇到失败时，只保留首次结果。"}
           </span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="失败自动重试">
+        <div className="android-settings-segmented" role="group" aria-label="重试 · 遇到波折再出发">
           <button
             type="button"
             className={autoRetryEnabled ? "active" : ""}
             onClick={() => onSetAutoRetryEnabled(true)}
           >
-            开启
+            启用
           </button>
           <button
             type="button"
             className={!autoRetryEnabled ? "active" : ""}
             onClick={() => onSetAutoRetryEnabled(false)}
           >
-            关闭
+            停用
           </button>
         </div>
         <div className="mt-3 flex items-center gap-3">
@@ -342,95 +342,95 @@ export function AndroidSettingsPanel({
           />
           <span className="android-settings-status-pill ready">{autoRetryCount} 次</span>
         </div>
-        <p className="android-settings-note">默认 {DEFAULT_AUTO_RETRY_COUNT} 次，不含首次请求。</p>
+        <p className="android-settings-note">初始为 {DEFAULT_AUTO_RETRY_COUNT} 次；第一次出发不计入重试。</p>
       </div>
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">退出时清理预览缓存</span>
+          <span className="android-settings-field-title">离开时 · 清理预览缓存</span>
           <span className="android-settings-field-subtitle">
             {cleanupPreviewCacheOnExit
-              ? "退出应用时会删除可重建的预览图和缩略图缓存。"
-              : "默认关闭，避免每次重开后重新生成历史预览影响体验。"}
+              ? "退出时删除可重建的预览图与缩略图缓存；源图、成图和历史仍保留。"
+              : "默认停用，留下预览缓存，方便下次更快翻看历史。"}
           </span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="退出时清理预览缓存">
+        <div className="android-settings-segmented" role="group" aria-label="离开时 · 清理预览缓存">
           <button
             type="button"
             className={!cleanupPreviewCacheOnExit ? "active" : ""}
             onClick={() => onSetCleanupPreviewCacheOnExit(false)}
           >
-            关闭
+            停用
           </button>
           <button
             type="button"
             className={cleanupPreviewCacheOnExit ? "active" : ""}
             onClick={() => onSetCleanupPreviewCacheOnExit(true)}
           >
-            开启
+            启用
           </button>
         </div>
       </div>
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">流式预览保护</span>
+          <span className="android-settings-field-title">预览 · 守护完整成图</span>
           <span className="android-settings-field-subtitle">
-            {protectStreamPreview ? "高并发或大尺寸任务时会自动关闭预览，优先保最终图。" : "不会自动代管流式预览，严格按当前预览帧数请求。"}
+            {protectStreamPreview ? "高并发或大尺寸创作时，让预览暂歇，优先守住最终图的完整。" : "预览保护已停用，将严格遵循设定的预览帧数。"}
           </span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="流式预览保护">
+        <div className="android-settings-segmented" role="group" aria-label="预览 · 守护完整成图">
           <button
             type="button"
             className={protectStreamPreview ? "active" : ""}
             onClick={() => onSetProtectStreamPreview(true)}
           >
-            开启
+            启用
           </button>
           <button
             type="button"
             className={!protectStreamPreview ? "active" : ""}
             onClick={() => onSetProtectStreamPreview(false)}
           >
-            关闭
+            停用
           </button>
         </div>
       </div>
 
       <div className="android-settings-field android-settings-field-stacked">
         <div>
-          <span className="android-settings-field-title">完成提示音</span>
+          <span className="android-settings-field-title">成图回响 · 提示音</span>
           <span className="android-settings-field-subtitle">
             {completionSound.enabled
               ? (completionSound.mode === "custom" && completionSound.customName
-                ? `当前使用 ${completionSound.customName}`
-                : "当前使用内置默认音")
-              : "生成完成时不播放提示音。"}
+                ? `此刻的回响：${completionSound.customName}`
+                : "此刻的回响：内置提示音")
+              : "作品落定时，将保持安静。"}
           </span>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="完成提示音开关">
+        <div className="android-settings-segmented" role="group" aria-label="成图回响 · 声音开关">
           <button
             type="button"
             className={completionSound.enabled ? "active" : ""}
             onClick={() => onSetCompletionSoundEnabled(true)}
           >
-            <Bell className="h-3.5 w-3.5" /> 开启
+            <Bell className="h-3.5 w-3.5" /> 启用
           </button>
           <button
             type="button"
             className={!completionSound.enabled ? "active" : ""}
             onClick={() => onSetCompletionSoundEnabled(false)}
           >
-            关闭
+            停用
           </button>
         </div>
-        <div className="android-settings-segmented" role="group" aria-label="完成提示音类型">
+        <div className="android-settings-segmented" role="group" aria-label="成图回响 · 声音选择">
           <button
             type="button"
             className={completionSound.mode === "default" ? "active" : ""}
             onClick={() => onSetCompletionSoundMode("default")}
           >
-            默认音
+            内置回响
           </button>
           <button
             type="button"
@@ -443,13 +443,13 @@ export function AndroidSettingsPanel({
               onSetCompletionSoundMode("custom");
             }}
           >
-            自定义
+            自选声音
           </button>
         </div>
         <div className="android-settings-action-grid">
-          <button type="button" onClick={onPreviewCompletionSound}>试听</button>
-          <button type="button" onClick={onSelectCompletionSound}>导入音频</button>
-          <button type="button" onClick={onResetCompletionSound}>恢复默认</button>
+          <button type="button" onClick={onPreviewCompletionSound}>听听回响</button>
+          <button type="button" onClick={onSelectCompletionSound}>选入音频</button>
+          <button type="button" onClick={onResetCompletionSound}>恢复内置音</button>
         </div>
       </div>
     </section>
@@ -457,22 +457,22 @@ export function AndroidSettingsPanel({
 
   const appearanceSection = (
     <section className="android-settings-card android-settings-card-appearance">
-      <div className="android-settings-section-title">外观</div>
-      <div className="android-settings-segmented" role="group" aria-label="主题">
+      <div className="android-settings-section-title">光影 · 外观与字号</div>
+      <div className="android-settings-segmented" role="group" aria-label="界面光色">
         <button type="button" className={theme === "system" ? "active" : ""} onClick={() => onSetTheme("system")}>
-          <Monitor className="h-3.5 w-3.5" /> 系统
+          <Monitor className="h-3.5 w-3.5" /> 随系统
         </button>
         <button type="button" className={theme === "light" ? "active" : ""} onClick={() => onSetTheme("light")}>
-          <Sun className="h-3.5 w-3.5" /> 浅色
+          <Sun className="h-3.5 w-3.5" /> 晨光 · 浅色
         </button>
         <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => onSetTheme("dark")}>
-          <Moon className="h-3.5 w-3.5" /> 深色
+          <Moon className="h-3.5 w-3.5" /> 夜色 · 深色
         </button>
       </div>
       <div className="android-settings-field">
         <div>
-          <span className="android-settings-field-title">字号</span>
-          <span className="android-settings-field-subtitle">当前 {Math.round(fontScale * 100)}%</span>
+          <span className="android-settings-field-title">文字尺度</span>
+          <span className="android-settings-field-subtitle">此刻为 {Math.round(fontScale * 100)}%</span>
         </div>
         <div className="android-settings-size-pills">
           {fontSizes.map(({ label, value }) => (
@@ -492,36 +492,36 @@ export function AndroidSettingsPanel({
 
   const historySection = (
     <section className="android-settings-card android-settings-card-history">
-      <div className="android-settings-section-title">历史数据</div>
+      <div className="android-settings-section-title">旧页 · 创作历史</div>
       <div className="android-settings-history-meter">
-        <span><Database className="h-4 w-4" /> 本地历史</span>
+        <span><Database className="h-4 w-4" /> 本机保存的旧页</span>
         <strong>{historyCountLabel}</strong>
       </div>
       <div className="android-settings-action-grid">
-        <button type="button" onClick={exportHistory}><Upload className="h-4 w-4" /> 导出</button>
-        <button type="button" onClick={importHistory}><Download className="h-4 w-4" /> 导入</button>
-        <button type="button" onClick={() => pruneHistory(3)}>清理 3 天前</button>
-        <button type="button" onClick={() => pruneHistory(7)}>清理 7 天前</button>
+        <button type="button" onClick={exportHistory}><Upload className="h-4 w-4" /> 备份历史</button>
+        <button type="button" onClick={importHistory}><Download className="h-4 w-4" /> 读入历史</button>
+        <button type="button" onClick={() => pruneHistory(3)}>删除 3 天前历史</button>
+        <button type="button" onClick={() => pruneHistory(7)}>删除 7 天前历史</button>
       </div>
     </section>
   );
 
   const dangerSection = (
     <section className="android-settings-card android-settings-danger-card">
-      <div className="android-settings-section-title">安全与清理</div>
+      <div className="android-settings-section-title">明确清理 · 本地数据</div>
       <button type="button" className="android-settings-row-action danger" onClick={clearAPIKey}>
         <span className="android-settings-row-icon"><KeyRound className="h-4 w-4" /></span>
         <span className="min-w-0 flex-1">
-          <span className="android-settings-field-title">清除 API Key</span>
-          <span className="android-settings-field-subtitle">从系统凭据存储移除当前密钥。</span>
+          <span className="android-settings-field-title">清除当前 API Key</span>
+          <span className="android-settings-field-subtitle">删除当前上游在本机凭据存储中的 API Key；再次生成前需重新填写。</span>
         </span>
         <Shield className="h-4 w-4 text-red-400" />
       </button>
       <button type="button" className="android-settings-row-action danger" onClick={clearHistory}>
         <span className="android-settings-row-icon"><Trash2 className="h-4 w-4" /></span>
         <span className="min-w-0 flex-1">
-          <span className="android-settings-field-title">清空历史</span>
-          <span className="android-settings-field-subtitle">删除本地数据库中的全部历史。</span>
+          <span className="android-settings-field-title">删除全部历史</span>
+          <span className="android-settings-field-subtitle">删除本地数据库中的全部历史记录，且无法撤销。</span>
         </span>
         <ChevronRight className="h-4 w-4 text-red-300" />
       </button>
@@ -530,11 +530,11 @@ export function AndroidSettingsPanel({
 
   const supportSection = (
     <section className="android-settings-card android-settings-card-support">
-      <div className="android-settings-section-title">支持</div>
+      <div className="android-settings-section-title">来处 · 项目与反馈</div>
       <div className="android-settings-action-grid">
-        <button type="button" onClick={onOpenAbout}><Info className="h-4 w-4" /> 关于</button>
-        <button type="button" onClick={onOpenRepo}><Github className="h-4 w-4" /> GitHub</button>
-        <button type="button" onClick={onOpenFeedback}><MessageSquare className="h-4 w-4" /> 反馈</button>
+        <button type="button" onClick={onOpenAbout}><Info className="h-4 w-4" /> 认识项目</button>
+        <button type="button" onClick={onOpenRepo}><Github className="h-4 w-4" /> 前往 GitHub</button>
+        <button type="button" onClick={onOpenFeedback}><MessageSquare className="h-4 w-4" /> 留下反馈</button>
       </div>
     </section>
   );

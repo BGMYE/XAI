@@ -14,8 +14,8 @@ export const ANDROID_API_MODE_OPTIONS: Array<{
   title: string;
   meta: string;
 }> = [
-  { id: "responses", title: "Responses", meta: "SSE 长任务" },
-  { id: "images", title: "Images", meta: "标准图像接口" },
+  { id: "images", title: "Images", meta: "沿用标准图像接口" },
+  { id: "responses", title: "Responses", meta: "以 SSE 保活长任务" },
 ];
 
 export const ANDROID_REQUEST_POLICY_OPTIONS: Array<{
@@ -23,8 +23,8 @@ export const ANDROID_REQUEST_POLICY_OPTIONS: Array<{
   title: string;
   meta: string;
 }> = [
-  { id: "openai", title: "OpenAI 标准", meta: "只发送公开字段" },
-  { id: "compat", title: "兼容中转", meta: "允许 relay 扩展字段" },
+  { id: "openai", title: "OpenAI 标准", meta: "仅携带公开字段" },
+  { id: "compat", title: "兼容中转", meta: "添上 relay 扩展字段" },
 ];
 
 export const ANDROID_REASONING_EFFORT_OPTIONS: Array<{
@@ -32,10 +32,10 @@ export const ANDROID_REASONING_EFFORT_OPTIONS: Array<{
   title: string;
   meta: string;
 }> = [
-  { id: "xhigh", title: "xhigh", meta: "默认，最稳" },
-  { id: "high", title: "high", meta: "高强度" },
-  { id: "medium", title: "medium", meta: "中等" },
-  { id: "low", title: "low", meta: "低强度，可能掉工具调用" },
+  { id: "xhigh", title: "xhigh", meta: "初始选择，兼容性稳妥" },
+  { id: "high", title: "high", meta: "深入思考" },
+  { id: "medium", title: "medium", meta: "适中思考" },
+  { id: "low", title: "low", meta: "较轻思考，可能无法调用工具" },
 ];
 
 export function useAndroidUpstreamConfig(open: boolean) {
@@ -125,13 +125,13 @@ export function useAndroidUpstreamConfig(open: boolean) {
     setDraft((current) => (current ? { ...current, ...patch } : current));
   }
 
-  async function handleNew(apiMode: APIMode = "responses") {
+  async function handleNew(apiMode: APIMode = "images") {
     const id = await createProfile({
       apiMode,
       requestPolicy: "openai",
       setActive: profiles.length === 0,
     });
-    setSelectedId(id);
+    if (id) setSelectedId(id);
   }
 
   async function handleDuplicate() {
@@ -139,17 +139,17 @@ export function useAndroidUpstreamConfig(open: boolean) {
     const id = await duplicateProfile(selectedId);
     if (id) {
       setSelectedId(id);
-      pushToast("已复制上游配置", "success");
+      pushToast("已为这处上游留下一份副本", "success");
     }
   }
 
   async function handleDelete() {
     if (!draft) return;
-    if (!window.confirm(`确认删除「${draft.name}」配置? 对应的 API Key 也会从系统凭据存储清除。`)) return;
+    if (!window.confirm(`要删除「${draft.name}」吗？这条配置及其 API Key 凭据会一并清除，删除后无法恢复。`)) return;
     await deleteProfile(draft.id);
     const remaining = useStudioStore.getState().profiles;
     setSelectedId(remaining[0]?.id ?? "");
-    pushToast("已删除上游配置", "success");
+    pushToast("上游配置及其 API Key 凭据已删除", "success");
   }
 
   async function handleSave() {
@@ -171,7 +171,7 @@ export function useAndroidUpstreamConfig(open: boolean) {
         concurrencyLimit: draft.concurrencyLimit,
         apiKey: draftKey.trim(),
       });
-      if (ok) pushToast("已保存上游配置", "success");
+      if (ok) pushToast("这处上游的配置已保存", "success");
       return ok;
     } finally {
       setSaving(false);
@@ -181,7 +181,7 @@ export function useAndroidUpstreamConfig(open: boolean) {
   async function handleSetActive() {
     if (!draft) return;
     await setActiveProfile(draft.id);
-    pushToast("已切换当前上游", "success");
+    pushToast("已将生图交给选定的上游", "success");
   }
 
   async function handleSaveAndSetActive(onSaved?: () => void) {
@@ -209,11 +209,11 @@ export function useAndroidUpstreamConfig(open: boolean) {
     const apiKey = draftKey.trim();
     const baseURL = draft.baseURL.trim();
     if (!apiKey) {
-      pushToast("先填入 API Key", "warn");
+      pushToast("请先添入 API Key，让请求有凭可行", "warn");
       return;
     }
     if (!baseURL) {
-      pushToast("先填入上游 BASE_URL", "warn");
+      pushToast("请先写下上游 BASE_URL，确定请求的去处", "warn");
       return;
     }
     setLoadingModels(true);
@@ -233,22 +233,22 @@ export function useAndroidUpstreamConfig(open: boolean) {
       setModelCatalog(catalog);
       if (result.responsesTransport === "websocket" && result.responsesTransportOK === false) {
         pushToast(
-          `已拉取模型，但 Responses WebSocket 不可用:${result.responsesTransportError || "未返回具体原因"}`,
+          `模型目录已取回，但 Responses WebSocket 暂不可用：${result.responsesTransportError || "上游未说明原因"}`,
           "warn",
           7000,
         );
       } else {
         pushToast(
           result.responsesTransport === "websocket"
-            ? `已加载 ${catalog.all.length} 个模型，Responses WebSocket 可用`
+            ? `已收录 ${catalog.all.length} 个模型，Responses WebSocket 已连通`
             : catalog.all.length > 0
-              ? `已加载 ${catalog.all.length} 个模型`
-              : `已连接上游，共返回 ${result.modelCount} 个条目，但没有可识别的模型 ID`,
+              ? `已收录 ${catalog.all.length} 个模型`
+              : `已抵达上游并取回 ${result.modelCount} 个条目，但其中没有可识别的模型 ID`,
           catalog.all.length > 0 ? "success" : "warn",
         );
       }
     } catch (error: any) {
-      const message = `加载模型失败:${error?.message ?? error}`;
+      const message = `模型目录未能取回：${error?.message ?? error}`;
       setModelCatalogError(message);
       pushToast(message, "error", 6000);
     } finally {
@@ -256,7 +256,7 @@ export function useAndroidUpstreamConfig(open: boolean) {
     }
   }
 
-  async function handleImportFromRawJSON(raw: string, successPrefix = "已导入") {
+  async function handleImportFromRawJSON(raw: string, successPrefix = "已读入") {
     const parsed = parseUpstreamConfigImportFile(raw);
     const result = await applyParsedUpstreamConfigImport(parsed, {
       getProfiles: () => useStudioStore.getState().profiles,
@@ -274,21 +274,21 @@ export function useAndroidUpstreamConfig(open: boolean) {
       setDraftKey(await GetStoredAPIKey(keyringUserFor(selectedProfile.id)).catch(() => ""));
       setSavedKeyLoaded(true);
     }
-    pushToast(`${successPrefix} ${result.importedCount} 组上游配置`, "success");
+    pushToast(`${successPrefix} ${result.importedCount} 组上游配置记录`, "success");
   }
 
   async function handleQuickImport() {
     const raw = quickImportText.trim();
     if (!raw) {
-      pushToast("先粘贴 JSON 模板", "warn");
+      pushToast("请先贴入一份 JSON 配置模板", "warn");
       return;
     }
     try {
-      await handleImportFromRawJSON(raw, "已快捷导入");
+      await handleImportFromRawJSON(raw, "已从 JSON 读入");
       setQuickImportOpen(false);
       setQuickImportText("");
     } catch (error: any) {
-      pushToast(`快捷导入失败:${error?.message ?? error}`, "error", 6000);
+      pushToast(`这份配置未能读入：${error?.message ?? error}`, "error", 6000);
     }
   }
 

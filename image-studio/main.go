@@ -57,6 +57,7 @@ func main() {
 		}
 	}
 	if runtime.GOOS == "windows" {
+		appOptions.Frameless = true
 		webviewUserDataPath, err := backend.WindowsWebviewUserDataPath()
 		if err != nil {
 			println("Error:", err.Error())

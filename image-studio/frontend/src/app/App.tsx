@@ -21,6 +21,7 @@ import { useDesktopPromptImport } from "./hooks/useDesktopPromptImport";
 import { useGlobalImageImport } from "./hooks/useGlobalImageImport";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useStudioBootstrap } from "./hooks/useStudioBootstrap";
+import { XAIWorkspace } from "../components/xai/XAIWorkspace";
 
 export default function App() {
   const fullscreen = useStudioStore((state) => state.fullscreen);
@@ -30,6 +31,7 @@ export default function App() {
   const openSettings = useStudioStore((state) => state.openSettings);
   const closeSettings = useStudioStore((state) => state.closeSettings);
   const { isMac } = usePlatform();
+  const { isAndroid } = usePlatform();
   const { androidView, setAndroidView } = useAndroidView();
   const { dragHover } = useGlobalImageImport(importImageFile, reuseAsSource);
   const promptImportDialog = useDesktopPromptImport();
@@ -40,17 +42,18 @@ export default function App() {
   return (
     <div className="app-root relative">
       <div className="liquid-ambient" aria-hidden="true" />
-
-      <AppHeader onOpenSettings={openSettings} />
-      <WorkspaceBar />
-      <PlatformWorkspace
-        fullscreen={fullscreen}
-        androidView={androidView}
-        onChangeAndroidView={setAndroidView}
-      />
+      {isAndroid ? <>
+        <AppHeader onOpenSettings={openSettings} />
+        <WorkspaceBar />
+        <PlatformWorkspace
+          fullscreen={fullscreen}
+          androidView={androidView}
+          onChangeAndroidView={setAndroidView}
+        />
+        <FooterBar />
+      </> : <XAIWorkspace onOpenSettings={openSettings} />}
       <ToastContainer />
       {dragHover ? <DropImportOverlay /> : null}
-      <FooterBar />
       <CustomAspectRatioGate />
       <CustomSizeGate />
       <UpstreamConfigGate />

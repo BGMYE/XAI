@@ -19,17 +19,17 @@ export function AndroidUpstreamProfileRail({
   onSelect: (id: string) => void;
 }) {
   return (
-    <section className="android-upstream-profiles" aria-label="上游配置列表">
+    <section className="android-upstream-profiles" aria-label="创作源头列表">
       <div className="android-upstream-section-head">
-        <span>配置组</span>
+        <span>已存的上游</span>
         <div className="android-upstream-icon-actions">
-          <button type="button" onClick={onCreate} title="新建配置">
+          <button type="button" onClick={onCreate} title="添入上游">
             <Plus className="h-4 w-4" />
           </button>
-          <button type="button" onClick={onDuplicate} disabled={!selectedId} title="复制当前配置">
+          <button type="button" onClick={onDuplicate} disabled={!selectedId} title="复制选中的上游配置">
             <Copy className="h-4 w-4" />
           </button>
-          <button type="button" onClick={onDelete} disabled={!selectedId} className="danger" title="删除当前配置">
+          <button type="button" onClick={onDelete} disabled={!selectedId} className="danger" title="删除选中的配置及 API Key 凭据">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
@@ -48,10 +48,10 @@ export function AndroidUpstreamProfileRail({
             >
               <span className={`android-upstream-profile-dot ${active ? "active" : ""}`} />
               <span className="android-upstream-profile-main">
-                <strong>{profile.name || "未命名配置"}</strong>
+                <strong>{profile.name || "尚未命名的上游"}</strong>
                 <small>
                   {profile.apiMode === "responses" ? "Responses" : "Images"}
-                  {profile.baseURL ? ` · ${profile.baseURL}` : " · 未填写地址"}
+                  {profile.baseURL ? ` · ${profile.baseURL}` : " · 尚待填写地址"}
                 </small>
               </span>
               <span className="android-upstream-profile-mode">

@@ -16,7 +16,7 @@ export function AndroidUpstreamConfigModal({
   const upstream = useAndroidUpstreamConfig(open);
 
   return (
-    <Modal open={open} onClose={onClose} title="上游配置" width={880}>
+    <Modal open={open} onClose={onClose} title="创作源头 · 上游配置" width={880}>
       <div className="android-upstream-panel">
         <AndroidUpstreamHeader
           activeProfile={upstream.activeProfile}
@@ -74,30 +74,30 @@ export function AndroidUpstreamConfigModal({
       <Modal
         open={upstream.quickImportOpen}
         onClose={() => upstream.setQuickImportOpen(false)}
-        title="快捷导入"
+        title="从 JSON 带入上游配置"
         width={520}
       >
         <section className="android-upstream-quick-import-sheet">
           <p>
-            粘贴对方提供的 JSON 模板。当前支持本应用导出文件、<code className="font-mono-token">newapi_channel_conn</code>、OpenCode <code className="font-mono-token">provider</code> 配置。
+            将已有的 JSON 模板贴在这里。可读入本应用备份、<code className="font-mono-token">newapi_channel_conn</code>、OpenCode <code className="font-mono-token">provider</code> 配置。
           </p>
           <textarea
             value={upstream.quickImportText}
             onChange={(event) => upstream.setQuickImportText(event.target.value)}
-            placeholder={"在这里粘贴 JSON...\n例如 {\"_type\":\"newapi_channel_conn\",...}"}
+            placeholder={"把 JSON 配置贴在这里…\n例如 {\"_type\":\"newapi_channel_conn\",...}"}
             className="focus-ring android-upstream-quick-import-textarea font-mono-token"
             spellCheck={false}
           />
           <div className="android-upstream-quick-import-hint">
             <Info className="h-4 w-4" />
-            <span>导入后会自动适配站点根地址并写入系统凭据存储。</span>
+            <span>读入后会整理站点根地址，API Key 则交由系统凭据存储保管。</span>
           </div>
           <div className="android-upstream-actions">
             <button type="button" onClick={() => upstream.setQuickImportOpen(false)}>
-              取消
+              暂且返回
             </button>
             <button type="button" className="primary" onClick={() => void upstream.handleQuickImport()}>
-              立即导入
+              读入这份配置
             </button>
           </div>
         </section>

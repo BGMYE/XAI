@@ -1,0 +1,418 @@
+/* Desktop upstream configuration only.  Android has a separate upstream sheet. */
+.app-modal-card-desktop.upstream-config-modal {
+  --upstream-gap: 24px;
+  --upstream-field-gap: 20px;
+  --upstream-control-height: 44px;
+  width: min(1080px, calc(100vw - 40px)) !important;
+  max-width: calc(100vw - 40px);
+  max-height: min(900px, calc(100vh - 40px));
+  min-height: min(680px, calc(100vh - 40px));
+  overflow: hidden;
+  font-family: var(--xai-body-font, var(--body-font));
+  font-size: 0.933rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Connection fields are UI text; JSON editors keep their monospace font. */
+.app-modal-card-desktop.upstream-config-modal :is(input, select, textarea:not(.font-mono-token), code) {
+  font-family: var(--xai-body-font, var(--body-font));
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.app-modal-card-desktop.upstream-config-modal :is(input, select) {
+  font-size: 0.933rem;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal code {
+  font-size: inherit;
+}
+
+.app-modal-card-desktop.upstream-config-modal .app-modal-header,
+.app-modal-card-desktop.upstream-config-modal.upstream-config-modal-header {
+  min-height: 64px;
+  padding: 16px 26px !important;
+}
+
+.app-modal-card-desktop.upstream-config-modal .app-modal-header h3 {
+  font-family: var(--xai-display-font, var(--body-font));
+  font-size: 1.6rem !important;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  padding: 26px 28px 28px !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+  font-size: 0.933rem;
+}
+
+/* The profile rail and editor each scroll independently, so a long model
+   catalog cannot push the save controls below the modal viewport. */
+.app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body:has(.upstream-profile-list),
+.app-modal-card-desktop.upstream-config-modal .upstream-redesign-layout {
+  min-height: 0;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body:has(.upstream-profile-list) > div,
+.app-modal-card-desktop.upstream-config-modal .upstream-redesign-layout {
+  display: grid !important;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(270px, 300px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--upstream-gap);
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-rail {
+  width: auto !important;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  gap: 14px !important;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  overflow: hidden auto;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list > div:first-child {
+  flex: 1 1 auto;
+  min-height: 180px;
+  max-height: none !important;
+  height: auto !important;
+  padding: 8px !important;
+  border-radius: 12px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list .platform-card {
+  min-height: 50px;
+  padding: 10px 12px !important;
+  font-size: 0.867rem;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-name {
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-badge {
+  font-size: 0.733rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list > .flex.flex-wrap,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-actions,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list > .grid {
+  gap: 8px !important;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list .platform-action-btn,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-actions button {
+  min-height: 40px;
+  min-width: max-content;
+  padding: 8px 12px !important;
+  font-size: 0.867rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list .platform-action-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list p,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-rail p {
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-list + section,
+.app-modal-card-desktop.upstream-config-modal .upstream-editor,
+.app-modal-card-desktop.upstream-config-modal .upstream-redesign-panel {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden auto;
+  padding: 4px 8px 4px 2px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-editor {
+  gap: var(--upstream-field-gap) !important;
+  min-width: 0;
+  padding: 2px 2px 12px;
+  font-size: 0.933rem;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-title {
+  font-size: 0.867rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-section {
+  margin: 0;
+  padding: 20px 22px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-section + .upstream-editor-section {
+  margin-top: 18px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-section-header {
+  margin: 0 0 16px;
+  font-family: var(--xai-display-font, var(--body-font));
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-section-note {
+  margin-left: 12px;
+  color: var(--text-muted);
+  font-family: var(--xai-body-font, var(--body-font));
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--upstream-field-gap) 18px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-field,
+.app-modal-card-desktop.upstream-config-modal .upstream-field {
+  min-width: 0;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-field > label,
+.app-modal-card-desktop.upstream-config-modal .upstream-field > label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 0.867rem !important;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-field > :is(input, select, textarea),
+.app-modal-card-desktop.upstream-config-modal .upstream-field > :is(input, select, textarea),
+.app-modal-card-desktop.upstream-config-modal :is(.upstream-editor-grid, .upstream-editor-details) input,
+.app-modal-card-desktop.upstream-config-modal :is(.upstream-editor-grid, .upstream-editor-details) select {
+  width: 100%;
+  min-height: var(--upstream-control-height);
+  padding: 9px 13px !important;
+  border-radius: 10px;
+  font-size: 0.933rem !important;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-field textarea,
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-field textarea {
+  min-height: 116px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-field > .relative {
+  min-height: var(--upstream-control-height);
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-field > .relative input {
+  min-height: var(--upstream-control-height);
+  padding-right: 48px !important;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-key-control input {
+  padding-right: 48px !important;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-key-toggle {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-field > :is(.mt-1, .mt-1\.5),
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-hint,
+.app-modal-card-desktop.upstream-config-modal .upstream-field > p {
+  margin-top: 8px !important;
+  color: var(--text-muted);
+  font-size: 0.8rem !important;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-field > button .leading-relaxed {
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-option-card {
+  min-height: 74px;
+  padding: 13px 15px !important;
+  gap: 5px !important;
+  font-size: 0.933rem;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-option-title {
+  font-size: 0.933rem !important;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-option-sub {
+  font-size: 0.8rem !important;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-details,
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-details > details {
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-details summary {
+  cursor: pointer;
+  font-size: 0.867rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions,
+.app-modal-card-desktop.upstream-config-modal .upstream-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions {
+  position: sticky;
+  bottom: -4px;
+  z-index: 2;
+  margin-top: 8px;
+  padding: 16px 0 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions button,
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions .platform-action-btn,
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions .liquid-primary-button {
+  min-height: 44px;
+  padding: 10px 18px !important;
+  font-size: 0.933rem !important;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-editor-actions > :first-child {
+  margin-left: auto;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-model-suggestions,
+.app-modal-card-desktop.upstream-config-modal .upstream-model-catalog {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.app-modal-card-desktop.upstream-config-modal .upstream-model-suggestions button,
+.app-modal-card-desktop.upstream-config-modal .upstream-model-catalog button {
+  min-height: 38px;
+  padding: 8px 11px !important;
+  font-size: 0.867rem !important;
+  font-weight: 400;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.app-modal-card-desktop.upstream-config-modal :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+html.dark .app-modal-card-desktop.upstream-config-modal .upstream-profile-list,
+html.dark .app-modal-card-desktop.upstream-config-modal .upstream-editor-section {
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+}
+
+html.dark .app-modal-card-desktop.upstream-config-modal .upstream-editor-actions {
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+}
+
+@media (max-width: 900px) {
+  .app-modal-card-desktop.upstream-config-modal {
+    min-height: 0;
+    max-height: calc(100vh - 24px);
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body:has(.upstream-profile-list) > div,
+  .app-modal-card-desktop.upstream-config-modal .upstream-redesign-layout {
+    grid-template-columns: minmax(220px, 0.36fr) minmax(0, 0.64fr);
+    gap: 16px;
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-profile-list {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-modal-card-desktop.upstream-config-modal {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px);
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body {
+    padding: 18px !important;
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-config-modal-body:has(.upstream-profile-list) > div,
+  .app-modal-card-desktop.upstream-config-modal .upstream-redesign-layout {
+    display: flex !important;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-profile-list {
+    flex: 0 0 auto;
+    max-height: 300px;
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-profile-list + section,
+  .app-modal-card-desktop.upstream-config-modal .upstream-editor,
+  .app-modal-card-desktop.upstream-config-modal .upstream-redesign-panel {
+    flex: 1 1 auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .app-modal-card-desktop.upstream-config-modal .upstream-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}

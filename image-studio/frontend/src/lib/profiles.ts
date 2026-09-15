@@ -26,6 +26,13 @@ export const PROFILES_LS_KEY = "gptcodex.profiles";
 export const ACTIVE_PROFILE_LS_KEY = "gptcodex.activeProfileId";
 export const AI_PROFILE_LS_KEY = "gptcodex.aiProfileId";
 
+export const DEFAULT_IMAGES_PROFILE = {
+  apiMode: "images" as const,
+  requestPolicy: "openai" as const,
+  baseURL: "https://img.740414025.xyz",
+  imageModelID: "gpt-image-2.5-sunburst",
+};
+
 // crypto.randomUUID 在 WebView2 / 现代 Chromium 都有。fallback 防御老内核。
 export function genProfileId(): string {
   try {
@@ -65,6 +72,9 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
   const baseURL = typeof o.baseURL === "string" ? o.baseURL : "";
   const textModelID = typeof o.textModelID === "string" ? o.textModelID : "";
   const imageModelID = typeof o.imageModelID === "string" ? o.imageModelID : "";
+  const modelIDs = Array.isArray(o.modelIDs)
+    ? Array.from(new Set(o.modelIDs.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)))
+    : undefined;
   const videoModelID = typeof o.videoModelID === "string" ? o.videoModelID.trim() : "";
   const reasoningEffort = normalizeReasoningEffort(o.reasoningEffort);
   const concurrencyLimit = typeof o.concurrencyLimit === "number" && o.concurrencyLimit >= 0
@@ -84,6 +94,7 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
     baseURL,
     textModelID,
     imageModelID,
+    modelIDs,
     videoModelID,
     reasoningEffort,
     concurrencyLimit,
@@ -143,7 +154,7 @@ export function nextDefaultProfileName(profiles: UpstreamProfile[] = []): string
 }
 
 // 新建 profile 的默认值 —— UpstreamConfigModal 里点「+ 新建」用。
-export function makeBlankProfile(apiMode: APIMode = "responses", profiles: UpstreamProfile[] = []): UpstreamProfile {
+export function makeBlankProfile(apiMode: APIMode = "images", profiles: UpstreamProfile[] = []): UpstreamProfile {
   return {
     id: genProfileId(),
     name: nextDefaultProfileName(profiles),
@@ -152,9 +163,10 @@ export function makeBlankProfile(apiMode: APIMode = "responses", profiles: Upstr
     requestPolicy: "openai",
     imagesNewAPICompat: false,
     allowInsecureConnection: false,
-    baseURL: "",
+    baseURL: apiMode === "images" ? DEFAULT_IMAGES_PROFILE.baseURL : "",
     textModelID: "",
-    imageModelID: "",
+    imageModelID: apiMode === "images" ? DEFAULT_IMAGES_PROFILE.imageModelID : "",
+    modelIDs: apiMode === "images" ? [DEFAULT_IMAGES_PROFILE.imageModelID] : [],
     videoModelID: "",
     reasoningEffort: "xhigh",
     concurrencyLimit: 0,
