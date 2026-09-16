@@ -87,7 +87,8 @@ const steps = [
       ANDROID_USER_HOME: androidUserHome,
       HOME: homeDir,
       GRADLE_USER_HOME: `${root}/.tmp/gradle-home-arm64`,
-      IMAGE_STUDIO_ANDROID_USE_PREBUILT_FRONTEND: "1",
+      // Let Gradle build the Android target instead of reusing the desktop dist above.
+      IMAGE_STUDIO_ANDROID_USE_PREBUILT_FRONTEND: "0",
     },
     resultFile: resultFileEntry("IMAGE_STUDIO_ANDROID_VERIFY_OUTPUT_PATH", "android-shell.json"),
   },
