@@ -33,7 +33,11 @@ func TestUpscaleImageSupportsTwoAndFourTimes(t *testing.T) {
 			if filepath.Ext(result.Path) != ".png" || result.Path == source {
 				t.Fatalf("output path = %q, source = %q", result.Path, source)
 			}
-			if result.MediaAssetRef.SavedPath != result.Path || result.MediaAssetRef.FullURL == "" || result.MediaAssetRef.PreviewURL == "" {
+			resolvedPath, err := filepath.EvalSymlinks(result.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.MediaAssetRef.SavedPath != resolvedPath || result.MediaAssetRef.FullURL == "" || result.MediaAssetRef.PreviewURL == "" {
 				t.Fatalf("media asset ref was not registered: %+v", result.MediaAssetRef)
 			}
 
