@@ -1,0 +1,58 @@
+name: Backend v2 verification
+on:
+  push:
+    branches: [codex/backend-v2-video-canvas]
+  pull_request:
+    paths:
+      - 'image-studio/**'
+      - 'go-cli/**'
+      - '.github/workflows/backend-v2.yml'
+permissions:
+  contents: read
+concurrency:
+  group: backend-v2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git archive --format=tar.gz --output=source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-v2-source
+          path: source.tar.gz
+          retention-days: 3
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: image-studio/go.mod
+          cache-dependency-path: |
+            image-studio/go.sum
+            go-cli/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Go client tests
+        run: go test -race ./pkg/client/...
+        working-directory: go-cli
+      - name: Go backend tests
+        run: go test -race ./backend/...
+        working-directory: image-studio
+      - name: Frontend dependencies
+        run: npm ci
+        working-directory: image-studio/frontend
+      - name: Frontend build
+        run: npm run build
+        working-directory: image-studio/frontend
