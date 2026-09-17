@@ -25,14 +25,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yuanhua/image-gptcodex/pkg/client"
+	runtime "image-studio/internal/desktopruntime"
 )
 
 // Service is the Wails-bound struct. Methods on it are exposed to the frontend
 // via runtime/window/bindings.
 type Service struct {
-	ctx context.Context
+	ctx             context.Context
+	desktopSettings *DesktopSettingsService
 
 	mu                        sync.Mutex
 	jobs                      map[string]*job
@@ -68,7 +69,7 @@ func NewService() *Service {
 }
 
 // Startup is wired into wails.Options OnStartup; persists the runtime context.
-func (s *Service) Startup(ctx context.Context) {
+func StartDesktopService(s *Service, ctx context.Context) {
 	s.ctx = ctx
 	s.loadCompatibilitySettings()
 	s.HandlePromptImportArgs(os.Args[1:])

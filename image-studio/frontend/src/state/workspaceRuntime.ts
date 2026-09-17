@@ -203,7 +203,10 @@ export function patchWorkspaceRuntime(workspaces: Workspace[], workspaceId: stri
     if (patch.loopGeneration !== undefined) next.loopGeneration = normalizeLoopGenerationConfig(patch.loopGeneration);
     if (patch.editAutoAspectResolution !== undefined) next.editAutoAspectResolution = normalizeAutoAspectResolutionPreset(patch.editAutoAspectResolution);
     if (patch.batchProcess !== undefined) next.batchProcess = normalizeBatchProcessConfig(patch.batchProcess);
-    if (patch.currentImageId !== undefined) next.currentImageId = patch.currentImageId;
+    if (patch.currentImageId !== undefined) {
+      if (patch.currentImageId !== next.currentImageId) next.editorState = undefined;
+      next.currentImageId = patch.currentImageId;
+    }
     if (patch.batchResultIds !== undefined) next.batchResultIds = patch.batchResultIds;
     if (patch.resultGridOpen !== undefined) next.resultGridOpen = patch.resultGridOpen;
     if (patch.runningJobs !== undefined) next.runningJobIds = patch.runningJobs;

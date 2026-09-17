@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AppHeader } from "../components/layout/AppHeader";
 import { WorkspaceBar } from "../components/layout/WorkspaceBar";
 import { FooterBar } from "../components/layout/FooterBar";
@@ -22,6 +23,7 @@ import { useGlobalImageImport } from "./hooks/useGlobalImageImport";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useStudioBootstrap } from "./hooks/useStudioBootstrap";
 import { XAIWorkspace } from "../components/xai/XAIWorkspace";
+import { useDesktopCommands } from "../platform/runtime/useDesktopCommands";
 
 export default function App() {
   const fullscreen = useStudioStore((state) => state.fullscreen);
@@ -38,6 +40,12 @@ export default function App() {
 
   useStudioBootstrap();
   useGlobalShortcuts({ isMac });
+  useDesktopCommands();
+  useEffect(() => {
+    if (isAndroid) return;
+    document.documentElement.dataset.desktopStudio = "true";
+    return () => { delete document.documentElement.dataset.desktopStudio; };
+  }, [isAndroid]);
 
   return (
     <div className="app-root relative">
@@ -56,10 +64,10 @@ export default function App() {
       {dragHover ? <DropImportOverlay /> : null}
       <CustomAspectRatioGate />
       <CustomSizeGate />
-      <UpstreamConfigGate />
-      <SettingsPanelGate open={settingsOpen} onClose={closeSettings} />
-      <HistoryTimelineModal />
-      <ResultDetailGate />
+      {isAndroid && <UpstreamConfigGate />}
+      {isAndroid && <SettingsPanelGate open={settingsOpen} onClose={closeSettings} />}
+      {isAndroid && <HistoryTimelineModal />}
+      {isAndroid && <ResultDetailGate />}
       <SavePromptGate />
       <StarPromptGate />
       <AppUpdateGate />

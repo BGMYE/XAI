@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	runtime "image-studio/internal/desktopruntime"
 )
 
 var supportedBatchInputExtensions = map[string]struct{}{

@@ -1,4 +1,3 @@
-import type { backend } from "../../wailsjs/go/models";
 import {
   ImportImageFromB64,
   RegisterMediaAsset,
@@ -204,6 +203,7 @@ export function saveActiveWorkspaceSnapshot(s: StudioState): Workspace[] {
       canvasNodes: s.canvasNodes,
       canvasViewport: s.canvasViewport ?? undefined,
       selectedNodeId: s.selectedNodeId,
+      editorState: { annotations: s.annotations, strokes: s.strokes, maskDataURL: s.maskDataURL, undoStack: s.undoStack, redoStack: s.redoStack },
       currentImageId: currentImageIdForWorkspaceSnapshot(s.currentImage, s.streamPreview, s.streamPreviews, w.currentImageId),
       batchResultIds: s.batchResults.map((item) => item.id),
       resultGridOpen: s.resultGridOpen,
@@ -216,6 +216,7 @@ export function saveActiveWorkspaceSnapshot(s: StudioState): Workspace[] {
       lastLogLine: s.lastLogLine,
       errorMessage: s.errorMessage,
       errorCanRetry: s.errorCanRetry,
+      errorRawPath: s.errorRawPath,
       lastPayload: s.lastPayload,
     };
   });

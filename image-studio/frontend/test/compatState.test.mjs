@@ -35,6 +35,72 @@ test.afterEach(() => {
   globalThis.localStorage = realLocalStorage;
 });
 
+function minimalExport(prompt) {
+  return {
+    history: [], profiles: [], activeProfileId: "", aiProfileId: "", proxyMode: "system", proxyURL: "",
+    promptHistory: [prompt], promptTemplates: [], presets: [], customAspectRatios: [],
+    theme: "light", fontScale: 1, outputFormat: "png", background: "auto", outputCompression: 100,
+    inputFidelity: "auto", imageStyle: "default", moderation: "auto", userIdentifier: "", partialImages: 1,
+    protectStreamPreview: true, autoRetryEnabled: true, autoRetryCount: 1, kernelRuntimeMode: "auto",
+    keepLogs: false, cleanupPreviewCacheOnExit: false, ignoredReleaseTag: "",
+    completionSound: { enabled: true, mode: "default", customName: "", customDataURL: "" }, completionNotification: { enabled: false },
+  };
+}
+
+test("close flush saves the pending compatibility document before its debounce fires", async () => {
+  installStorage();
+  let saved;
+  installService({ SaveCompatibilityState: async (state) => { saved = state; } });
+  const compat = await import(`../src/lib/compatState.ts?flush=${Math.random()}`);
+  compat.scheduleCompatibilityExport(minimalExport("unsaved prompt"));
+  await compat.flushCompatibilityExport();
+  assert.deepEqual(saved.settings.promptHistory, ["unsaved prompt"]);
+});
+
+test("compatibility export preserves the supported 200 percent font size", async () => {
+  installStorage();
+  const { buildCompatibilityState } = await import("../src/lib/compatState.ts");
+  assert.equal(buildCompatibilityState({ ...minimalExport(""), fontScale: 2 }).settings.fontScale, 2);
+  assert.equal(buildCompatibilityState({ ...minimalExport(""), fontScale: 2.1 }).settings.fontScale, 1);
+});
+
+test("compatibility exports remain ordered when a write is slow", async () => {
+  installStorage();
+  const saved = [];
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  installService({ SaveCompatibilityState: async (state) => {
+    const prompt = state.settings.promptHistory[0];
+    saved.push(`start:${prompt}`);
+    if (prompt === "first") await blocked;
+    saved.push(`end:${prompt}`);
+  } });
+  const compat = await import(`../src/lib/compatState.ts?order=${Math.random()}`);
+  const first = compat.exportCompatibilityStateNow(minimalExport("first"));
+  await new Promise((resolve) => setImmediate(resolve));
+  const second = compat.exportCompatibilityStateNow(minimalExport("second"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(saved, ["start:first"]);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(saved, ["start:first", "end:first", "start:second", "end:second"]);
+});
+
+test("failed compatibility writes remain available for a subsequent close retry", async () => {
+  installStorage();
+  let fail = true;
+  let saved;
+  installService({ SaveCompatibilityState: async (state) => {
+    if (fail) throw new Error("disk unavailable");
+    saved = state;
+  } });
+  const compat = await import(`../src/lib/compatState.ts?retry=${Math.random()}`);
+  await assert.rejects(compat.exportCompatibilityStateNow(minimalExport("keep me")), /disk unavailable/);
+  fail = false;
+  await compat.flushCompatibilityExport();
+  assert.deepEqual(saved.settings.promptHistory, ["keep me"]);
+});
+
 test("compat export preserves previewPath sourcePaths and parentId in history", async () => {
   installStorage();
   let savedState = null;

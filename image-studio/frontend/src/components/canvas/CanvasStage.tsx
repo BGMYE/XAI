@@ -16,12 +16,29 @@ import { StreamPreviewBadge } from "./StreamPreviewBadge";
 import { streamPreviewItemsFromPreviews } from "../../state/studioStore.streamPreview";
 import { historyFullSrc, orderedNavigationItemsForCurrent, sortHistoryItemsByCreatedAtAsc } from "../../lib/images";
 import { DragExportHandle } from "./DragExportHandle";
-import { CanvasNodeShape } from "./CanvasNodeShape";
+import { CanvasNodeShape, type CanvasNodeAppearance } from "./CanvasNodeShape";
 import { clampCanvasScale, createCanvasNode, fitCanvasView, oneToOneCanvasView, sourceHistoryItemForCanvasNode, type CanvasViewport } from "../../state/canvasNodes";
 
+function canvasNodeAppearance(): CanvasNodeAppearance {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    accent: style.getPropertyValue("--studio-accent").trim() || "#0062cc",
+    background: style.getPropertyValue("--studio-content").trim() || "#ffffff",
+    border: style.getPropertyValue("--studio-border").trim() || "#c8ccd3",
+    text: style.getPropertyValue("--studio-text").trim() || "#1d1d1f",
+    font: style.getPropertyValue("--studio-font").trim() || "sans-serif",
+  };
+}
+
 export function CanvasStage() {
+  const [nodeAppearance, setNodeAppearance] = useState(canvasNodeAppearance);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setNodeAppearance(canvasNodeAppearance()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-high-contrast"] });
+    return () => observer.disconnect();
+  }, []);
   const {
-    currentImage, tool, brushSize, brushMode,
+    currentImage, tool, brushSize, brushMode, fontScale,
     annotationKind, annotationColor,
     selectedAnnotationId,
     annotations, addAnnotation, removeAnnotation, clearAnnotations,
@@ -599,6 +616,9 @@ export function CanvasStage() {
               <CanvasNodeShape
                 key={node.id}
                 node={node}
+                appearance={nodeAppearance}
+                viewScale={view.scale}
+                fontScale={fontScale}
                 source={history.find((entry) => entry.id === node.id) ? historyFullSrc(history.find((entry) => entry.id === node.id)!, null) : null}
                 selected={selectedNodeId === node.id}
                 draggable={effectiveTool === "pan" && !spacePan}

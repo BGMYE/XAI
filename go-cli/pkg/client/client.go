@@ -33,7 +33,8 @@ func RequestAndExtractWithPartial(
 	rawSink io.Writer,
 	onProgress func(stage string, elapsedSeconds int, bytesReceived int64),
 	onPartial func(PartialImage),
-) (ImageResult, error) {
+) (result ImageResult, returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, opts.APIKey) }()
 	payload, err := BuildPayload(opts)
 	if err != nil {
 		return ImageResult{}, err
@@ -63,7 +64,12 @@ func RequestAndExtractWithPartial(
 	startedAt := time.Now()
 
 	go func() {
-		done <- transport.Stream(ctx, req, collector, progressCh)
+		redacted := newCredentialWriter(collector, opts.APIKey)
+		err := transport.Stream(ctx, req, redacted, progressCh)
+		if flushErr := redacted.Flush(); err == nil {
+			err = flushErr
+		}
+		done <- err
 		close(progressCh)
 	}()
 
@@ -89,7 +95,7 @@ loop:
 				// Channel closed before done signal — drain.
 				continue
 			}
-			lastStage = stage
+			lastStage = redactCredential(stage, opts.APIKey)
 			if onProgress != nil {
 				elapsed := int(time.Since(startedAt).Seconds())
 				onProgress(lastStage, elapsed, collector.bytesReceived())
@@ -145,7 +151,12 @@ func RequestAndExtractWithRetriesAndPartial(
 	onLog func(string),
 	onProgress func(stage string, elapsed int, bytes int64),
 	onPartial func(PartialImage),
-) (ImageResult, string, error) {
+) (result ImageResult, rawPath string, returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, opts.APIKey) }()
+	if onLog != nil {
+		original := onLog
+		onLog = func(message string) { original(redactCredential(message, opts.APIKey)) }
+	}
 	if opts.APIMode == APIModeImages {
 		return imagesAPIWithRetries(ctx, opts, outputDir, timestamp, onLog, onProgress, onPartial)
 	}
@@ -159,7 +170,12 @@ func RequestAndExtractWithRetriesAndPartialInMemory(
 	onLog func(string),
 	onProgress func(stage string, elapsed int, bytes int64),
 	onPartial func(PartialImage),
-) (ImageResult, string, error) {
+) (result ImageResult, raw string, returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, opts.APIKey) }()
+	if onLog != nil {
+		original := onLog
+		onLog = func(message string) { original(redactCredential(message, opts.APIKey)) }
+	}
 	if opts.APIMode == APIModeImages {
 		return imagesAPIWithRetriesInMemory(ctx, opts, onLog, onProgress, onPartial)
 	}

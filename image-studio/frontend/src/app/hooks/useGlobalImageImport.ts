@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { HistoryItem } from "../../types/domain";
 import { INTERNAL_HISTORY_ITEM_MIME, readInternalHistoryItemDragData } from "../../lib/dragExport.ts";
+import { hasDesktopSettingsHost } from "../../platform/runtime/desktop";
+import { EventsOn } from "../../platform/runtime/host";
+import { useStudioStore } from "../../state/studioStore";
+import { acceptDesktopDroppedImages, type DesktopDroppedImages } from "./desktopDrop";
 
 function hasTransferType(types: readonly string[] | DOMStringList | undefined, expected: string): boolean {
   if (!types) return false;
@@ -15,6 +19,22 @@ export function useGlobalImageImport(
 
   useEffect(() => {
     let depth = 0;
+    const nativeDesktop = hasDesktopSettingsHost();
+    // Wails' own target highlighting also covers native macOS/Linux drag events.
+    if (nativeDesktop) document.documentElement.setAttribute("data-file-drop-target", "");
+    const nativeHover = nativeDesktop ? new MutationObserver(() => {
+      setDragHover(document.documentElement.classList.contains("file-drop-target-active"));
+    }) : null;
+    nativeHover?.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    let nativeImports = Promise.resolve();
+    const stopNativeDrop = nativeDesktop ? EventsOn("desktop-images-dropped", (result: DesktopDroppedImages) => {
+      depth = 0;
+      setDragHover(false);
+      nativeImports = nativeImports.then(() => acceptDesktopDroppedImages(result,
+        (image, name, size) => useStudioStore.getState().acceptImportedImage(image, name, size),
+        (errorMessage) => useStudioStore.setState({ errorMessage, errorCanRetry: false, errorRawPath: null }),
+      ));
+    }) : () => {};
 
     const onDragEnter = (event: DragEvent) => {
       const types = event.dataTransfer?.types;
@@ -57,6 +77,10 @@ export function useGlobalImageImport(
         return;
       }
 
+      // Wails resolves native paths, including Windows drops which also reach
+      // this DOM listener. Importing their File objects here would duplicate it.
+      if (nativeDesktop) return;
+
       const files = event.dataTransfer?.files;
       if (!files?.length) return;
 
@@ -91,6 +115,9 @@ export function useGlobalImageImport(
     document.addEventListener("paste", onPaste);
 
     return () => {
+      stopNativeDrop();
+      nativeHover?.disconnect();
+      if (nativeDesktop) document.documentElement.removeAttribute("data-file-drop-target");
       window.removeEventListener("dragenter", onDragEnter);
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("dragleave", onDragLeave);

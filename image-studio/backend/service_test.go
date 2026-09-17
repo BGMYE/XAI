@@ -8,7 +8,7 @@ import (
 
 func TestStartJobRejectsWhenConcurrencyLimitReached(t *testing.T) {
 	svc := NewService()
-	svc.Startup(context.Background())
+	StartDesktopService(svc, context.Background())
 	svc.jobs["existing"] = &job{apiMode: "responses", done: make(chan struct{})}
 	svc.runningByAPIMode["responses"] = 1
 
@@ -28,7 +28,7 @@ func TestStartJobRejectsWhenConcurrencyLimitReached(t *testing.T) {
 
 func TestStartJobConcurrencyLimitIsPerAPIMode(t *testing.T) {
 	svc := NewService()
-	svc.Startup(context.Background())
+	StartDesktopService(svc, context.Background())
 	svc.runningByAPIMode["responses"] = 1
 
 	if !svc.canStartJobLocked("images", 1) {
@@ -38,7 +38,7 @@ func TestStartJobConcurrencyLimitIsPerAPIMode(t *testing.T) {
 
 func TestStartJobConcurrencyLimitZeroIsUnlimited(t *testing.T) {
 	svc := NewService()
-	svc.Startup(context.Background())
+	StartDesktopService(svc, context.Background())
 	svc.runningByAPIMode["responses"] = 1
 
 	if !svc.canStartJobLocked("responses", 0) {

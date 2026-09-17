@@ -19,6 +19,9 @@ import {
 import { cleanBaseURL } from "../lib/security";
 import { normalizeConcurrencyLimit } from "./workspaceRuntime";
 import { persistActiveProfileId, persistProfiles } from "./studioStore.shared";
+import { hasDesktopSettingsHost, invokeDesktopSettings } from "../platform/runtime/desktop";
+import type { SettingsSnapshot } from "../components/desktop-settings/settingsModel";
+import { applyDesktopSettingsSnapshot } from "./desktopSettingsSync";
 
 type StateAdapter = {
   getState: () => StudioState;
@@ -26,6 +29,12 @@ type StateAdapter = {
 };
 
 export function createProfileActions(store: StateAdapter) {
+  async function snapshot() { return invokeDesktopSettings<SettingsSnapshot>("GetSnapshot"); }
+  async function commit(method: string, ...args: unknown[]) {
+    const next = await invokeDesktopSettings<SettingsSnapshot>(method, ...args);
+    await applyDesktopSettingsSnapshot(store, next);
+    return next;
+  }
   return {
     async createProfile(input: {
       name?: string;
@@ -64,6 +73,14 @@ export function createProfileActions(store: StateAdapter) {
         fallbackProfileId: undefined,
         createdAt: Date.now(),
       };
+      if (hasDesktopSettingsHost()) {
+        try {
+          await commit("SaveProfile", { expectedRevision: (await snapshot()).revision, profile,
+            credential: input.apiKey?.trim() ? { action: "replace", value: input.apiKey } : { action: "keep" },
+            setActive: input.setActive ?? true });
+          return id;
+        } catch { store.getState().pushToast("配置未能保存，请重新打开设置后重试", "error"); return ""; }
+      }
       if ((input.apiKey ?? "").trim()) {
         try { await SetStoredAPIKey(keyringUserFor(id), input.apiKey!.trim()); }
         catch {
@@ -85,6 +102,17 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async updateProfile(id: string, patch: Partial<Omit<UpstreamProfile, "id" | "createdAt">> & { apiKey?: string }) {
+      if (hasDesktopSettingsHost()) {
+        try {
+          const current = await snapshot();
+          const existing = current.profiles.find((profile) => profile.id === id);
+          if (!existing) return false;
+          const { apiKey, ...fields } = patch;
+          await commit("SaveProfile", { expectedRevision: current.revision, profile: { ...existing, ...fields },
+            credential: apiKey === undefined ? { action: "keep" } : apiKey.trim() ? { action: "replace", value: apiKey } : { action: "clear" } });
+          return true;
+        } catch { store.getState().pushToast("配置未能保存，请重新打开设置后重试", "error"); return false; }
+      }
       const list = store.getState().profiles;
       const index = list.findIndex((profile) => profile.id === id);
       if (index < 0) return false;
@@ -144,6 +172,10 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async deleteProfile(id: string) {
+      if (hasDesktopSettingsHost()) {
+        await commit("DeleteProfile", (await snapshot()).revision, id);
+        return;
+      }
       const list = store.getState().profiles;
       const index = list.findIndex((profile) => profile.id === id);
       if (index < 0) return;
@@ -183,6 +215,11 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async duplicateProfile(id: string) {
+      if (hasDesktopSettingsHost()) {
+        const before = await snapshot();
+        const next = await commit("DuplicateProfile", before.revision, id);
+        return next.profiles.find((profile) => !before.profiles.some((old) => old.id === profile.id))?.id ?? null;
+      }
       const current = store.getState().profiles.find((profile) => profile.id === id);
       if (!current) return null;
       const cloned = cloneProfile(current);
@@ -202,6 +239,10 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async setActiveProfile(id: string) {
+      if (hasDesktopSettingsHost()) {
+        await commit("SetProfileRole", (await snapshot()).revision, "generation", id);
+        return;
+      }
       const profile = store.getState().profiles.find((p) => p.id === id);
       if (!profile) return;
       persistActiveProfileId(id);
@@ -225,6 +266,10 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async setAIProfile(id: string) {
+      if (hasDesktopSettingsHost()) {
+        try { await commit("SetProfileRole", (await snapshot()).revision, "assistant", id); return true; }
+        catch { return false; }
+      }
       const profile = store.getState().profiles.find((item) => item.id === id);
       if (!profile || profile.apiMode !== "responses") return false;
       persistAIProfileId(id);

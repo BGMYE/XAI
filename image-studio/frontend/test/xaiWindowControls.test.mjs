@@ -22,7 +22,7 @@ loader.deregister();
 
 const realWindow = globalThis.window;
 const cases = [
-  { color: "red", label: "关闭窗口", method: "Quit" },
+  { color: "red", label: "关闭窗口", method: "WindowClose" },
   { color: "yellow", label: "最小化窗口", method: "WindowMinimise" },
   { color: "green", label: "最大化或还原窗口", method: "WindowToggleMaximise" },
 ];

@@ -4,9 +4,10 @@
 
 ## 环境要求
 
-- Go 1.25.x。当前 `go.mod` 使用 `go 1.25.5` 与 `toolchain go1.26.3`。
-- Node.js 20 或更新版本。
-- Wails CLI v2.12.0。非 macOS release workflow 使用 `go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0`。
+- Go 1.26.3。当前 `go.mod` 使用 `go 1.25.5` 与 `toolchain go1.26.3`。
+- Node.js 24 LTS。测试直接运行 TypeScript，Node.js 20 不受支持。
+- Wails 3 固定为 `v3.0.0-beta.23`，前端 runtime 使用相同版本。Windows 资源编译需要 `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.23`。
+- macOS 12 或更新版本及 Xcode Command Line Tools；Linux 使用 Ubuntu 24.04、GTK 4 与 WebKitGTK 6.0。
 - Android 构建需要 JDK 17、Android SDK 34、Build Tools 34.0.0、Gradle 8.7。
 
 ## 克隆源码
@@ -21,17 +22,16 @@ cd XAI
 ## 桌面开发模式
 
 ```bash
-cd image-studio
-wails dev
+cd image-studio/frontend
+npm ci
+npm run build
+cd ..
+go run .
 ```
 
-`image-studio/wails.json` 当前会执行：
+`go run .` 使用已构建的前端资源；修改前端后重新执行 `npm run build`。需要前端热更新时使用下方独立预览命令。前端脚本按宿主平台选择 `macos` / `windows` / `linux`。
 
-- `frontend:install`: `npm ci`
-- `frontend:build`: `npm run build`
-- `frontend:dev:watcher`: `npm run dev`
-
-前端脚本会按宿主平台自动选择 `macos` / `windows` / `linux` 对应主题，不需要手动改环境变量。
+`image-studio/wails.json` 保留为版本及安装包元数据来源；Wails 3 的桌面入口与宿主配置位于 Go 源码，构建不再使用 Wails 2 CLI 或重新生成旧版 `wailsjs` 文件。
 
 ## 前端独立预览
 
@@ -72,17 +72,20 @@ bash scripts/package-local-macos-app.sh
 image-studio/build/bin/Image Studio.app
 ```
 
-脚本会分别构建 arm64 与 amd64，再用 `lipo` 合成 universal 二进制，并执行本地自签。
+脚本会分别构建 arm64 与 amd64，再用 `lipo` 合成 universal 二进制，并执行本地自签。最低系统为 macOS 12，应用 ID 保持 `top.gptcodex.imagestudio`；图标由系统 `sips` / `iconutil` 打包。
+
+早期本地打包版本使用过 `com.wails.image-studio`。启动时会将该旧标识下的 WebKit 数据迁移到 `top.gptcodex.imagestudio`，后续构建统一使用同一应用标识。
 
 ## Windows / Linux Wails 构建
 
-Wails v2 桌面端需要在目标平台原生构建。
+Linux 与 macOS 需要在目标平台原生构建。Windows 可在 Windows x64 / ARM64 runner 构建，脚本使用固定版本的 Wails 3 CLI 嵌入图标、版本资源和 DPI manifest，再执行 Go 生产构建。
 
 Windows：
 
 ```bash
-cd image-studio
-wails build -platform windows/amd64 -clean
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.23
+node scripts/build-desktop.mjs windows amd64
+# ARM64: node scripts/build-desktop.mjs windows arm64
 ```
 
 如果你要生成“用户直接解压双击 `exe` 也能运行”的 Windows 便携包，不要复用普通 release 的裸 `exe`。仓库提供了独立 workflow：
@@ -97,13 +100,12 @@ Linux Ubuntu 24.04 / Debian 新版本：
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+sudo apt-get install -y pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
 
-cd image-studio
-wails build -platform linux/amd64 -clean -tags webkit2_41
+node scripts/build-desktop.mjs linux amd64
 ```
 
-Ubuntu 22.04 系通常使用 `libwebkit2gtk-4.0-dev`，构建时不加 `webkit2_41` tag。
+Linux ARM64 在对应架构的 Ubuntu 24.04 上执行 `node scripts/build-desktop.mjs linux arm64`。当前桌面包不使用 GTK 3 / WebKitGTK 4.x。
 
 ## Windows / Linux Gio 测试客户端
 
@@ -417,7 +419,7 @@ worker 端口等环境指纹，并列出每条 parity check 的通过/失败情�
 
 当前发布链路在 `.github/workflows/release.yml`：
 
-- 并行构建 Windows、macOS、Linux Wails 桌面产物。
+- 并行构建 Windows x64/ARM64、macOS universal、Linux x64/ARM64 Wails 3 桌面产物。常规 PR 检查也会构建这五个桌面目标；macOS universal 在平台内核验证链完成，其余由桌面宿主矩阵完成。
 - Windows 额外产出单个自适应架构的 NSIS installer `image-studio-<version>-windows-installer.exe`，内部同时包含 amd64 与 arm64 二进制，供正式安装分发或 Microsoft Store Win32 提交使用。
 - Windows 额外产出 `image-studio-<version>-windows-x64.msix`、`image-studio-<version>-windows-arm64.msix` 与 `image-studio-<version>-windows.msixbundle`，供 Microsoft Store / 企业分发使用。
 - 单独构建一个 Android release APK。
@@ -485,6 +487,8 @@ MSIX / MSIXBundle 打包内置了当前 Microsoft Store 产品 `9P9DTWG1G93N` �
 - 面向 Microsoft Store 提交时可以保持未签名，由商店在提交后重新签名；如果你要本地侧载测试，则还需要额外签一个测试证书。
 
 平台内核验证 workflow：
+
+验证包含 Windows x64 / ARM64、Ubuntu 24.04 x64 / ARM64 的原生构建、macOS universal 与 Android 回归，以及独立 Chromium 桌面交互测试。桌面交互报告和截图保存在 `desktop-interaction-results` artifact。
 
 - `.github/workflows/verify-platform-kernel.yml`
 - `.github/workflows/live-verify-platform-kernel.yml`

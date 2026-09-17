@@ -52,12 +52,12 @@ jobs:
         include:
           - id: windows-amd64-portable-fixed-webview
             runner: windows-latest
-            wails_args: -platform windows/amd64 -clean
+            goarch: amd64
             portable_arch: x64
             artifact_suffix: windows-amd64-portable-fixed-webview.zip
           - id: windows-arm64-portable-fixed-webview
             runner: windows-11-arm
-            wails_args: -platform windows/arm64 -clean
+            goarch: arm64
             portable_arch: arm64
             artifact_suffix: windows-arm64-portable-fixed-webview.zip
 
@@ -68,7 +68,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.3"
           check-latest: true
           cache-dependency-path: image-studio/go.sum
 
@@ -91,10 +91,10 @@ jobs:
         shell: bash
         run: npm ci
 
-      - name: Install Wails CLI
+      - name: Install Wails 3 resource compiler
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.23
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build portable exe
@@ -103,8 +103,7 @@ jobs:
         env:
           VITE_APP_VERSION: ${{ needs.prepare-version.outputs.app_version }}
         run: |
-          wails build ${{ matrix.wails_args }} \
-            -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
+          node ../scripts/build-desktop.mjs windows "${{ matrix.goarch }}"
 
       - name: Build portable fixed-webview zip
         id: package

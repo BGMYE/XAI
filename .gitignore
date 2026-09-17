@@ -69,3 +69,7 @@ gio-client/image-studio-gio
 # Frontend (wails-generated hash files)
 package-lock.json.md5
 package.json.md5
+# Local desktop interaction reports (CI uploads these as artifacts).
+image-studio/frontend/test-results/
+image-studio/frontend/settings-test-results/
+image-studio/frontend/playwright-report/

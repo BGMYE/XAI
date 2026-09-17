@@ -25,6 +25,10 @@ func MigrateMacWebkitDataDir() error {
 }
 
 func migrateMacWebkitDataDirs(dst string, legacyPaths []string) error {
+	// An isolated backend must never relocate the user's normal WebKit profile.
+	if isolatedDataRoot() != "" {
+		return nil
+	}
 	dst = strings.TrimSpace(dst)
 	if dst == "" || len(legacyPaths) == 0 {
 		return nil

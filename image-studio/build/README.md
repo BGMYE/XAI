@@ -1,38 +1,12 @@
-# Build Directory
+# Desktop build resources
 
-The build directory is used to house all the build files and assets for your application. 
+The desktop host uses Wails `v3.0.0-beta.23`. Build commands and platform dependencies are documented in [docs/build.md](../../docs/build.md).
 
-The structure is:
+- `bin/` contains generated executables and app bundles and is ignored by Git.
+- `appicon.png` is the macOS icon source. `scripts/package-local-macos-app.sh` uses the system `sips` and `iconutil` tools to produce a universal macOS 12+ app with bundle ID `top.gptcodex.imagestudio`.
+- `darwin/Info.plist` and `Info.dev.plist` record the macOS metadata templates. The packaging script renders equivalent metadata using the version source in `wails.json`.
+- `windows/icon.ico`, `info.json`, and `wails.exe.manifest` supply the executable icon, version information, and per-monitor DPI manifest. `scripts/build-desktop.mjs` renders the metadata in a temporary directory, invokes the pinned `wails3 generate syso` command, builds with Go, and removes its generated resource object.
+- `windows/installer/` remains the standalone NSIS installer source used by the release workflow. It accepts explicit product and architecture definitions; it does not invoke Wails 2.
+- `windows/msix/` contains the existing Microsoft Store package template.
 
-* bin - Output directory
-* darwin - macOS specific files
-* windows - Windows specific files
-
-## Mac
-
-The `darwin` directory holds files specific to Mac builds.
-These may be customised and used as part of the build. In this repository they
-are consumed by both:
-
-- `wails build` / `wails dev` when you are using the upstream Wails workflow
-- `scripts/package-local-macos-app.sh`, which is the repository's preferred
-  local macOS packaging path and produces the universal `Image Studio.app`
-
-The directory contains the following files:
-
-- `Info.plist` - the main plist template for macOS release builds
-- `Info.dev.plist` - same as the main plist file but used when building using `wails dev`
-
-## Windows
-
-The `windows` directory contains the manifest and rc files used when building with `wails build`.
-These may be customised for your application. To return these files to the default state, simply delete them and
-build with `wails build`.
-
-- `icon.ico` - The icon used for the application. This is used when building using `wails build`. If you wish to
-  use a different icon, simply replace this file with your own. If it is missing, a new `icon.ico` file
-  will be created using the `appicon.png` file in the build directory.
-- `installer/*` - The files used to create the Windows installer. These are used when building using `wails build`.
-- `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
-  as well as the application itself (right click the exe -> properties -> details)
-- `wails.exe.manifest` - The main application manifest file.
+Application identity, installation paths, WebView data paths, and credential storage are retained across the host migration.

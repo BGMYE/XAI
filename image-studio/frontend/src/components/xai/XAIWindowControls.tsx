@@ -4,7 +4,7 @@ import { getRuntime } from "../../platform/runtime/hostBindings.ts";
 import "./xai-window-controls.css";
 
 const controls = [
-  { action: "Quit", label: "关闭窗口", color: "red", Icon: X },
+  { action: "WindowClose", label: "关闭窗口", color: "red", Icon: X },
   { action: "WindowMinimise", label: "最小化窗口", color: "yellow", Icon: Minus },
   { action: "WindowToggleMaximise", label: "最大化或还原窗口", color: "green", Icon: Maximize2 },
 ] as const;

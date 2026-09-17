@@ -2,16 +2,14 @@ package main
 
 import (
 	"embed"
-	"net/http"
-	"runtime"
-
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 	"image-studio/backend"
-
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	wailsmac "github.com/wailsapp/wails/v2/pkg/options/mac"
-	wailswindows "github.com/wailsapp/wails/v2/pkg/options/windows"
+	bridge "image-studio/internal/desktopruntime"
+	"io/fs"
+	"log/slog"
+	"os"
+	"runtime"
 )
 
 //go:embed all:frontend/dist
@@ -19,94 +17,73 @@ var assets embed.FS
 
 func main() {
 	svc := backend.NewService()
-	appOptions := &options.App{
-		Title:     "Image Studio",
-		Width:     1440,
-		Height:    980,
-		MinWidth:  1100,
-		MinHeight: 780,
-		AssetServer: &assetserver.Options{
-			Assets:     assets,
-			Handler:    svc.MediaHandler(http.NotFoundHandler()),
-			Middleware: svc.MediaHandler,
-		},
-		BackgroundColour: &options.RGBA{R: 18, G: 20, B: 26, A: 1},
-		OnStartup:        svc.Startup,
-		OnShutdown:       svc.Shutdown,
-		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "top.gptcodex.imagestudio",
-			OnSecondInstanceLaunch: func(secondInstanceData options.SecondInstanceData) {
-				svc.HandlePromptImportArgs(secondInstanceData.Args)
-			},
-		},
-		Bind: []interface{}{
-			svc,
-		},
+	settings := backend.NewDesktopSettingsService(svc)
+	host := &DesktopHost{}
+	frontend, err := fs.Sub(assets, "frontend/dist")
+	if err != nil {
+		panic(err)
 	}
-
+	options := application.Options{
+		Name: "Image Studio", Description: "XAI 图像工作室", LogLevel: slog.LevelError,
+		Services:       []application.Service{application.NewService(svc), application.NewService(settings), application.NewService(host)},
+		Assets:         application.AssetOptions{Handler: application.BundledAssetFileServer(frontend), Middleware: svc.MediaHandler, DisableLogging: true},
+		SingleInstance: &application.SingleInstanceOptions{UniqueID: "top.gptcodex.imagestudio", OnSecondInstanceLaunch: func(data application.SecondInstanceData) { svc.HandlePromptImportArgs(data.Args); host.ShowMain() }},
+		OnShutdown:     func() { backend.ShutdownDesktopService(svc, nil) },
+		ShouldQuit:     host.canQuit,
+	}
 	if runtime.GOOS == "darwin" {
 		if err := backend.MigrateMacWebkitDataDir(); err != nil {
-			println("Warning:", err.Error())
-		}
-		appOptions.Mac = &wailsmac.Options{
-			Appearance:           wailsmac.DefaultAppearance,
-			TitleBar:             wailsmac.TitleBarHiddenInset(),
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
-			OnUrlOpen:            svc.HandlePromptImportURL,
+			slog.Warn("WebKit data migration", "error", err)
 		}
 	}
 	if runtime.GOOS == "windows" {
-		appOptions.Frameless = true
-		webviewUserDataPath, err := backend.WindowsWebviewUserDataPath()
+		dataPath, err := backend.WindowsWebviewUserDataPath()
 		if err != nil {
-			println("Error:", err.Error())
-			return
+			panic(err)
 		}
-		legacyWebviewUserDataPaths, err := backend.WindowsLegacyWebviewUserDataPaths()
+		legacyPaths, err := backend.WindowsLegacyWebviewUserDataPaths()
 		if err != nil {
-			println("Error:", err.Error())
-			return
+			panic(err)
 		}
-		if err := backend.MigrateWindowsWebviewDataDirs(webviewUserDataPath, legacyWebviewUserDataPaths); err != nil {
-			println("Warning:", err.Error())
+		if err := backend.MigrateWindowsWebviewDataDirs(dataPath, legacyPaths); err != nil {
+			slog.Warn("WebView data migration", "error", err)
 		}
-		fixedWebviewBrowserPath, err := backend.WindowsPortableWebviewBrowserPath()
+		browserPath, err := backend.WindowsPortableWebviewBrowserPath()
 		if err != nil {
-			println("Warning:", err.Error())
+			slog.Warn("WebView runtime", "error", err)
 		}
-		if fixedWebviewBrowserPath != "" {
-			if err := backend.EnsureWindowsFixedWebviewRuntimePermissions(fixedWebviewBrowserPath); err != nil {
-				println("Warning:", err.Error())
+		if browserPath != "" {
+			if err := backend.EnsureWindowsFixedWebviewRuntimePermissions(browserPath); err != nil {
+				slog.Warn("WebView permissions", "error", err)
 			}
 		}
-		appOptions.Windows = &wailswindows.Options{
-			Theme:                wailswindows.SystemDefault,
-			BackdropType:         wailswindows.Mica,
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  true,
-			WebviewBrowserPath:   fixedWebviewBrowserPath,
-			WebviewUserDataPath:  webviewUserDataPath,
-			CustomTheme: &wailswindows.ThemeSettings{
-				DarkModeTitleBar:           wailswindows.RGB(32, 32, 32),
-				DarkModeTitleBarInactive:   wailswindows.RGB(38, 38, 38),
-				DarkModeTitleText:          wailswindows.RGB(245, 245, 245),
-				DarkModeTitleTextInactive:  wailswindows.RGB(200, 200, 200),
-				DarkModeBorder:             wailswindows.RGB(54, 54, 54),
-				DarkModeBorderInactive:     wailswindows.RGB(45, 45, 45),
-				LightModeTitleBar:          wailswindows.RGB(243, 243, 243),
-				LightModeTitleBarInactive:  wailswindows.RGB(237, 237, 237),
-				LightModeTitleText:         wailswindows.RGB(31, 31, 31),
-				LightModeTitleTextInactive: wailswindows.RGB(96, 96, 96),
-				LightModeBorder:            wailswindows.RGB(219, 219, 219),
-				LightModeBorderInactive:    wailswindows.RGB(226, 226, 226),
-			},
-		}
+		options.Windows = application.WindowsOptions{WebviewUserDataPath: dataPath, WebviewBrowserPath: browserPath}
 	}
+	app := application.New(options)
+	host.app = app
+	host.main = app.Window.NewWithOptions(windowOptions("main", "Image Studio", "/", 1440, 980, 960, 640))
+	host.main.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		result := backend.ImportDesktopDroppedImages(event.Context().DroppedFiles())
+		dispatchDesktopWindowEvent(host.main, "desktop-images-dropped", result)
+	})
+	host.main.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) { event.Cancel(); app.Quit() })
+	backend.ConfigureDesktopSettingsEvents(settings, func(revision int64) {
+		app.Event.Emit("desktop-settings-changed", map[string]int64{"revision": revision})
+	})
+	backend.StartDesktopService(svc, bridge.WithDriver(app.Context(), host))
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) { svc.HandlePromptImportArgs(event.Context().OpenedFiles()) })
+	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) { svc.HandlePromptImportURL(event.Context().URL()) })
+	host.installMenu()
+	if err := app.Run(); err != nil {
+		slog.Error("Desktop startup failed", "error", err)
+		os.Exit(1)
+	}
+}
 
-	err := wails.Run(appOptions)
-
-	if err != nil {
-		println("Error:", err.Error())
+func windowOptions(name, title, url string, width, height, minWidth, minHeight int) application.WebviewWindowOptions {
+	return application.WebviewWindowOptions{Name: name, Title: title, URL: desktopOriginURL(url), Width: width, Height: height, MinWidth: minWidth, MinHeight: minHeight,
+		Frameless: runtime.GOOS != "darwin", EnableFileDrop: name == "main", BackgroundColour: application.NewRGB(245, 245, 247),
+		Mac:     application.MacWindow{TitleBar: application.MacTitleBarHiddenInset, Appearance: application.NSAppearanceNameAqua, Backdrop: application.MacBackdropNormal},
+		Windows: application.WindowsWindow{Theme: application.Light, BackdropType: application.None},
 	}
 }
