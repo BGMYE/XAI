@@ -1,180 +1,146 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ChevronDown, ChevronRight, CircleHelp, Film, FolderOpen,
-  Gauge, Image as ImageIcon, MoreHorizontal, Plus, Settings, Sparkles,
-  SlidersHorizontal, Sparkles as Stars, Wand2, X,
-} from "lucide-react";
+import { BookOpen, ChevronRight, Film, FolderOpen, Image as ImageIcon, MoreHorizontal, PanelLeft, Plus, Settings, SlidersHorizontal, Sparkles, Square, Wand2, X } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
+import { usePlatform } from "../../platform/context";
 import { VideoGenerationPanel } from "../panel/VideoGenerationPanel";
+import { PromptTemplateManagerModal } from "../panel/PromptTemplateManagerModal";
 import { XAIProPanels } from "./XAIProPanels";
 import { handleWindowTitleBarDoubleClick, XAIWindowControls } from "./XAIWindowControls";
 import { availableQualityOptions, normalizeQualitySelection } from "../panel/panelOptions";
 import { buildAspectSizeSelection, deriveAspectPreset, deriveResolutionPreset, listAspectPresetOptions, normalizeSizeSelection, type AspectPreset } from "../panel/sizeCapabilities";
-import { historyPreviewSrc, useBlobURL } from "../../lib/images";
+import { useBlobURL } from "../../lib/images";
 import type { HistoryItem, SourceImage } from "../../types/domain";
 import { XAIProgress } from "./XAIProgress";
+import { ContextMenu, type MenuItem } from "../common/ContextMenu";
+import { Modal } from "../common/Modal";
+import { DeleteResultDialog, DesktopLibrary, DesktopResultCard, DesktopResultDetail } from "./DesktopLibrary";
+import { EmptyState, IconButton, SegmentedControl, StudioButton } from "./DesktopPrimitives";
 import "./xai-theme.css";
-import "../../styles/_xai-typography.css";
 
 type StudioView = "simple" | "pro";
 type MediaTab = "image" | "video";
-
-function ModeSwitch({ view, setView }: { view: StudioView; setView: (v: StudioView) => void }) {
-  return <div className="xai-mode-switch no-drag" role="tablist">
-    <button className={view === "simple" ? "active" : ""} onClick={() => setView("simple")}>简洁模式</button>
-    <button className={view === "pro" ? "active" : ""} onClick={() => setView("pro")}>专业模式</button>
-  </div>;
-}
-
-function SideNav({ active = "创作", onCreate, onHistory, onSettings, onHint }: { active?: string; onCreate?: () => void; onHistory?: () => void; onSettings?: () => void; onHint?: (label: string) => void }) {
-  const items = [[Wand2, "创作"], [FolderOpen, "作品"], [Stars, "灵感"], [CircleHelp, "社区"]] as const;
-  const handle = (label: string) => label === "创作" ? onCreate?.() : label === "作品" ? onHistory?.() : onHint?.(label);
-  return <aside className="xai-side-nav">{items.map(([Icon, label]) => <button key={label} className={active === label ? "active" : ""} onClick={() => handle(label)}><Icon size={18} /><span>{label}</span></button>)}<div className="xai-nav-spacer" /><button onClick={onSettings}><Settings size={18} /><span>设置</span></button></aside>;
-}
-
-function ImageDropzone({ sources, onAdd, onRemove }: { sources: SourceImage[]; onAdd: () => void; onRemove: (index: number) => void }) {
-  return <div className="xai-reference">
-    <div className="xai-section-label"><span>上传参考图</span><small>（可选）</small></div>
-    <div className="xai-reference-row"><button className="xai-upload" onClick={onAdd}><Plus size={22} /><span>添加图片</span></button>{sources.map((source, i) => <ReferenceThumbnail source={source} index={i} key={`${source.path}-${i}`} onRemove={() => onRemove(i)} />)}</div>
-  </div>;
-}
+const modeOptions = [{ value: "simple", label: "简洁模式" }, { value: "pro", label: "专业模式" }] as const;
 
 function ReferenceThumbnail({ source, index, onRemove }: { source: SourceImage; index: number; onRemove: () => void }) {
   const blobURL = useBlobURL(source.imageBlob, source.imageB64);
-  return <div className="xai-thumb"><img src={source.previewUrl || blobURL || ""} alt={source.name || "参考图"} /><button onClick={onRemove} aria-label={`删除参考图 ${index + 1}`}><X size={12} /></button></div>;
+  return <div className="studio-reference"><img src={source.previewUrl || blobURL || ""} alt={source.name || `参考图 ${index + 1}`} /><IconButton label={`删除参考图 ${index + 1}`} onClick={onRemove}><X size={14} /></IconButton></div>;
 }
 
-function AspectRatioPicker({
-  value,
-  options,
-  onChange,
-}: {
-  value: AspectPreset;
-  options: ReturnType<typeof listAspectPresetOptions>;
-  onChange: (value: AspectPreset) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [open]);
-
-  if (!selected) return null;
-  return <div
-    className={`xai-select xai-aspect-picker${open ? " is-open" : ""}`}
-    ref={rootRef}
-    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
-  >
-    <span aria-hidden="true">▣</span>
-    <button
-      type="button"
-      className="xai-aspect-trigger"
-      aria-haspopup="listbox"
-      aria-expanded={open}
-      aria-label="图像比例"
-      onClick={() => setOpen((current) => !current)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-        if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); }
-      }}
-    >{selected.label}</button>
-    <ChevronDown size={14} aria-hidden="true" />
-    {open && <div className="xai-aspect-menu" role="listbox" aria-label="可选图像比例">
-      {options.map((option) => <button
-        type="button"
-        role="option"
-        aria-selected={option.value === value}
-        className={`xai-aspect-option${option.value === value ? " active" : ""}`}
-        key={option.value}
-        onClick={() => { onChange(option.value); setOpen(false); }}
-      >
-        <span className={`xai-aspect-shape${option.auto ? " auto" : ""}`} style={{ aspectRatio: `${option.w} / ${option.h}` }} aria-hidden="true" />
-        <span>{option.label}</span>
-      </button>)}
-    </div>}
-  </div>;
-}
-
-function ResultCard({ item, onDetail, onRegenerate, onDelete }: { item: HistoryItem; onDetail: () => void; onRegenerate: () => void; onDelete: () => void }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const blobURL = useBlobURL(item.previewBlob ?? item.imageBlob, item.imageB64);
-  const title = item.prompt?.slice(0, 20) || "生成结果";
-  return <article className="xai-result-card" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") setMenuOpen(false); }}>
-    <button className="xai-result-image" onClick={onDetail} aria-label={`查看结果：${title}`}><img src={historyPreviewSrc(item, blobURL)} alt={title} /></button>
-    <div className="xai-result-meta"><div><b>{title}</b><small>{item.size === "auto" ? "自适应尺寸" : item.size.replace("x", " × ")}</small></div><div className="xai-result-actions"><button onClick={() => setMenuOpen((open) => !open)} aria-label="结果操作" aria-expanded={menuOpen}><MoreHorizontal size={16} /></button>{menuOpen && <div className="xai-result-menu"><button onClick={() => { setMenuOpen(false); onDetail(); }}>查看详情</button><button onClick={() => { setMenuOpen(false); onRegenerate(); }}>重新生成</button><button onClick={() => { setMenuOpen(false); onDelete(); }}>删除</button></div>}</div></div>
-  </article>;
-}
-
-function SimpleWorkspace({ tab, setTab, setView }: { tab: MediaTab; setTab: (t: MediaTab) => void; setView: (v: StudioView) => void }) {
+function SimpleWorkspace({ onLibrary, onSettings }: { onLibrary: () => void; onSettings: () => void }) {
   const {
-    prompt, setField, submit, isRunning, jobsCompleted, jobsTotal, progress, sources, selectSourceImage, removeSource, history,
-    imageModelID, profiles, activeProfileId, setActiveProfile, size, batchCount, quality,
-    outputFormat, background, seed, apiMode, requestPolicy, customAspectRatios, errorMessage,
-    openHistoryTimeline, closeHistoryTimeline, openSettings, openResultDetail,
-    regenerateFromHistory, deleteHistoryItem, pushToast, apiKey, baseURL,
+    prompt, setField, submit, cancel, isRunning, jobsCompleted, jobsTotal, progress, sources, selectSourceImage, removeSource, history,
+    imageModelID, profiles, activeProfileId, setActiveProfile, size, batchCount, quality, outputFormat, background, seed,
+    apiMode, requestPolicy, customAspectRatios, errorMessage, openResultDetail, regenerateFromHistory, promptTemplates,
+    optimizePrompt, isOptimizingPrompt,
   } = useStudioStore();
-  const [filter, setFilter] = useState("全部");
+  const [tab, setTab] = useState<MediaTab>("image");
   const [parametersOpen, setParametersOpen] = useState(false);
-  const capabilityInput = { apiMode, requestPolicy, imageModelID };
-  const aspectOptions = listAspectPresetOptions(capabilityInput, customAspectRatios);
-  const aspect = deriveAspectPreset(normalizeSizeSelection(size, capabilityInput, customAspectRatios), customAspectRatios);
-  const qualityOptions = availableQualityOptions(imageModelID);
-  const cards = filter === "视频" ? [] : history.slice(0, 4);
-  const handleNavHint = (label: string) => pushToast(`${label}功能尚未开放，可继续使用创作与作品历史`, "info");
-  const returnToCreate = () => { closeHistoryTimeline(); setTab("image"); setView("simple"); };
-  return <div className="xai-window simple-window">
-    <div className="xai-window-bar drag-region" onDoubleClick={(event) => handleWindowTitleBarDoubleClick(event, () => pushToast("窗口控制请在桌面应用中使用。", "info"))}><XAIWindowControls onUnavailable={() => pushToast("窗口控制请在桌面应用中使用。", "info")} /><span className="xai-window-title">XAI</span><ModeSwitch view="simple" setView={setView} /><div className="xai-connected"><i />{apiKey && baseURL ? "已配置上游" : "待配置上游"}</div></div>
-    <div className="xai-window-body"><SideNav onCreate={returnToCreate} onHistory={openHistoryTimeline} onSettings={openSettings} onHint={handleNavHint} /><main className="xai-simple-main">
-      <div className="xai-media-tabs"><button className={tab === "image" ? "active" : ""} onClick={() => setTab("image")}><ImageIcon size={17} />图片</button><button className={tab === "video" ? "active" : ""} onClick={() => setTab("video")}><Film size={17} />视频</button></div>
-      {tab === "video" ? <VideoGenerationPanel /> : <section className="xai-compose-card">
-        <ImageDropzone sources={sources} onAdd={() => void selectSourceImage()} onRemove={removeSource} />
-        <textarea value={prompt} onChange={(e) => setField("prompt", e.target.value)} placeholder="描述你想要创作的内容…" maxLength={2000} aria-label="创作提示词" />
-        <div className="xai-count">{prompt.length}/2000</div>
-        <div className="xai-compose-footer">
-          <label className="xai-select"><Gauge size={15} /><select value={activeProfileId} onChange={(e) => void setActiveProfile(e.target.value)} aria-label="图像模型">
-            {!profiles.length && <option value="">{imageModelID.trim() || "选择模型"}</option>}
-            {profiles.map((profile) => {
-              const configuredModel = profile.imageModelID.trim() || (profile.id === activeProfileId ? imageModelID.trim() : "");
-              return <option key={profile.id} value={profile.id}>{configuredModel ? `${configuredModel} · ${profile.name}` : profile.name}</option>;
-            })}
-          </select><ChevronDown size={14} /></label>
-          <AspectRatioPicker value={aspect} options={aspectOptions} onChange={(nextAspect) => setField("size", buildAspectSizeSelection(nextAspect, deriveResolutionPreset(size), capabilityInput, customAspectRatios))} />
-          <label className="xai-select"><span>⌘</span><select value={batchCount} onChange={(e) => setField("batchCount", Number(e.target.value))} aria-label="生成张数">{Array.from(new Set([1, 2, 3, 4, batchCount])).sort((a, b) => a - b).map((count) => <option key={count} value={count}>{count}张</option>)}</select><ChevronDown size={14} /></label>
-          <button className="xai-round" onClick={() => setParametersOpen((open) => !open)} title="生成参数" aria-label="生成参数" aria-expanded={parametersOpen}><SlidersHorizontal size={16} /></button>
-          <button className="xai-generate" disabled={isRunning || !prompt.trim()} onClick={() => void submit()}><Sparkles size={17} />{isRunning ? "生成中…" : "生成"}</button>
+  const [deleting, setDeleting] = useState<HistoryItem | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const capability = { apiMode, requestPolicy, imageModelID };
+  const aspects = listAspectPresetOptions(capability, customAspectRatios);
+  const aspect = deriveAspectPreset(normalizeSizeSelection(size, capability, customAspectRatios), customAspectRatios);
+  const qualities = availableQualityOptions(imageModelID);
+  const activeProfile = profiles.find((entry) => entry.id === activeProfileId);
+  const modelChoices = profiles.flatMap((profile) => Array.from(new Set([profile.imageModelID, ...(profile.modelIDs ?? []), ...(profile.id === activeProfileId ? [imageModelID] : [])].filter(Boolean))).map((model) => ({ profile, model, value: JSON.stringify([profile.id, model]) })));
+  const selectModel = async (value: string) => {
+    const choice = modelChoices.find((entry) => entry.value === value);
+    if (!choice) return;
+    if (choice.profile.id !== activeProfileId) await setActiveProfile(choice.profile.id);
+    setField("imageModelID", choice.model);
+  };
+  const promptMenu = (button: HTMLButtonElement) => {
+    const rect = button.getBoundingClientRect();
+    setMenu({ x: rect.left, y: rect.bottom, items: promptTemplates.map((entry) => ({ label: entry.label, onClick: () => setField("prompt", entry.text) })) });
+  };
+  return <div className="studio-page"><div className="studio-compose">
+    <header className="studio-page-header"><div><h1>创作</h1><p>描述画面，或从参考图开始。</p></div><SegmentedControl label="创作类型" value={tab} onChange={setTab} options={[{ value: "image", label: "图片", icon: <ImageIcon size={16} /> }, { value: "video", label: "视频", icon: <Film size={16} /> }]} /></header>
+    <div className="studio-media-panel" hidden={tab !== "image"}>
+      <section aria-label="图像生成">
+        <div className="studio-compose-editor">
+          <div className="studio-prompt-heading"><label htmlFor="studio-prompt">提示词</label><div className="studio-secondary-actions"><StudioButton className="quiet" disabled={!prompt.trim() || isOptimizingPrompt} onClick={() => void optimizePrompt()}><Sparkles />{isOptimizingPrompt ? "正在优化…" : "优化提示词"}</StudioButton>{promptTemplates.length > 0 && <StudioButton className="quiet" onClick={(event) => promptMenu(event.currentTarget)}><BookOpen />使用模板</StudioButton>}</div></div>
+          <textarea id="studio-prompt" className="studio-prompt" value={prompt} onChange={(event) => setField("prompt", event.target.value)} placeholder="描述主体、构图、光线和风格…" maxLength={2000} />
+          <div className="studio-prompt-count">{prompt.length} / 2000</div>
+          <div className="studio-reference-row"><StudioButton onClick={() => void selectSourceImage()}><Plus />添加参考图</StudioButton>{sources.map((source, index) => <ReferenceThumbnail key={`${source.path}-${index}`} source={source} index={index} onRemove={() => removeSource(index)} />)}</div>
         </div>
-        <XAIProgress isRunning={isRunning} progress={progress} jobsCompleted={jobsCompleted} jobsTotal={jobsTotal} />
-        {parametersOpen && <div className="xai-parameters">
-          <label>生成质量<select value={normalizeQualitySelection(quality, imageModelID)} onChange={(e) => setField("quality", e.target.value as typeof quality)}>{qualityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-          <label>输出格式<select value={outputFormat} onChange={(e) => setField("outputFormat", e.target.value as typeof outputFormat)}>{["png", "jpeg", "webp"].map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label>
-          <label>背景<select value={background} onChange={(e) => setField("background", e.target.value as typeof background)}><option value="auto">自动</option><option value="opaque">不透明</option><option value="transparent">透明</option></select></label>
-          <label>随机种子<input type="number" min={0} value={seed} onChange={(e) => setField("seed", Math.max(0, Number(e.target.value) || 0))} /><small>0 表示随机</small></label>
+        <div className="studio-compose-controls">
+          <label className="studio-field studio-model-select">图像模型<select aria-label="图像模型" value={JSON.stringify([activeProfileId, imageModelID])} onChange={(event) => void selectModel(event.target.value)} disabled={!modelChoices.length}>{!modelChoices.length && <option value={JSON.stringify([activeProfileId, imageModelID])}>{imageModelID || "请先在设置中添加模型"}</option>}{modelChoices.map(({ profile, model, value }) => <option key={value} value={value}>{model}{profiles.length > 1 ? ` · ${profile.name}` : ""}</option>)}</select></label>
+          <label className="studio-field">图像比例<select aria-label="图像比例" value={aspect} onChange={(event) => setField("size", buildAspectSizeSelection(event.target.value as AspectPreset, deriveResolutionPreset(size), capability, customAspectRatios))}>{aspects.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label className="studio-field">生成张数<select aria-label="生成张数" value={batchCount} onChange={(event) => setField("batchCount", Number(event.target.value))}>{Array.from(new Set([1, 2, 3, 4, batchCount])).sort((a, b) => a - b).map((count) => <option key={count} value={count}>{count} 张</option>)}</select></label>
+          <StudioButton aria-expanded={parametersOpen} aria-controls="studio-generation-parameters" onClick={() => setParametersOpen((open) => !open)}><SlidersHorizontal />参数</StudioButton>
+        </div>
+        {parametersOpen && <div id="studio-generation-parameters" className="studio-parameter-grid">
+          <label className="studio-field">生成质量<select value={normalizeQualitySelection(quality, imageModelID)} onChange={(event) => setField("quality", event.target.value as typeof quality)}>{qualities.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label className="studio-field">输出格式<select value={outputFormat} onChange={(event) => setField("outputFormat", event.target.value as typeof outputFormat)}>{["png", "jpeg", "webp"].map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label>
+          <label className="studio-field">背景<select value={background} onChange={(event) => setField("background", event.target.value as typeof background)}><option value="auto">自动</option><option value="opaque">不透明</option><option value="transparent">透明</option></select></label>
+          <label className="studio-field">随机种子<input type="number" min={0} value={seed} onChange={(event) => setField("seed", Math.max(0, Number(event.target.value) || 0))} /><span>0 为随机生成</span></label>
         </div>}
-        {errorMessage && <p className="xai-request-error" role="alert">{errorMessage}</p>}
-      </section>}
-      <section className="xai-results"><div className="xai-results-head"><div><h2>创作结果</h2><p>每一次灵感，都值得被看见</p></div><button className="xai-link" onClick={openHistoryTimeline}>查看全部 <ChevronRight size={15} /></button></div>
-        <div className="xai-result-tabs">{["全部", "图片", "视频"].map((label) => <button key={label} className={filter === label ? "active" : ""} onClick={() => setFilter(label)}>{label}</button>)}</div>
-        <div className="xai-result-grid">{cards.map((item) => <ResultCard item={item} key={item.id} onDetail={() => void openResultDetail(item)} onRegenerate={() => void regenerateFromHistory(item)} onDelete={() => void deleteHistoryItem(item.id)} />)}</div>
-        {!cards.length && <p className="xai-empty-results">{filter === "视频" ? "视频结果可在视频生成面板中查看。" : "还没有创作结果，输入提示词开始生成。"}</p>}
+        <div className="studio-compose-actions"><StudioButton className="quiet" onClick={onSettings}><Settings />{activeProfile?.name || "配置上游"}</StudioButton>{isRunning ? <StudioButton onClick={cancel}><Square />停止生成</StudioButton> : <StudioButton primary disabled={!prompt.trim()} onClick={() => void submit()}><Sparkles />生成图片</StudioButton>}</div>
+        <XAIProgress isRunning={isRunning} progress={progress} jobsCompleted={jobsCompleted} jobsTotal={jobsTotal} />
+        {errorMessage && <p className="studio-inline-error" role="alert">{errorMessage}</p>}
       </section>
-    </main></div>
-  </div>;
+      <section className="studio-recent" aria-label="最近作品"><div className="studio-section-header"><h2>最近作品</h2><StudioButton className="quiet" onClick={onLibrary}>查看全部<ChevronRight /></StudioButton></div>
+        {history.length ? <div className="studio-result-grid">{history.slice(0, 4).map((item) => <DesktopResultCard key={item.id} item={item} onOpen={() => void openResultDetail(item)} onMenu={(x, y) => setMenu({ x, y, items: [{ label: "查看详情", onClick: () => void openResultDetail(item) }, { label: "重新生成", onClick: () => void regenerateFromHistory(item) }, { label: "删除作品", danger: true, separatorBefore: true, onClick: () => setDeleting(item) }] })} />)}</div> : <EmptyState title="你的作品会显示在这里">输入提示词，开始第一次创作。</EmptyState>}
+      </section>
+    </div>
+    <div className="studio-media-panel" hidden={tab !== "video"}><VideoGenerationPanel /></div>
+    {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+    <DeleteResultDialog item={deleting} onClose={() => setDeleting(null)} />
+  </div></div>;
 }
 
-function ProWorkspace({ setView, onOpenSettings }: { setView: (v: StudioView) => void; onOpenSettings: () => void }) {
-  const { openHistoryTimeline, pushToast, apiKey, baseURL } = useStudioStore();
-  return <div className="xai-window pro-window"><div className="xai-window-bar drag-region" onDoubleClick={(event) => handleWindowTitleBarDoubleClick(event, () => pushToast("窗口控制请在桌面应用中使用。", "info"))}><XAIWindowControls onUnavailable={() => pushToast("窗口控制请在桌面应用中使用。", "info")} /><span className="xai-window-title">XAI</span><ModeSwitch view="pro" setView={setView} /><div className="xai-connected"><i />{apiKey && baseURL ? "已配置" : "未配置"}</div></div><div className="xai-window-body"><SideNav onCreate={() => setView("simple")} onHistory={openHistoryTimeline} onSettings={onOpenSettings} onHint={(label) => pushToast(`${label}功能尚未开放，当前可继续使用创作与作品历史`, "info")} /><XAIProPanels /></div></div>;
-}
 export function XAIWorkspace({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const [view, setViewState] = useState<StudioView>(() => (localStorage.getItem("xai-ui-mode") as StudioView) || "simple");
-  const [tab, setTab] = useState<MediaTab>("image");
-  const setView = (next: StudioView) => { setViewState(next); localStorage.setItem("xai-ui-mode", next); };
-  return <div className="xai-app">{view === "simple" ? <SimpleWorkspace tab={tab} setTab={setTab} setView={setView} /> : <ProWorkspace setView={setView} onOpenSettings={onOpenSettings} />}</div>;
+  const { isMac } = usePlatform();
+  const { workspaces, activeWorkspaceId, newWorkspace, switchWorkspace, closeWorkspace, renameWorkspace, historyTimelineOpen, openHistoryTimeline, closeHistoryTimeline, resultDetail, closeResultDetail, pushToast } = useStudioStore();
+  const [view, setViewState] = useState<StudioView>(() => { try { return localStorage.getItem("xai-ui-mode") === "pro" ? "pro" : "simple"; } catch { return "simple"; } });
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [workspaceMenu, setWorkspaceMenu] = useState<{ x: number; y: number } | null>(null);
+  const renameInput = useRef<HTMLInputElement>(null);
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const setView = (next: StudioView) => { setViewState(next); closeHistoryTimeline(); closeResultDetail(); try { localStorage.setItem("xai-ui-mode", next); } catch { /* Preview storage can be disabled. */ } };
+  const showCreate = () => { closeHistoryTimeline(); closeResultDetail(); };
+  const showLibrary = () => { closeResultDetail(); openHistoryTimeline(); };
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const next = (event as CustomEvent<{ view: StudioView | "library" }>).detail?.view;
+      if (next === "library") { closeResultDetail(); openHistoryTimeline(); }
+      else if (next === "simple" || next === "pro") { setViewState(next); closeHistoryTimeline(); closeResultDetail(); try { localStorage.setItem("xai-ui-mode", next); } catch { /* Storage unavailable. */ } }
+    };
+    window.addEventListener("studio:navigate", navigate);
+    return () => window.removeEventListener("studio:navigate", navigate);
+  }, [closeHistoryTimeline, closeResultDetail, openHistoryTimeline]);
+  useEffect(() => { if (renameOpen) renameInput.current?.select(); }, [renameOpen]);
+  return <div className="xai-app">
+    <header className="studio-titlebar drag-region" onDoubleClick={(event) => handleWindowTitleBarDoubleClick(event, () => pushToast("请在桌面应用中使用窗口控制", "info"))}>
+      {isMac ? <div className="studio-native-window-inset" aria-hidden="true" /> : <XAIWindowControls onUnavailable={() => pushToast("请在桌面应用中使用窗口控制", "info")} />}
+      <IconButton label={sidebarOpen ? "隐藏侧边栏" : "显示侧边栏"} className="quiet no-drag" aria-expanded={sidebarOpen} aria-controls="studio-sidebar" onClick={() => setSidebarOpen((open) => !open)}><PanelLeft /></IconButton>
+      <span className="studio-window-name">{historyTimelineOpen ? "作品" : resultDetail ? "作品详情" : activeWorkspace?.name || "创作"}</span>
+      <div className="studio-titlebar-spacer" />
+      <div className="no-drag"><SegmentedControl label="工作模式" value={view} options={modeOptions} onChange={setView} /></div>
+      <div className="studio-titlebar-spacer" />
+      <div className="studio-workspace-picker no-drag"><select aria-label="当前工作区" value={activeWorkspaceId} onChange={(event) => switchWorkspace(event.target.value)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select><IconButton label="工作区操作" className="quiet" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setWorkspaceMenu({ x: rect.right, y: rect.bottom }); }}><MoreHorizontal /></IconButton></div>
+    </header>
+    <div className="studio-body">
+      {sidebarOpen && <nav id="studio-sidebar" className="studio-sidebar" aria-label="主导航"><div className="studio-sidebar-heading">工作台</div><button type="button" aria-current={!historyTimelineOpen ? "page" : undefined} onClick={showCreate}><Wand2 />创作</button><button type="button" aria-current={historyTimelineOpen ? "page" : undefined} onClick={showLibrary}><FolderOpen />作品</button><div className="studio-sidebar-divider" /><button type="button" onClick={() => setTemplatesOpen(true)}><BookOpen />提示词模板</button><button type="button" onClick={onOpenSettings}><Settings />设置</button></nav>}
+      <div className="studio-content-area">
+        <main className="studio-view" hidden={historyTimelineOpen || !!resultDetail || view !== "simple"}><SimpleWorkspace onLibrary={showLibrary} onSettings={onOpenSettings} /></main>
+        {view === "pro" && !historyTimelineOpen && !resultDetail && <XAIProPanels />}
+        <main className={`studio-library-view${resultDetail ? " has-selection" : ""}`} hidden={!historyTimelineOpen}>
+          <div className="studio-library-list"><DesktopLibrary onCreate={() => setView("pro")} /></div>
+          {historyTimelineOpen && resultDetail && <aside className="studio-library-inspector" aria-label="作品详情"><DesktopResultDetail key={resultDetail.id} item={resultDetail} onClose={closeResultDetail} onCanvas={() => setView("pro")} /></aside>}
+        </main>
+        {!historyTimelineOpen && resultDetail && <main className="studio-view"><DesktopResultDetail key={resultDetail.id} item={resultDetail} onClose={closeResultDetail} onCanvas={() => setView("pro")} /></main>}
+      </div>
+    </div>
+    {workspaceMenu && <ContextMenu {...workspaceMenu} onClose={() => setWorkspaceMenu(null)} items={[
+      { label: "新建工作区", onClick: () => { newWorkspace(); showCreate(); } },
+      { label: "重命名工作区", onClick: () => { setDraftName(activeWorkspace?.name || ""); setRenameOpen(true); } },
+      { label: "关闭当前工作区", onClick: () => closeWorkspace(activeWorkspaceId), disabled: workspaces.length <= 1 },
+    ]} />}
+    <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="重命名工作区" width={420}><form onSubmit={(event) => { event.preventDefault(); if (!draftName.trim()) return; renameWorkspace(activeWorkspaceId, draftName.trim()); setRenameOpen(false); }}><label className="studio-field">工作区名称<input ref={renameInput} value={draftName} onChange={(event) => setDraftName(event.target.value)} maxLength={80} /></label><div className="studio-detail-actions"><StudioButton onClick={() => setRenameOpen(false)}>取消</StudioButton><StudioButton type="submit" primary disabled={!draftName.trim()}>保存名称</StudioButton></div></form></Modal>
+    <PromptTemplateManagerModal open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
+  </div>;
 }

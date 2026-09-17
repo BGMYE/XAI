@@ -309,6 +309,8 @@ export interface Workspace {
   canvasNodes?: import("../state/canvasNodes").CanvasNode[];
   canvasViewport?: import("../state/canvasNodes").CanvasViewport;
   selectedNodeId?: string | null;
+  // Undo closures stay in memory; durable workspace snapshots keep only painting.
+  editorState?: Pick<import("../state/studioStore.types").StudioState, "annotations" | "strokes" | "maskDataURL" | "undoStack" | "redoStack">;
   // IDs from the latest multi-request run for this workspace. These are history
   // IDs so the tab state stays light while the canvas can reopen the batch grid.
   batchResultIds: string[];

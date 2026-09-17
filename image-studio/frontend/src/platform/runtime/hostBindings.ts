@@ -16,6 +16,8 @@ export type RuntimeBinding = {
   WindowUnfullscreen?: () => void;
   WindowIsFullscreen?: () => Promise<boolean>;
   Quit?: () => void;
+  WindowClose?: () => void;
+  OpenSettings?: () => void;
   WindowMinimise?: () => void;
   WindowToggleMaximise?: () => void;
 };

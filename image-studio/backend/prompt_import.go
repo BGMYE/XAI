@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yuanhua/image-gptcodex/pkg/client"
 	"github.com/yuanhua/image-gptcodex/pkg/promptimport"
+	runtime "image-studio/internal/desktopruntime"
 )
 
 const promptImportEventName = "studio-import-token"

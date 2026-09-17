@@ -8,6 +8,129 @@ on:
   workflow_dispatch:
 
 jobs:
+  verify-desktop-interactions:
+    name: Verify desktop interactions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: image-studio/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test desktop interactions
+        run: npm run test:desktop
+      - name: Upload browser verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-interaction-results
+          path: image-studio/frontend/test-results
+          if-no-files-found: warn
+          retention-days: 7
+
+  verify-desktop-host:
+    name: Verify desktop host (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+          - runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache-dependency-path: image-studio/go.sum
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        run: npm ci
+      - name: Install Linux build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
+      - name: Install Wails 3 resource compiler
+        if: matrix.goos == 'windows'
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.23
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build desktop application
+        run: node scripts/build-desktop.mjs ${{ matrix.goos }} ${{ matrix.goarch }}
+      - name: Test desktop runtime adapters
+        working-directory: image-studio
+        run: go test ./...
+      - name: Upload desktop build
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: image-studio/build/bin/image-studio*
+          retention-days: 7
+
+  verify-desktop-macos:
+    name: Verify desktop host (macOS Universal)
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache-dependency-path: image-studio/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        run: npm ci
+      - name: Build Universal app
+        run: bash scripts/package-local-macos-app.sh
+      - name: Verify architectures and package
+        run: |
+          lipo -verify_arch x86_64 arm64 "image-studio/build/bin/Image Studio.app/Contents/MacOS/image-studio"
+          codesign --verify --deep --strict "image-studio/build/bin/Image Studio.app"
+          ditto -c -k --keepParent "image-studio/build/bin/Image Studio.app" image-studio/build/bin/image-studio-macos-universal.zip
+      - name: Upload desktop build
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-universal
+          path: image-studio/build/bin/image-studio-macos-universal.zip
+          retention-days: 7
+
   verify-local-platform-kernel:
     name: Verify local platform kernel suite
     runs-on: macos-14
@@ -19,7 +142,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.3"
           check-latest: true
 
       - name: Set up Node

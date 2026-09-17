@@ -218,6 +218,7 @@ func optimizePromptWithLLM(
 	if err != nil {
 		return "", err
 	}
+	raw = []byte(strings.ReplaceAll(string(raw), apiKey, "[已隐藏]"))
 	if resp.StatusCode/100 != 2 {
 		if msg := extractResponseErrorMessage(raw); msg != "" {
 			return "", fmt.Errorf("上游返回 %d:%s", resp.StatusCode, msg)

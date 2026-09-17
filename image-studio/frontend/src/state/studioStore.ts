@@ -28,7 +28,6 @@ import {
   setKernelRuntimeMode,
   UpscaleImage,
 } from "../platform/runtime/host";
-import type { backend } from "../../wailsjs/go/models";
 import {
   APIMode,
   AppUpdateInfo,
@@ -120,6 +119,7 @@ import {
   pickActiveProfile,
 } from "../lib/profiles";
 import { isMac, readRuntimePlatformState } from "../platform";
+import { getRuntime } from "../platform/runtime/hostBindings";
 import { dispatchFullscreenResize, setNativeFullscreen } from "../platform/nativeFullscreen";
 import {
   activeRuntimePatch,
@@ -620,6 +620,8 @@ const imageActions = createImageActions({
   },
 });
 
+let studioBootstrapPromise: Promise<void> | null = null;
+
 export const useStudioStore = create<StudioState>((set, get) => ({
   apiKey: "",
   mode: "generate",
@@ -728,7 +730,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   loopGeneration: defaultLoopGenerationConfig(),
   presets: [],
   customAspectRatios: [],
-  theme: "system",
+  theme: readRuntimePlatformState().isAndroid ? "system" : "light",
   fontScale: 1,
   customAspectRatioModalOpen: false,
   openCustomAspectRatioModal: () => set({ customAspectRatioModalOpen: true }),
@@ -804,18 +806,28 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     return true;
   },
   settingsOpen: false,
-  openSettings: () => set({ settingsOpen: true, upstreamModalOpen: false }),
+  openSettings: () => {
+    if (readRuntimePlatformState().isAndroid) {
+      set({ settingsOpen: true, upstreamModalOpen: false });
+      return;
+    }
+    const openSettingsWindow = getRuntime()?.OpenSettings;
+    if (openSettingsWindow) openSettingsWindow();
+    else get().pushToast("请在桌面应用中打开设置", "info");
+  },
   closeSettings: () => set({ settingsOpen: false }),
   isTestingKey: false,
   isOptimizingPrompt: false,
   isInferringPrompt: false,
   upstreamModalOpen: false,
   upstreamReturnTarget: "app",
-  openUpstreamConfig: (returnTarget = "app") => set({
-    upstreamModalOpen: true,
-    upstreamReturnTarget: returnTarget,
-    settingsOpen: false,
-  }),
+  openUpstreamConfig: (returnTarget = "app") => {
+    if (!readRuntimePlatformState().isAndroid) {
+      get().openSettings();
+      return;
+    }
+    set({ upstreamModalOpen: true, upstreamReturnTarget: returnTarget, settingsOpen: false });
+  },
   closeUpstreamConfig: () => {
     const { upstreamReturnTarget } = get();
     set({
@@ -1167,7 +1179,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       return;
     }
     if (!s.baseURL.trim()) {
-      set({ errorMessage: "请在右侧工作栏顶部的「上游配置」中填入你的中转站地址(必须兼容 OpenAI Responses API + image_generation 工具)", errorCanRetry: false, errorRawPath: null });
+      set({ errorMessage: "请在设置的「连接与模型」中填写服务地址", errorCanRetry: false, errorRawPath: null });
       return;
     }
     const cleanedBaseURL = cleanBaseURL(s.baseURL);
@@ -1544,6 +1556,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   saveCurrentImageAs: async () => imageActions.saveCurrentImageAs(),
 
   bootstrap: async () => {
+    if (studioBootstrapPromise) return studioBootstrapPromise;
+    studioBootstrapPromise = (async () => {
     const previewScenario = readPreviewScenario();
     if (previewScenario === "mac-workspace" || previewScenario === "windows-right-rail") {
       const workspaceId = genId();
@@ -1680,7 +1694,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     let promptTemplates: PromptTemplate[] = [];
     let presets: Preset[] = [];
     const customAspectRatios = loadCustomAspectRatios();
-    let theme: ThemeMode = "system";
+    let theme: ThemeMode = readRuntimePlatformState().isAndroid ? "system" : "light";
     let fontScale = 1;
     try {
       const raw = localStorage.getItem("gptcodex.promptHistory");
@@ -1693,12 +1707,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     promptTemplates = readStoredPromptTemplates();
     try {
       const raw = localStorage.getItem("gptcodex.theme");
-      if (raw === "system" || raw === "light" || raw === "dark") theme = raw;
+      if (readRuntimePlatformState().isAndroid && (raw === "system" || raw === "light" || raw === "dark")) theme = raw;
     } catch {}
     try {
       const raw = localStorage.getItem("gptcodex.fontScale");
       const n = Number(raw);
-      if (!Number.isNaN(n) && n > 0.5 && n < 2) fontScale = n;
+      if (!Number.isNaN(n) && n > 0.5 && n <= 2) fontScale = n;
     } catch {}
     let kernelRuntimeMode: KernelRuntimeMode = "auto";
     try {
@@ -1991,8 +2005,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       shouldShowUpdate,
       appUpdateModalOpen: shouldShowUpdate,
     }).catch(() => undefined);
+    await (await import("./desktopSettingsSync")).initializeDesktopSettingsSync(useStudioStore);
+    await (await import("./desktopWorkspacePersistence")).initializeDesktopWorkspacePersistence(useStudioStore);
     enableCompatibilityExport();
     void backfillHistoryPreviewRefs(items);
+    })();
+    try { await studioBootstrapPromise; }
+    catch (error) { studioBootstrapPromise = null; throw error; }
   },
 
   importMaskImage: async () => {
@@ -2495,6 +2514,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   importImageFile: async (file) => imageActions.importImageFile(file),
+  acceptImportedImage: async (image, name, size) => imageActions.acceptImportedImage(image, name, size),
 }));
 
 // Fire one job (concurrent member of a batch). Registers its own EventsOn

@@ -11,14 +11,16 @@ import (
 const SchemaVersion = 1
 
 type State struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	Client        string            `json:"client,omitempty"`
-	UpdatedAt     int64             `json:"updatedAt"`
-	Settings      Settings          `json:"settings"`
-	Profiles      []UpstreamProfile `json:"profiles"`
-	ActiveProfile string            `json:"activeProfileId"`
-	History       []HistoryItem     `json:"history"`
-	HistoryFull   []HistoryFullItem `json:"historyFull,omitempty"`
+	SchemaVersion           int               `json:"schemaVersion"`
+	Client                  string            `json:"client,omitempty"`
+	UpdatedAt               int64             `json:"updatedAt"`
+	Settings                Settings          `json:"settings"`
+	Profiles                []UpstreamProfile `json:"profiles"`
+	ActiveProfile           string            `json:"activeProfileId"`
+	AIProfile               string            `json:"aiProfileId,omitempty"`
+	DesktopSettingsRevision int64             `json:"desktopSettingsRevision,omitempty"`
+	History                 []HistoryItem     `json:"history"`
+	HistoryFull             []HistoryFullItem `json:"historyFull,omitempty"`
 }
 
 type AdvancedFloatingPanelPrefs struct {
@@ -58,35 +60,38 @@ type Settings struct {
 	CompletionSound           *CompletionSoundSettings        `json:"completionSound,omitempty"`
 	CompletionNotification    *CompletionNotificationSettings `json:"completionNotification,omitempty"`
 	AdvancedFloatingPanel     *AdvancedFloatingPanelPrefs     `json:"advancedFloatingPanel,omitempty"`
+	LastSettingsPane          string                          `json:"lastSettingsPane,omitempty"`
 }
 
 type CompletionSoundSettings struct {
-	Enabled    bool   `json:"enabled,omitempty"`
+	Enabled    bool   `json:"enabled"`
 	Mode       string `json:"mode,omitempty"`
 	CustomName string `json:"customName,omitempty"`
 	CustomData string `json:"customDataURL,omitempty"`
 }
 
 type CompletionNotificationSettings struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool `json:"enabled"`
 }
 
 type UpstreamProfile struct {
-	ID                      string `json:"id"`
-	Name                    string `json:"name"`
-	APIMode                 string `json:"apiMode"`
-	ResponsesTransport      string `json:"responsesTransport,omitempty"`
-	RequestPolicy           string `json:"requestPolicy"`
-	ImagesNewAPICompat      bool   `json:"imagesNewAPICompat,omitempty"`
-	AllowInsecureConnection bool   `json:"allowInsecureConnection,omitempty"`
-	BaseURL                 string `json:"baseURL"`
-	TextModelID             string `json:"textModelID"`
-	ImageModelID            string `json:"imageModelID"`
-	ReasoningEffort         string `json:"reasoningEffort"`
-	ConcurrencyLimit        int    `json:"concurrencyLimit"`
-	FallbackProfileID       string `json:"fallbackProfileId,omitempty"`
-	CreatedAt               int64  `json:"createdAt"`
-	LastUsedAt              int64  `json:"lastUsedAt,omitempty"`
+	ID                      string   `json:"id"`
+	Name                    string   `json:"name"`
+	APIMode                 string   `json:"apiMode"`
+	ResponsesTransport      string   `json:"responsesTransport,omitempty"`
+	RequestPolicy           string   `json:"requestPolicy"`
+	ImagesNewAPICompat      bool     `json:"imagesNewAPICompat,omitempty"`
+	AllowInsecureConnection bool     `json:"allowInsecureConnection,omitempty"`
+	BaseURL                 string   `json:"baseURL"`
+	TextModelID             string   `json:"textModelID"`
+	ImageModelID            string   `json:"imageModelID"`
+	ModelIDs                []string `json:"modelIDs,omitempty"`
+	VideoModelID            string   `json:"videoModelID,omitempty"`
+	ReasoningEffort         string   `json:"reasoningEffort"`
+	ConcurrencyLimit        int      `json:"concurrencyLimit"`
+	FallbackProfileID       string   `json:"fallbackProfileId,omitempty"`
+	CreatedAt               int64    `json:"createdAt"`
+	LastUsedAt              int64    `json:"lastUsedAt,omitempty"`
 }
 
 type Preset struct {

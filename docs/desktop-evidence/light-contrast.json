@@ -1,0 +1,54 @@
+{
+  "title": {
+    "foreground": [
+      29,
+      29,
+      31
+    ],
+    "backdrop": [
+      242,
+      250,
+      255
+    ],
+    "minimumRatio": 15.94
+  },
+  "sidebar": {
+    "foreground": [
+      96,
+      96,
+      104
+    ],
+    "backdrop": [
+      234,
+      244,
+      254
+    ],
+    "minimumRatio": 5.6
+  },
+  "contentSecondary": {
+    "foreground": [
+      96,
+      96,
+      104
+    ],
+    "backdrop": [
+      218,
+      234,
+      255
+    ],
+    "minimumRatio": 5.1
+  },
+  "menu": {
+    "foreground": [
+      29,
+      29,
+      31
+    ],
+    "backdrop": [
+      240,
+      249,
+      255
+    ],
+    "minimumRatio": 15.79
+  }
+}

@@ -14,6 +14,7 @@ import { base64ToBlob } from "../lib/images";
 import { clearHistoryStorage, removeHistoryItem } from "../lib/storage";
 import type { BatchProcessSourceImage, HistoryItem, SourceImage } from "../types/domain";
 import type { StudioState } from "./studioStore.types";
+import type { ImportedImageLike } from "../platform/runtime/hostTypes";
 import {
   ensureFullHistoryItem,
   fileToBase64,
@@ -22,7 +23,6 @@ import {
   withMediaAssetRef,
 } from "./studioStore.runtime";
 import { patchWorkspaceRuntime } from "./workspaceRuntime";
-import { genId } from "./studioStore.shared";
 import { buildHistoryCleanupPatch, waitForActiveHistoryLoad } from "./historyCleanup";
 import { restoreHistorySources } from "./historyRegeneration";
 
@@ -68,6 +68,50 @@ function buildSourceCanvasItem(
 }
 
 export function createImageActions(store: StateAdapter) {
+  async function acceptImportedImage(result: ImportedImageLike, name: string, size: number, fallbackB64 = "") {
+    const ref = await RegisterImportedImageAsset(result.path).catch(() => null);
+    const legacyB64 = result.previewUrl || ref?.previewUrl ? "" : (result.imageB64 || fallbackB64 || await ReadImageAsBase64(result.path));
+    const legacyBlob = legacyB64 ? base64ToBlob(legacyB64) : null;
+    const transientItem: HistoryItem = {
+      id: `source-preview:${result.path}`,
+      imageB64: legacyB64 || undefined,
+      imageBlob: null,
+      previewBlob: legacyBlob,
+      prompt: `(导入)${name}`,
+      mode: "edit",
+      size: "1024x1024",
+      quality: "medium",
+      createdAt: Date.now(),
+      savedPath: result.path,
+    };
+    const importedItem = ref ? withMediaAssetRef(transientItem, ref) : transientItem;
+    const existingSources = store.getState().sources;
+    const alreadyIn = existingSources.some((source) => source.path === result.path);
+    store.setState({
+      currentImage: ref ? { ...importedItem, previewOnly: true } : importedItem,
+      batchResults: [],
+      resultGridOpen: false,
+      mode: "edit",
+      editSourceMode: "manual",
+      size: alreadyIn || existingSources.length > 0 ? store.getState().size : "auto",
+      sources: alreadyIn
+        ? existingSources
+        : [...existingSources, {
+            path: result.path,
+            name,
+            size,
+            imageBlob: legacyBlob,
+            imageB64: legacyB64 || undefined,
+            previewUrl: importedItem.previewUrl,
+            previewWidth: importedItem.previewWidth,
+            previewHeight: importedItem.previewHeight,
+      }],
+      errorMessage: null,
+      errorCanRetry: false,
+      errorRawPath: null,
+    });
+  }
+
   function mapBatchSource(source: {
     path: string;
     name: string;
@@ -91,6 +135,14 @@ export function createImageActions(store: StateAdapter) {
   }
 
   return {
+    async acceptImportedImage(result: ImportedImageLike, name: string, size: number) {
+      try {
+        await acceptImportedImage(result, name, size);
+      } catch (error: any) {
+        store.setState({ errorMessage: `导入失败:${error?.message ?? error}`, errorCanRetry: false, errorRawPath: null });
+      }
+    },
+
     async selectSourceImage() {
       try {
         const res = await OpenImageDialog();
@@ -331,47 +383,7 @@ export function createImageActions(store: StateAdapter) {
         }
         const b64 = await fileToBase64(file);
         const result = await ImportImageFromB64(b64, file.name);
-        const ref = await RegisterImportedImageAsset(result.path).catch(() => null);
-        const legacyB64 = result.previewUrl || ref?.previewUrl ? "" : (result.imageB64 || b64);
-        const legacyBlob = legacyB64 ? base64ToBlob(legacyB64) : null;
-        const transientItem: HistoryItem = {
-          id: genId(),
-          imageB64: legacyB64 || undefined,
-          imageBlob: null,
-          previewBlob: legacyBlob,
-          prompt: `(导入)${file.name}`,
-          mode: "edit",
-          size: "1024x1024",
-          quality: "medium",
-          createdAt: Date.now(),
-          savedPath: result.path,
-        };
-        const importedItem = ref ? withMediaAssetRef(transientItem, ref) : transientItem;
-        const existingSources = store.getState().sources;
-        const alreadyIn = existingSources.some((source) => source.path === result.path);
-        store.setState({
-          currentImage: ref ? { ...importedItem, previewOnly: true } : importedItem,
-          batchResults: [],
-          resultGridOpen: false,
-          mode: "edit",
-          editSourceMode: "manual",
-          size: alreadyIn || existingSources.length > 0 ? store.getState().size : "auto",
-          sources: alreadyIn
-            ? existingSources
-            : [...existingSources, {
-                path: result.path,
-                name: file.name,
-                size: file.size,
-                imageBlob: legacyBlob,
-                imageB64: legacyB64 || undefined,
-                previewUrl: importedItem.previewUrl,
-                previewWidth: importedItem.previewWidth,
-                previewHeight: importedItem.previewHeight,
-          }],
-          errorMessage: null,
-          errorCanRetry: false,
-          errorRawPath: null,
-        });
+        await acceptImportedImage(result, file.name, file.size, b64);
       } catch (e: any) {
         store.setState({ errorMessage: `导入失败:${e?.message ?? e}`, errorCanRetry: false, errorRawPath: null });
       }

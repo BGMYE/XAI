@@ -72,31 +72,31 @@ jobs:
             runner: windows-latest
             goos: windows
             artifact_suffix: windows-amd64.exe
-            wails_args: -platform windows/amd64 -clean
+            goarch: amd64
             package_cmd: cp image-studio/build/bin/image-studio.exe "$artifact_path"
           - id: windows-arm64
             runner: windows-11-arm
             goos: windows
             artifact_suffix: windows-arm64.exe
-            wails_args: -platform windows/arm64 -clean
+            goarch: arm64
             package_cmd: cp image-studio/build/bin/image-studio.exe "$artifact_path"
           - id: macos-universal
             runner: macos-latest
             goos: darwin
             artifact_suffix: macos-universal.zip
-            wails_args: ""
+            goarch: universal
             package_cmd: ditto -c -k --sequesterRsrc --keepParent "image-studio/build/bin/Image Studio.app" "$artifact_path"
           - id: linux-amd64
             runner: ubuntu-24.04
             goos: linux
             artifact_suffix: linux-amd64.tar.gz
-            wails_args: -platform linux/amd64 -clean -tags webkit2_41
+            goarch: amd64
             package_cmd: tar -C image-studio/build/bin -czf "$artifact_path" image-studio
           - id: linux-arm64
             runner: ubuntu-24.04-arm
             goos: linux
             artifact_suffix: linux-arm64.tar.gz
-            wails_args: -platform linux/arm64 -clean -tags webkit2_41
+            goarch: arm64
             package_cmd: tar -C image-studio/build/bin -czf "$artifact_path" image-studio
 
     steps:
@@ -106,7 +106,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.3"
           check-latest: true
           cache-dependency-path: image-studio/go.sum
 
@@ -133,13 +133,13 @@ jobs:
         if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
 
-      - name: Install Wails CLI
-        if: matrix.goos != 'darwin'
+      - name: Install Wails 3 resource compiler
+        if: matrix.goos == 'windows'
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.23
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build desktop app
@@ -151,8 +151,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "darwin" ]; then
             bash ../scripts/package-local-macos-app.sh
           else
-            wails build ${{ matrix.wails_args }} \
-              -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
+            node ../scripts/build-desktop.mjs "${{ matrix.goos }}" "${{ matrix.goarch }}"
           fi
 
       - name: Detect macOS signing inputs

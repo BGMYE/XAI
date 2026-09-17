@@ -29,7 +29,7 @@ func TestServiceCreateAndPollVideo(t *testing.T) {
 	defer srv.Close()
 
 	svc := NewService()
-	svc.Startup(context.Background())
+	StartDesktopService(svc, context.Background())
 	created, err := svc.CreateVideo(VideoOptions{BaseURL: srv.URL, APIKey: videoTestAPIKey, VideoModelID: "video-model", Prompt: "ocean"})
 	if err != nil || created.ID != "vid_backend" {
 		t.Fatalf("created=%+v err=%v", created, err)

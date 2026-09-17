@@ -127,6 +127,8 @@ export type CompatibilityExportInput = {
 };
 
 let exportTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingExport: CompatibilityState | null = null;
+let exportQueue = Promise.resolve();
 
 export async function importCompatibilityStateIfNewer(): Promise<boolean> {
   const state = normalizeCompatibilityState(await LoadCompatibilityState());
@@ -141,19 +143,39 @@ export async function importCompatibilityStateIfNewer(): Promise<boolean> {
 
 export function scheduleCompatibilityExport(input: CompatibilityExportInput): void {
   if (exportTimer) clearTimeout(exportTimer);
-  const snapshot = cloneExportInput(input);
+  pendingExport = buildCompatibilityState(cloneExportInput(input));
   exportTimer = setTimeout(() => {
     exportTimer = null;
-    void exportCompatibilityStateNow(snapshot).catch((error) => {
+    void flushCompatibilityExport().catch((error) => {
       if (typeof console !== "undefined") console.warn("compat export failed", error);
     });
   }, 250);
 }
 
 export async function exportCompatibilityStateNow(input: CompatibilityExportInput): Promise<void> {
-  const state = buildCompatibilityState(input);
-  await SaveCompatibilityState(state as unknown as Record<string, unknown>);
-  writeLocalMarker(state.updatedAt);
+  pendingExport = buildCompatibilityState(input);
+  await flushCompatibilityExport();
+}
+
+export async function flushCompatibilityExport(): Promise<void> {
+  if (exportTimer) clearTimeout(exportTimer);
+  exportTimer = null;
+  while (pendingExport) {
+    const state = pendingExport;
+    pendingExport = null;
+    const write = exportQueue.catch(() => undefined).then(async () => {
+      await SaveCompatibilityState(state as unknown as Record<string, unknown>);
+      writeLocalMarker(state.updatedAt);
+    });
+    exportQueue = write;
+    try { await write; }
+    catch (error) {
+      // Keep the most recent snapshot available for a retry or a close request.
+      if (exportQueue === write) pendingExport ??= state;
+      throw error;
+    }
+  }
+  await exportQueue;
 }
 
 export function compatibilityExportFingerprint(input: CompatibilityExportInput): string {
@@ -194,7 +216,7 @@ export function compatibilityExportFingerprint(input: CompatibilityExportInput):
   });
 }
 
-function buildCompatibilityState(input: CompatibilityExportInput): CompatibilityState {
+export function buildCompatibilityState(input: CompatibilityExportInput): CompatibilityState {
   const history = input.history.map(toSerializableHistoryItem).filter((item): item is HistoryItem => item !== null);
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -624,7 +646,7 @@ function normalizeQuality(value: unknown): HistoryItem["quality"] {
 
 function normalizeFontScale(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) && n > 0.5 && n < 2 ? n : 1;
+  return Number.isFinite(n) && n > 0.5 && n <= 2 ? n : 1;
 }
 
 function normalizeBatchCount(value: unknown): number {

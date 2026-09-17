@@ -84,7 +84,7 @@ func TestCleanupLogDirsIfDisabledLeavesLogsWhenEnabled(t *testing.T) {
 }
 
 func TestManagedRuntimeCleanupDirsPreservePrimaryImageData(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	svc := NewService()
 	outputRoot := filepath.Join(t.TempDir(), "output")
 	trustedRoot := filepath.Join(t.TempDir(), "trusted")
@@ -108,7 +108,7 @@ func TestManagedRuntimeCleanupDirsPreservePrimaryImageData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalizedOutputRoots := normalizeRoots([]string{defaultRoot, outputRoot, trustedRoot})
+	normalizedOutputRoots := normalizeRoots(append([]string{defaultRoot, outputRoot, trustedRoot}, platformLegacyOutputRoots()...))
 	for _, root := range normalizedOutputRoots {
 		for _, dir := range []string{thumbsSubdir(root), previewsSubdir(root), logSubdir(root)} {
 			if err := os.MkdirAll(dir, secureDirMode); err != nil {
@@ -156,7 +156,7 @@ func TestManagedRuntimeCleanupDirsPreservePrimaryImageData(t *testing.T) {
 }
 
 func TestShutdownRemovesOnlyManagedRuntimeCaches(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	svc := NewService()
 	outputRoot := filepath.Join(t.TempDir(), "output")
 	if err := svc.SetOutputDir(outputRoot); err != nil {
@@ -194,7 +194,7 @@ func TestShutdownRemovesOnlyManagedRuntimeCaches(t *testing.T) {
 		}
 	}
 
-	svc.Shutdown(context.Background())
+	ShutdownDesktopService(svc, context.Background())
 
 	for _, path := range []string{keepImage, keepImport} {
 		if _, err := os.Stat(path); err != nil {
@@ -209,7 +209,7 @@ func TestShutdownRemovesOnlyManagedRuntimeCaches(t *testing.T) {
 }
 
 func TestShutdownLeavesPreviewCachesWhenCleanupDisabled(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	svc := NewService()
 	outputRoot := filepath.Join(t.TempDir(), "output")
 	if err := svc.SetOutputDir(outputRoot); err != nil {
@@ -241,7 +241,7 @@ func TestShutdownLeavesPreviewCachesWhenCleanupDisabled(t *testing.T) {
 		}
 	}
 
-	svc.Shutdown(context.Background())
+	ShutdownDesktopService(svc, context.Background())
 
 	for _, path := range []string{thumbFile, previewFile, importPreviewFile} {
 		if _, err := os.Stat(path); err != nil {

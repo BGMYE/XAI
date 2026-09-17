@@ -4,11 +4,16 @@ import type Konva from "konva";
 import type { CanvasNode } from "../../state/canvasNodes";
 import { useImageFromSource } from "./canvasImage";
 
-export function CanvasNodeShape({ node, selected, source, draggable, onSelect, onMove, onDelete }: {
+export type CanvasNodeAppearance = { accent: string; background: string; border: string; text: string; font: string };
+
+export function CanvasNodeShape({ node, selected, source, draggable, appearance, viewScale, fontScale, onSelect, onMove, onDelete }: {
   node: CanvasNode;
   selected: boolean;
   source?: string | null;
   draggable: boolean;
+  appearance: CanvasNodeAppearance;
+  viewScale: number;
+  fontScale: number;
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
   onDelete: () => void;
@@ -68,15 +73,23 @@ export function CanvasNodeShape({ node, selected, source, draggable, onSelect, o
     };
   }, [node.type, node.src]);
   const toggleVideo = (e: Konva.KonvaEventObject<MouseEvent>) => { e.cancelBubble = true; const element = videoRef.current; if (!element || failed) return; if (element.paused) void element.play().catch(() => setFailed(true)); else element.pause(); };
+  const labelScale = fontScale / viewScale;
+  const labelWidth = node.width / labelScale;
   return (
     <Group x={node.x} y={node.y} draggable={draggable} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }} onDragEnd={(e) => { e.cancelBubble = true; onMove(e.target.x(), e.target.y()); }}>
       {node.type === "image" && image ? <KonvaImage image={image} width={node.width} height={node.height} /> : null}
       {node.type === "video" && video && !failed ? <KonvaImage ref={videoImageRef} image={video} width={node.width} height={node.height} /> : null}
-      {(node.type === "video" && (!video || failed)) || (node.type === "image" && !image) ? <Rect width={node.width} height={node.height} fill="#eadfd8" /> : null}
-      <Rect width={node.width} height={node.height} stroke={selected ? "#c15f3c" : "rgba(39,35,32,.18)"} strokeWidth={selected ? 4 : 1} cornerRadius={16} listening={false} />
-      {node.type === "video" ? <Text text={failed ? "视频无法预览 · 点击打开" : (playing ? "暂停" : "播放")} x={12} y={12} fill="#8f3f28" fontSize={14} onClick={failed && node.src ? (e) => { e.cancelBubble = true; window.open(node.src, "_blank", "noopener,noreferrer"); } : toggleVideo} /> : null}
-      <Text text={node.type === "video" ? "VIDEO" : (node.label ?? "图片")} x={12} y={node.height - 28} fill={selected ? "#8f3f28" : "#54463f"} fontSize={13} listening={false} />
-      {selected ? <Text text="×" x={node.width - 28} y={6} fill="#8f3f28" fontSize={22} onClick={(e) => { e.cancelBubble = true; onDelete(); }} /> : null}
+      {(node.type === "video" && (!video || failed)) || (node.type === "image" && !image) ? <Rect width={node.width} height={node.height} fill={appearance.background} /> : null}
+      <Rect width={node.width} height={node.height} stroke={selected ? appearance.accent : appearance.border} strokeWidth={selected ? 3 : 1} strokeScaleEnabled={false} listening={false} />
+      <Group y={-32 * labelScale} scaleX={labelScale} scaleY={labelScale}>
+        <Rect width={labelWidth} height={30} fill={appearance.background} cornerRadius={[6, 6, 0, 0]} listening={false} />
+        <Text text={node.label || (node.type === "video" ? "视频" : "图片")} x={10} y={8} width={Math.max(1, labelWidth - (selected ? 44 : 20))} ellipsis wrap="none" fill={appearance.text} fontFamily={appearance.font} fontSize={14} listening={false} />
+        {selected && labelWidth >= 44 ? <Text text="×" x={labelWidth - 30} y={2} width={28} height={28} align="center" fill={appearance.text} fontSize={24} onClick={(e) => { e.cancelBubble = true; onDelete(); }} /> : null}
+      </Group>
+      {node.type === "video" ? <Group x={12 * labelScale} y={12 * labelScale} scaleX={labelScale} scaleY={labelScale}>
+        <Rect width={failed ? 210 : 58} height={32} fill={appearance.background} cornerRadius={8} />
+        <Text text={failed ? "视频无法预览 · 点击打开" : (playing ? "暂停" : "播放")} x={10} y={9} fill={appearance.accent} fontFamily={appearance.font} fontSize={14} onClick={failed && node.src ? (e) => { e.cancelBubble = true; window.open(node.src, "_blank", "noopener,noreferrer"); } : toggleVideo} />
+      </Group> : null}
     </Group>
   );
 }

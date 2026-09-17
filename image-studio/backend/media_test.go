@@ -16,7 +16,7 @@ import (
 )
 
 func TestListBatchInputImagesOnlyScansCurrentDirectoryImages(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
 	if err := os.MkdirAll(nested, secureDirMode); err != nil {
@@ -87,7 +87,7 @@ func TestBuildBatchOutputPathAppliesPrefixAndAvoidsCollisions(t *testing.T) {
 }
 
 func TestMediaHandlerServesRegisteredFullAndAVIFThumb(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	root, err := defaultOutputDir()
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestMediaHandlerServesRegisteredFullAndAVIFThumb(t *testing.T) {
 }
 
 func TestRegisterImportedImageAssetCreatesManagedAVIFPreview(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	importDir, err := importsDir()
 	if err != nil {
 		t.Fatal(err)
@@ -285,7 +285,7 @@ func TestRegisterImportedImageAssetCreatesManagedAVIFPreview(t *testing.T) {
 }
 
 func TestRegisterMediaAssetRebuildsMissingThumb(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	root, err := defaultOutputDir()
 	if err != nil {
 		t.Fatal(err)

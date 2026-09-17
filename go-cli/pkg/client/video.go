@@ -112,6 +112,7 @@ func CreateVideo(ctx context.Context, opts VideoOptions) (VideoResult, error) {
 		return VideoResult{}, err
 	}
 	defer resp.Body.Close()
+	redactResponseBody(resp, opts.APIKey)
 	result, err := decodeVideoResponseForBase(resp, base)
 	if err != nil {
 		return result, err
@@ -146,6 +147,7 @@ func PollVideo(ctx context.Context, opts VideoPollOptions) (VideoResult, error) 
 		return VideoResult{}, err
 	}
 	defer resp.Body.Close()
+	redactResponseBody(resp, opts.APIKey)
 	result, err := decodeVideoResponseForBase(resp, base)
 	if err != nil {
 		return result, err

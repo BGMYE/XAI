@@ -113,6 +113,19 @@ test("reads runtime from the active workspace mirror and background tabs", () =>
   assert.equal(bg.jobsCompleted, 2);
 });
 
+test("a background result invalidates painting and undo state from its previous image", () => {
+  const editorState = { annotations: [], strokes: [{ points: [1, 2], size: 8 }], maskDataURL: null, undoStack: [{ undo() {} }], redoStack: [] };
+  const workspaces = [makeWorkspace("a"), makeWorkspace("b", { currentImageId: "old-image", editorState })];
+  const progressOnly = runtime.patchWorkspaceRuntime(workspaces, "b", { jobsCompleted: 1 });
+  assert.equal(progressOnly[1].editorState, editorState);
+  const sameImage = runtime.patchWorkspaceRuntime(workspaces, "b", { currentImageId: "old-image" });
+  assert.equal(sameImage[1].editorState, editorState);
+  const finished = runtime.patchWorkspaceRuntime(workspaces, "b", { currentImageId: "new-image" });
+  assert.equal(finished[1].currentImageId, "new-image");
+  assert.equal(finished[1].editorState, undefined);
+  assert.deepEqual(finished[0], workspaces[0]);
+});
+
 test("tracks per-api-mode running counts and active patches", () => {
   const state = { runningJobMeta: { a: { workspaceId: "a", apiMode: "responses" }, b: { workspaceId: "b", apiMode: "images" } } };
   assert.equal(runtime.workspaceRunningCount(state, "responses"), 1);

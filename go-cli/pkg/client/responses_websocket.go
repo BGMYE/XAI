@@ -233,7 +233,8 @@ func requestResponsesOverWebSocketOnce(
 	snapshot *ResponsesWSRunStateSnapshot,
 	startedAt time.Time,
 	onProgress func(stage string, elapsedSeconds int, bytesReceived int64),
-) (ImageResult, error) {
+) (result ImageResult, returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, apiKey) }()
 	wsURL, err := responsesWebSocketURL(baseURL, allowInsecureConnection)
 	if err != nil {
 		return ImageResult{}, err
@@ -249,7 +250,7 @@ func requestResponsesOverWebSocketOnce(
 
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
-		return ImageResult{}, describeWebSocketDialError(err, resp)
+		return ImageResult{}, describeWebSocketDialError(err, resp, apiKey)
 	}
 	defer conn.Close()
 
@@ -293,7 +294,7 @@ func requestResponsesOverWebSocketOnce(
 			continue
 		}
 		snapshot.LastActivityAt = time.Now()
-		line := bytes.TrimSpace(data)
+		line := bytes.TrimSpace([]byte(redactCredential(string(data), apiKey)))
 		if len(line) == 0 {
 			continue
 		}
@@ -425,7 +426,8 @@ func probeResponsesWebSocketOnce(
 	proxy ProxyConfig,
 	allowInsecureConnection bool,
 	payload []byte,
-) error {
+) (returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, apiKey) }()
 	wsURL, err := responsesWebSocketURL(baseURL, allowInsecureConnection)
 	if err != nil {
 		return err
@@ -440,7 +442,7 @@ func probeResponsesWebSocketOnce(
 	headers.Set("Accept", "application/json")
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
-		return describeWebSocketDialError(err, resp)
+		return describeWebSocketDialError(err, resp, apiKey)
 	}
 	defer conn.Close()
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
@@ -454,6 +456,7 @@ func probeResponsesWebSocketOnce(
 		if err != nil {
 			return fmt.Errorf("websocket read: %w", err)
 		}
+		data = []byte(redactCredential(string(data), apiKey))
 		var ev Event
 		if err := decodeEvent(string(bytes.TrimSpace(data)), &ev); err != nil {
 			continue
@@ -467,12 +470,15 @@ func probeResponsesWebSocketOnce(
 	}
 }
 
-func describeWebSocketDialError(err error, resp *http.Response) error {
+func describeWebSocketDialError(err error, resp *http.Response, credentials ...string) error {
 	if err == nil {
 		return nil
 	}
 	if resp != nil {
 		defer resp.Body.Close()
+		for _, credential := range credentials {
+			redactResponseBody(resp, credential)
+		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		summary := summarizeWebSocketHandshakeBody(body)
 		if summary != "" {

@@ -22,7 +22,7 @@ func (s *Service) SetCleanupPreviewCacheOnExitEnabled(enabled bool) {
 	s.mu.Unlock()
 }
 
-func (s *Service) Shutdown(_ context.Context) {
+func ShutdownDesktopService(s *Service, _ context.Context) {
 	if err := cleanupManagedRuntimeArtifacts(s.keepLogsEnabled(), s.cleanupPreviewCacheOnExitEnabled(), s.managedRuntimeCleanupDirs()); err != nil {
 		println("Warning:", err.Error())
 	}

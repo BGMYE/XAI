@@ -74,7 +74,7 @@ func TestUpscaleImageRejectsUnsupportedScale(t *testing.T) {
 }
 
 func TestUpscaleImageRejectsUnmanagedPath(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	svc := NewService()
 	outside := filepath.Join(t.TempDir(), "outside.png")
 	writeUpscaleSource(t, outside, 2, 2)
@@ -144,7 +144,7 @@ func TestValidateDecodedImageDimensionsRejectsDecompressionBombs(t *testing.T) {
 }
 
 func TestUpscaleImageWritesCatmullRomPixelsAndPreservesTransparency(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	root := t.TempDir()
 	svc := NewService()
 	if err := svc.SetOutputDir(root); err != nil {
@@ -193,7 +193,7 @@ func TestUpscaleImageWritesCatmullRomPixelsAndPreservesTransparency(t *testing.T
 
 func newUpscaleTestService(t *testing.T, width, height int) (*Service, string) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("IMAGE_STUDIO_DATA_ROOT", t.TempDir())
 	root := t.TempDir()
 	svc := NewService()
 	if err := svc.SetOutputDir(root); err != nil {

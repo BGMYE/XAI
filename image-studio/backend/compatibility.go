@@ -27,6 +27,9 @@ func (s *Service) LoadCompatibilityState() (compat.State, error) {
 }
 
 func (s *Service) SaveCompatibilityState(state compat.State) error {
+	if s.desktopSettings != nil {
+		return s.desktopSettings.saveWorkspace(state)
+	}
 	path, err := compatibilityStatePath()
 	if err != nil {
 		return err

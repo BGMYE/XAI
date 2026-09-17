@@ -1,4 +1,4 @@
-import type { GenerateOptionsLike } from "../platform/runtime/hostTypes";
+import type { GenerateOptionsLike, ImportedImageLike } from "../platform/runtime/hostTypes";
 import type { SavePromptRequest } from "../lib/savePromptState";
 import type {
   Annotation,
@@ -235,6 +235,7 @@ export interface StudioState {
   selectBatchResult: (item: HistoryItem) => Promise<void>;
   stepBatchResult: (delta: -1 | 1) => Promise<void>;
   importImageFile: (file: File) => Promise<void>;
+  acceptImportedImage: (image: ImportedImageLike, name: string, size: number) => Promise<void>;
   pushToast: (text: string, kind?: Toast["kind"], ttl?: number, action?: Toast["action"]) => void;
   dismissToast: (id: string) => void;
   resultDetail: HistoryItem | null;

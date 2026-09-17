@@ -72,6 +72,9 @@ func WindowsLegacyWebviewUserDataPaths() ([]string, error) {
 	if override := strings.TrimSpace(os.Getenv(windowsLegacyWebviewDirEnvName)); override != "" {
 		return []string{override}, nil
 	}
+	if isolatedDataRoot() != "" {
+		return nil, nil
+	}
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
@@ -115,6 +118,9 @@ func appendUniquePath(paths []string, path string) []string {
 }
 
 func windowsPersistentDataRoot() (string, error) {
+	if root := isolatedDataRoot(); root != "" {
+		return root, nil
+	}
 	if root, err := readWindowsRegistryDataRoot(); err == nil && strings.TrimSpace(root) != "" {
 		if err := os.MkdirAll(root, secureDirMode); err != nil {
 			return "", err

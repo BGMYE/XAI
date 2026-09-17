@@ -1,0 +1,59 @@
+.desktop-settings-window { height:100dvh; color:var(--studio-text); background:var(--studio-background) var(--studio-wallpaper) center / cover no-repeat; font-family:var(--studio-font); font-size:calc(14px * var(--font-scale,1)); display:flex; flex-direction:column; }
+.desktop-settings-window * { box-sizing:border-box; }
+.desktop-settings-titlebar { height:54px; flex-shrink:0; display:flex; align-items:center; padding:0 22px; gap:22px; border-bottom:1px solid var(--studio-separator); background:var(--studio-glass); backdrop-filter:blur(24px); font-size:.93em; font-weight:600; --wails-draggable:drag; }
+:root[data-platform="macos"] .desktop-settings-titlebar { padding-left:88px; }
+.desktop-settings-traffic { display:flex; gap:8px; --wails-draggable:no-drag; }
+.desktop-settings-traffic>* { border:0; padding:0; width:12px; height:12px; border-radius:50%; }
+.desktop-settings-traffic .close { background:#ff5f57; cursor:pointer; box-shadow:0 0 0 1px #0002 inset; position:relative; }
+.desktop-settings-traffic .close:before { content:""; position:absolute; inset:-9px; }
+.desktop-settings-traffic .close:hover:after { content:"×"; position:absolute; inset:-3px; font:16px/18px sans-serif; color:#4b0b07; }
+.desktop-settings-traffic .disabled { background:var(--studio-separator); }
+.desktop-settings-layout { display:grid; grid-template-columns:184px minmax(0,1fr); min-height:0; flex:1; }
+.desktop-settings-nav { display:flex; flex-direction:column; gap:5px; padding:20px 12px; border-right:1px solid var(--studio-separator); overflow-y:auto; border-radius:0!important; }
+.desktop-settings-nav button { display:flex; align-items:center; gap:10px; padding:11px 12px; border:0; border-radius:9px; background:transparent; color:var(--studio-secondary); font:inherit; text-align:left; cursor:pointer; }
+.desktop-settings-nav button:hover { background:var(--studio-content-secondary); color:var(--studio-text); }
+.desktop-settings-nav button[aria-current] { color:var(--studio-text); background:var(--studio-selection); font-weight:600; }
+.desktop-settings-nav svg { flex-shrink:0; }
+.desktop-settings-content { min-width:0; overflow:auto; padding:28px 32px 48px; scrollbar-gutter:stable; }
+.desktop-settings-heading { display:flex; gap:16px; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.desktop-settings-heading h1 { font-size:1.72em; font-weight:650; letter-spacing:-.025em; margin:0; }
+.desktop-settings-group { margin:0 0 28px; }
+.desktop-settings-group h2 { font-size:1.08em; font-weight:600; margin:0 0 12px; }
+.desktop-settings-group>div { border:1px solid var(--studio-border); border-radius:12px; background:var(--studio-content); padding:18px; display:flex; flex-direction:column; gap:17px; }
+.desktop-settings-group p { margin:0; color:var(--studio-secondary); line-height:1.6; }
+.desktop-settings-field { display:flex; flex-direction:column; gap:7px; font-size:1em; font-weight:500; min-width:0; }
+.desktop-settings-field small,.desktop-settings-toggle small { color:var(--studio-secondary); font-size:.86em; font-weight:400; line-height:1.5; }
+.desktop-settings-window input,.desktop-settings-window select,.desktop-settings-window textarea,.desktop-settings-window button { font-family:inherit; }
+.desktop-settings-window .studio-field { width:100%; min-width:0; font-size:1em; padding:8px 10px; min-height:36px; color:var(--studio-text); background:var(--studio-content-secondary); border:1px solid var(--studio-border); border-radius:7px; }
+.desktop-settings-window .studio-button { font-size:.93em; min-height:34px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px; white-space:normal; }
+.desktop-settings-window :is(button,input,select,textarea,summary):focus-visible { outline:3px solid var(--studio-focus); outline-offset:2px; }
+.desktop-settings-window button:disabled { cursor:default; opacity:.5; }
+.desktop-settings-toggle { display:flex; justify-content:space-between; gap:24px; align-items:center; cursor:pointer; }
+.desktop-settings-toggle span { display:flex; flex-direction:column; gap:5px; }.desktop-settings-toggle b { font-weight:500; }
+.desktop-settings-toggle input { appearance:none; width:34px; height:20px; flex-shrink:0; border-radius:20px; background:var(--studio-tertiary); position:relative; cursor:pointer; }
+.desktop-settings-toggle input:checked { background:var(--studio-accent); }
+.desktop-settings-toggle input:before { content:""; width:16px; height:16px; border-radius:50%; background:white; position:absolute; left:2px; top:2px; box-shadow:0 1px 3px #0003; transition:transform .16s; }.desktop-settings-toggle input:checked:before { transform:translateX(14px); }
+.desktop-settings-connections { display:grid; grid-template-columns:156px minmax(0,1fr); gap:24px; margin-bottom:28px; }
+.desktop-settings-profiles { min-width:0; display:flex; flex-direction:column; gap:5px; }
+.desktop-settings-profiles>button { font:inherit; display:flex; flex-direction:column; gap:5px; text-align:left; color:var(--studio-text); background:transparent; border:1px solid transparent; border-radius:9px; padding:12px; cursor:pointer; overflow-wrap:anywhere; }
+.desktop-settings-profiles>button small { font-size:.8em; color:var(--studio-secondary); }.desktop-settings-profiles>button.selected { background:var(--studio-selection); border-color:var(--studio-border); }
+.desktop-settings-profiles>p { color:var(--studio-secondary); font-size:.93em; line-height:1.6; padding:10px; }
+.desktop-settings-profile-tools { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.desktop-settings-editor { min-width:0; margin:0; padding:0; border:0; }.desktop-settings-pair { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.desktop-settings-key { display:flex; gap:8px; }.desktop-settings-key input { flex:1; }
+.desktop-settings-inline { display:flex!important; flex-flow:row wrap!important; gap:9px!important; align-items:center; }
+.desktop-settings-models { display:flex; flex-wrap:wrap; gap:6px; max-height:160px; overflow:auto; }
+.desktop-settings-models>span { display:flex; max-width:100%; border:1px solid var(--studio-border); border-radius:6px; background:var(--studio-content-secondary); }
+.desktop-settings-models button { border:0; background:transparent; color:var(--studio-secondary); padding:6px; cursor:pointer; font-size:.85em; min-width:28px; overflow-wrap:anywhere; }
+.desktop-settings-advanced { border-bottom:1px solid var(--studio-separator); padding:0 0 20px; margin-bottom:20px; }.desktop-settings-advanced summary { cursor:pointer; color:var(--studio-secondary); font-size:.93em; padding:8px 0; }.desktop-settings-advanced>div { display:flex; flex-direction:column; gap:18px; margin-top:18px; }
+.desktop-settings-editor-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; position:sticky; bottom:-48px; background:var(--studio-content); padding:16px 0; border-top:1px solid var(--studio-separator); }
+.desktop-settings-status { border:1px solid var(--studio-border); background:var(--studio-content); padding:12px 14px; border-radius:8px; margin-bottom:20px; line-height:1.55; overflow-wrap:anywhere; }.desktop-settings-status.error { border-color:var(--studio-danger,#c23c35); color:var(--studio-danger,#c23c35); }
+.desktop-settings-path { overflow-wrap:anywhere; }.desktop-settings-fact { display:flex; justify-content:space-between; gap:16px; }.desktop-settings-fact b { font-weight:500; color:var(--studio-secondary); }
+.desktop-settings-type-preview { font-size:1.3em; padding:12px 0!important; }.desktop-settings-type-preview span { font-size:.8em; }
+.desktop-settings-file-button { position:relative; overflow:hidden; cursor:pointer; }.desktop-settings-file-button input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.desktop-settings-about { display:flex; flex-direction:column; align-items:center; text-align:center; padding:10px 0 30px; }.desktop-settings-about>div { width:74px; height:74px; display:grid; place-items:center; border-radius:19px; font-size:38px; font-weight:700; background:var(--studio-accent); color:var(--studio-accent-text); box-shadow:var(--studio-shadow); }.desktop-settings-about h2 { font-size:1.72em; margin:16px 0 2px; }.desktop-settings-about p { color:var(--studio-secondary); margin:5px; }
+.desktop-settings-confirm { width:min(420px,calc(100vw - 40px)); border:1px solid var(--studio-border); border-radius:16px; background:var(--studio-content); color:var(--studio-text); padding:26px; box-shadow:var(--studio-shadow); font:inherit; }.desktop-settings-confirm::backdrop { background:rgb(0 0 0 / .28); }.desktop-settings-confirm h2 { font-size:1.2em; margin:0 0 10px; }.desktop-settings-confirm p { color:var(--studio-secondary); line-height:1.5; }.desktop-settings-confirm>div { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:24px; }
+.desktop-settings-window .spin { animation:settings-spin 1s linear infinite; } @keyframes settings-spin { to { transform:rotate(360deg); } }
+@media(max-width:900px) { .desktop-settings-content { padding:24px 20px 36px; }.desktop-settings-connections { grid-template-columns:minmax(0,1fr); }.desktop-settings-profiles { flex-direction:row; flex-wrap:wrap; }.desktop-settings-profiles>button { min-width:140px; }.desktop-settings-profile-tools { margin:0; }.desktop-settings-editor-actions { bottom:-36px; } }
+@media(max-width:620px) { .desktop-settings-layout { grid-template-columns:136px minmax(0,1fr); }.desktop-settings-nav { padding:14px 6px; }.desktop-settings-nav button { padding:10px 8px; gap:7px; }.desktop-settings-nav svg { display:none; }.desktop-settings-content { padding:20px 12px; }.desktop-settings-pair { grid-template-columns:1fr; }.desktop-settings-heading { align-items:flex-start; flex-direction:column; }.desktop-settings-group>div { padding:12px; }.desktop-settings-key { flex-wrap:wrap; } }
+@media(prefers-reduced-motion:reduce) { .desktop-settings-window * { animation:none!important; transition:none!important; } }
+@media(forced-colors:active) { .desktop-settings-toggle input { appearance:auto; }.desktop-settings-toggle input:before { display:none; }.desktop-settings-nav button[aria-current],.desktop-settings-profiles>button.selected { outline:2px solid Highlight; } }

@@ -233,7 +233,8 @@ func RequestImagesAPIWithPartial(
 	rawSink io.Writer,
 	onProgress func(stage string, elapsedSeconds int, bytesReceived int64),
 	onPartial func(PartialImage),
-) (ImageResult, error) {
+) (result ImageResult, returnErr error) {
+	defer func() { returnErr = redactCredentialError(returnErr, opts.APIKey) }()
 	if strings.TrimSpace(opts.APIKey) == "" {
 		return ImageResult{}, ErrEmptyAPIKey
 	}
@@ -413,6 +414,7 @@ func RequestImagesAPIWithPartial(
 		return ImageResult{}, err
 	}
 	defer resp.Body.Close()
+	redactResponseBody(resp, opts.APIKey)
 	if useGoogleInteractions {
 		return readGoogleInteractionResponse(ctx, resp, httpClient, rawSink, onProgress, startedAt)
 	}

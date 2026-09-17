@@ -6,6 +6,7 @@ import type { HistoryItem, Workspace } from "../types/domain";
 import type { StudioState } from "./studioStore.types";
 import { historyItemsByIds, saveActiveWorkspaceSnapshot } from "./studioStore.runtime";
 import { streamPreviewItemFromWorkspace } from "./studioStore.streamPreview";
+import { sourceHistoryItemForCanvasNode } from "./canvasNodes";
 import {
   defaultBatchProcessConfig,
   defaultLoopGenerationConfig,
@@ -124,7 +125,8 @@ export function createWorkspaceActions(store: StateAdapter) {
       const target = persisted.find((workspace) => workspace.id === id);
       if (!target) return;
       const persistedCurrent = target.currentImageId
-        ? state.history.find((item) => item.id === target.currentImageId) ?? null
+        ? state.history.find((item) => item.id === target.currentImageId)
+          ?? sourceHistoryItemForCanvasNode(target.canvasNodes?.find((node) => node.id === target.currentImageId)) ?? null
         : null;
       const newCurrent = streamPreviewItemFromWorkspace(target, persistedCurrent) ?? persistedCurrent;
       const batchResults = historyItemsByIds(state.history, target.batchResultIds ?? []);
@@ -159,11 +161,11 @@ export function createWorkspaceActions(store: StateAdapter) {
         currentImage: newCurrent,
         batchResults,
         resultGridOpen: !!target.resultGridOpen,
-        annotations: [],
-        strokes: [],
-        maskDataURL: null,
-        undoStack: [],
-        redoStack: [],
+        annotations: target.editorState?.annotations ?? [],
+        strokes: target.editorState?.strokes ?? [],
+        maskDataURL: target.editorState?.maskDataURL ?? null,
+        undoStack: target.editorState?.undoStack ?? [],
+        redoStack: target.editorState?.redoStack ?? [],
         runningJobs,
         jobsTotal: target.jobsTotal ?? 0,
         jobsCompleted: target.jobsCompleted ?? 0,
@@ -185,18 +187,20 @@ export function createWorkspaceActions(store: StateAdapter) {
         state.pushToast("至少保留一个标签页", "warn");
         return;
       }
-      const closingJobIds = state.workspaces.find((workspace) => workspace.id === id)?.runningJobIds ?? [];
+      const persisted = saveActiveWorkspaceSnapshot(state);
+      const closingJobIds = persisted.find((workspace) => workspace.id === id)?.runningJobIds ?? [];
       for (const jobId of closingJobIds) {
         try { void wailsCancel(jobId); } catch {}
         EventsOff(`progress:${jobId}`, `log:${jobId}`, `preview:${jobId}`, `result:${jobId}`, `error:${jobId}`);
       }
       const nextMeta = { ...state.runningJobMeta };
       for (const jobId of closingJobIds) delete nextMeta[jobId];
-      const remaining = state.workspaces.filter((workspace) => workspace.id !== id);
+      const remaining = persisted.filter((workspace) => workspace.id !== id);
       if (state.activeWorkspaceId === id) {
         const next = remaining[0];
         const persistedCurrent = next.currentImageId
-          ? state.history.find((item) => item.id === next.currentImageId) ?? null
+          ? state.history.find((item) => item.id === next.currentImageId)
+            ?? sourceHistoryItemForCanvasNode(next.canvasNodes?.find((node) => node.id === next.currentImageId)) ?? null
           : null;
         const newCurrent = streamPreviewItemFromWorkspace(next, persistedCurrent) ?? persistedCurrent;
         const batchResults = historyItemsByIds(state.history, next.batchResultIds ?? []);
@@ -232,11 +236,11 @@ export function createWorkspaceActions(store: StateAdapter) {
           currentImage: newCurrent,
           batchResults,
           resultGridOpen: !!next.resultGridOpen,
-          annotations: [],
-          strokes: [],
-          maskDataURL: null,
-          undoStack: [],
-          redoStack: [],
+          annotations: next.editorState?.annotations ?? [],
+          strokes: next.editorState?.strokes ?? [],
+          maskDataURL: next.editorState?.maskDataURL ?? null,
+          undoStack: next.editorState?.undoStack ?? [],
+          redoStack: next.editorState?.redoStack ?? [],
           runningJobs,
           jobsTotal: next.jobsTotal ?? 0,
           jobsCompleted: next.jobsCompleted ?? 0,

@@ -187,19 +187,6 @@ test("selecting a batch image aligns canvas node selection atomically", async ()
   assert.match(selection, /currentImageId: full\.id,[\s\S]*selectedNodeId: full\.id/);
 });
 
-test("every workspace transition discards undo and redo history", async () => {
-  const source = await readFile(new URL("../src/state/studioStore.workspaces.ts", import.meta.url), "utf8");
-  const transitions = [
-    source.slice(source.indexOf("newWorkspace("), source.indexOf("switchWorkspace(")),
-    source.slice(source.indexOf("switchWorkspace("), source.indexOf("closeWorkspace(")),
-    source.slice(source.indexOf("closeWorkspace("), source.indexOf("renameWorkspace(")),
-  ];
-  for (const transition of transitions) {
-    assert.match(transition, /undoStack: \[\]/);
-    assert.match(transition, /redoStack: \[\]/);
-  }
-});
-
 test("canvas clear uses one store action", async () => {
   const stage = await readFile(new URL("../src/components/canvas/CanvasStage.tsx", import.meta.url), "utf8");
   const toolbar = await readFile(new URL("../src/components/canvas/Toolbar.tsx", import.meta.url), "utf8");

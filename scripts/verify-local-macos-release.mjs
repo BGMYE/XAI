@@ -246,6 +246,7 @@ try {
     "<string>top.gptcodex.imagestudio</string>",
     "<string>Image Studio</string>",
     "<string>image-studio</string>",
+    "<string>12.0</string>",
   ];
 
   for (const snippet of requiredPlistSnippets) {

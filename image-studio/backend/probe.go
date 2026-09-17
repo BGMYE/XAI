@@ -34,11 +34,17 @@ func (s *Service) ProbeUpstream(opts ProbeUpstreamOptions) (ProbeUpstreamResult,
 	return probeUpstream(s.ctx, opts)
 }
 
-func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpstreamResult, error) {
+func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (result ProbeUpstreamResult, err error) {
 	apiKey := strings.TrimSpace(opts.APIKey)
 	if apiKey == "" {
 		return ProbeUpstreamResult{}, fmt.Errorf("API Key 不能为空")
 	}
+	defer func() {
+		if err != nil {
+			err = errors.New(strings.ReplaceAll(err.Error(), apiKey, "[已隐藏]"))
+		}
+		result.ResponsesTransportError = strings.ReplaceAll(result.ResponsesTransportError, apiKey, "[已隐藏]")
+	}()
 	baseURL, err := client.ValidateBaseURLWithSecurity(opts.BaseURL, opts.AllowInsecureConnection)
 	if err != nil {
 		return ProbeUpstreamResult{}, err
@@ -67,7 +73,7 @@ func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpst
 
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, probeUpstreamMaxBody))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		summary := summarizeProbeBody(body)
+		summary := summarizeProbeBody(body, apiKey)
 		if summary == "" && readErr != nil {
 			summary = readErr.Error()
 		}
@@ -88,20 +94,25 @@ func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpst
 		return ProbeUpstreamResult{}, fmt.Errorf("上游 /v1/models 响应缺少 data 数组")
 	}
 	models := make([]UpstreamModelDescriptor, 0, len(parsed.Data))
+	modelCount := len(parsed.Data)
 	for _, item := range parsed.Data {
 		id := strings.TrimSpace(item.ID)
+		if strings.Contains(id, apiKey) {
+			modelCount--
+			continue
+		}
 		if id == "" {
 			continue
 		}
 		models = append(models, UpstreamModelDescriptor{
 			ID:          id,
-			Object:      strings.TrimSpace(item.Object),
-			OwnedBy:     strings.TrimSpace(item.OwnedBy),
-			DisplayName: strings.TrimSpace(item.DisplayName),
+			Object:      strings.ReplaceAll(strings.TrimSpace(item.Object), apiKey, "[已隐藏]"),
+			OwnedBy:     strings.ReplaceAll(strings.TrimSpace(item.OwnedBy), apiKey, "[已隐藏]"),
+			DisplayName: strings.ReplaceAll(strings.TrimSpace(item.DisplayName), apiKey, "[已隐藏]"),
 		})
 	}
-	result := ProbeUpstreamResult{
-		ModelCount: len(parsed.Data),
+	result = ProbeUpstreamResult{
+		ModelCount: modelCount,
 		Models:     models,
 	}
 	if strings.TrimSpace(opts.APIMode) == string(client.APIModeResponses) &&
@@ -123,7 +134,7 @@ func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpst
 	return result, nil
 }
 
-func summarizeProbeBody(body []byte) string {
+func summarizeProbeBody(body []byte, secrets ...string) string {
 	text := strings.TrimSpace(string(body))
 	if text == "" {
 		return ""
@@ -139,6 +150,12 @@ func summarizeProbeBody(body []byte) string {
 			text = msg
 		} else if msg := strings.TrimSpace(parsed.Message); msg != "" {
 			text = msg
+		}
+	}
+	// Redact before truncating so an echoed credential cannot escape as a prefix.
+	for _, secret := range secrets {
+		if secret != "" {
+			text = strings.ReplaceAll(text, secret, "[已隐藏]")
 		}
 	}
 	if len(text) > 160 {
