@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {zoomAt,fitNodes,connect,removeNodes,mergeProject,orderGraph,exportTemplate,importTemplate,newProject} from '../src/studio/graph.mjs';
+const node=(id,kind='image',x=0)=>({id,kind,x,y:0,title:id,text:'',parameters:{}});
+const project=()=>({...newProject(),nodes:[node('a','prompt'),node('b'),node('c','video')]});
+test('studio: zoom anchors the pointer and clamps',()=>{const v={x:30,y:-10,zoom:.5},p={x:260,y:90};for(const z of [-1,.8,8]){const n=zoomAt(v,p,z);assert.ok(Math.abs((p.x-n.x)/n.zoom-(p.x-v.x)/v.zoom)<1e-9);assert.ok(n.zoom>=.1&&n.zoom<=4);}});
+test('studio: fit includes node extents',()=>{const p=project();p.nodes[1].x=600;const v=fitNodes(p.nodes,1000,600);for(const n of p.nodes){assert.ok(n.x*v.zoom+v.x>=0);assert.ok((n.x+248)*v.zoom+v.x<=1000);}});
+test('studio: DAG validation, cycle rejection and cascading delete',()=>{let p=connect(project(),'a','b');p=connect(p,'b','c');assert.deepEqual(orderGraph(p),['a','b','c']);assert.throws(()=>connect(p,'c','b'));assert.throws(()=>connect(p,'a','b'));assert.equal(removeNodes(p,['b']).edges.length,0);});
+test('studio: finite geometry and dangling edges rejected',()=>{const p=project();p.nodes[0].x=NaN;assert.throws(()=>orderGraph(p));const q=project();q.edges=[{id:'e',from:'bad',to:'b'}];assert.throws(()=>orderGraph(q));});
+test('studio: three way merge keeps generated media and local drag',()=>{const base=project(),local=structuredClone(base),remote=structuredClone(base);local.nodes[0].x=70;remote.nodes.push(node('result','asset'));remote.revision=2;const m=mergeProject(base,local,remote);assert.equal(m.nodes.find(n=>n.id==='a').x,70);assert.equal(m.nodes.length,4);assert.equal(m.revision,2);});
+test('studio: conflicting edits are explicit',()=>{const b=project(),l=structuredClone(b),r=structuredClone(b);l.name='one';r.name='two';assert.throws(()=>mergeProject(b,l,r),/保存冲突/);});
+test('studio: template excludes credential and asset bindings',()=>{const p=project();p.nodes[0].assetId='private';p.apiKey='secret';const t=exportTemplate(p);assert.ok(!t.includes('secret'));assert.ok(!t.includes('private'));const q=importTemplate(t);assert.notEqual(q.id,p.id);assert.equal(q.revision,0);assert.throws(()=>importTemplate('{"schemaVersion":9}'));});

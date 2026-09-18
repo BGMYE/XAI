@@ -1,0 +1,12 @@
+import type {Project, StudioNode, Viewport} from './types';
+export function uid(): string;
+export function clamp(n: number, min: number, max: number): number;
+export function zoomAt(view: Viewport, point: {x: number; y: number}, zoom: number): Viewport;
+export function fitNodes(nodes: StudioNode[], width: number, height: number): Viewport;
+export function orderGraph(project: Project): string[];
+export function connect(project: Project, from: string, to: string): Project;
+export function removeNodes(project: Project, ids: string[]): Project;
+export function mergeProject(base: Project, local: Project, remote: Project): Project;
+export function exportTemplate(project: Project): string;
+export function importTemplate(text: string): Project;
+export function newProject(name?: string): Project;
