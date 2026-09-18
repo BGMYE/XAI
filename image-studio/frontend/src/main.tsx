@@ -1,7 +1,7 @@
 import React from 'react'
 import {createRoot} from 'react-dom/client'
 import './styles/index.css'
-import App from './app/App'
+import StudioRoot from './studio/StudioRoot'
 import { applyPlatformAttributes } from './platform'
 import { PlatformProvider } from './platform/context'
 import { applyMacWorkspacePreviewToStore, applyWindowsRightRailPreviewToStore, readPreviewScenario } from './app/dev/previewScenario'
@@ -10,10 +10,8 @@ import { useStudioStore } from './state/studioStore'
 
 const container = document.getElementById('root')
 applyPlatformAttributes()
-
 const root = createRoot(container!)
-
-if (import.meta.env.DEV && typeof window !== "undefined") {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
     ;(window as Window & { __imageStudioDebug?: unknown }).__imageStudioDebug = {
         readPreviewScenario,
         applyMacWorkspacePreviewToStore,
@@ -21,11 +19,10 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
         getState: () => useStudioStore.getState(),
     }
 }
-
 root.render(
     <React.StrictMode>
         <PlatformProvider>
-            <App/>
+            <StudioRoot/>
         </PlatformProvider>
     </React.StrictMode>
 )

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"net/http"
 	"runtime"
@@ -19,31 +20,38 @@ var assets embed.FS
 
 func main() {
 	svc := backend.NewService()
+	studio := backend.NewStudioV2(svc)
+	media := func(next http.Handler) http.Handler {
+		return studio.MediaHandler(svc.MediaHandler(next))
+	}
 	appOptions := &options.App{
-		Title:     "Image Studio",
+		Title:     "XAI · Image Studio",
 		Width:     1440,
 		Height:    980,
 		MinWidth:  1100,
 		MinHeight: 780,
 		AssetServer: &assetserver.Options{
 			Assets:     assets,
-			Handler:    svc.MediaHandler(http.NotFoundHandler()),
-			Middleware: svc.MediaHandler,
+			Handler:    media(http.NotFoundHandler()),
+			Middleware: media,
 		},
-		BackgroundColour: &options.RGBA{R: 18, G: 20, B: 26, A: 1},
-		OnStartup:        svc.Startup,
-		OnShutdown:       svc.Shutdown,
+		BackgroundColour: &options.RGBA{R: 230, G: 241, B: 255, A: 1},
+		OnStartup: func(ctx context.Context) {
+			svc.Startup(ctx)
+			studio.Startup(ctx)
+		},
+		OnShutdown: func(ctx context.Context) {
+			studio.Shutdown(ctx)
+			svc.Shutdown(ctx)
+		},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "top.gptcodex.imagestudio",
-			OnSecondInstanceLaunch: func(secondInstanceData options.SecondInstanceData) {
-				svc.HandlePromptImportArgs(secondInstanceData.Args)
+			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+				svc.HandlePromptImportArgs(data.Args)
 			},
 		},
-		Bind: []interface{}{
-			svc,
-		},
+		Bind: []interface{}{svc, studio},
 	}
-
 	if runtime.GOOS == "darwin" {
 		if err := backend.MigrateMacWebkitDataDir(); err != nil {
 			println("Warning:", err.Error())
@@ -58,25 +66,25 @@ func main() {
 	}
 	if runtime.GOOS == "windows" {
 		appOptions.Frameless = true
-		webviewUserDataPath, err := backend.WindowsWebviewUserDataPath()
+		userData, err := backend.WindowsWebviewUserDataPath()
 		if err != nil {
 			println("Error:", err.Error())
 			return
 		}
-		legacyWebviewUserDataPaths, err := backend.WindowsLegacyWebviewUserDataPaths()
+		legacy, err := backend.WindowsLegacyWebviewUserDataPaths()
 		if err != nil {
 			println("Error:", err.Error())
 			return
 		}
-		if err := backend.MigrateWindowsWebviewDataDirs(webviewUserDataPath, legacyWebviewUserDataPaths); err != nil {
+		if err = backend.MigrateWindowsWebviewDataDirs(userData, legacy); err != nil {
 			println("Warning:", err.Error())
 		}
-		fixedWebviewBrowserPath, err := backend.WindowsPortableWebviewBrowserPath()
+		fixed, err := backend.WindowsPortableWebviewBrowserPath()
 		if err != nil {
 			println("Warning:", err.Error())
 		}
-		if fixedWebviewBrowserPath != "" {
-			if err := backend.EnsureWindowsFixedWebviewRuntimePermissions(fixedWebviewBrowserPath); err != nil {
+		if fixed != "" {
+			if err = backend.EnsureWindowsFixedWebviewRuntimePermissions(fixed); err != nil {
 				println("Warning:", err.Error())
 			}
 		}
@@ -85,28 +93,27 @@ func main() {
 			BackdropType:         wailswindows.Mica,
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  true,
-			WebviewBrowserPath:   fixedWebviewBrowserPath,
-			WebviewUserDataPath:  webviewUserDataPath,
+			WebviewBrowserPath:   fixed,
+			WebviewUserDataPath:  userData,
+			// Keep classic-editor native theme parity. Studio V2 draws its own
+			// azure titlebar inside the frameless webview.
 			CustomTheme: &wailswindows.ThemeSettings{
 				DarkModeTitleBar:           wailswindows.RGB(32, 32, 32),
 				DarkModeTitleBarInactive:   wailswindows.RGB(38, 38, 38),
 				DarkModeTitleText:          wailswindows.RGB(245, 245, 245),
 				DarkModeTitleTextInactive:  wailswindows.RGB(200, 200, 200),
-				DarkModeBorder:             wailswindows.RGB(54, 54, 54),
-				DarkModeBorderInactive:     wailswindows.RGB(45, 45, 45),
+				DarkModeBorder:            wailswindows.RGB(54, 54, 54),
+				DarkModeBorderInactive:    wailswindows.RGB(45, 45, 45),
 				LightModeTitleBar:          wailswindows.RGB(243, 243, 243),
 				LightModeTitleBarInactive:  wailswindows.RGB(237, 237, 237),
 				LightModeTitleText:         wailswindows.RGB(31, 31, 31),
 				LightModeTitleTextInactive: wailswindows.RGB(96, 96, 96),
-				LightModeBorder:            wailswindows.RGB(219, 219, 219),
-				LightModeBorderInactive:    wailswindows.RGB(226, 226, 226),
+				LightModeBorder:           wailswindows.RGB(219, 219, 219),
+				LightModeBorderInactive:   wailswindows.RGB(226, 226, 226),
 			},
 		}
 	}
-
-	err := wails.Run(appOptions)
-
-	if err != nil {
+	if err := wails.Run(appOptions); err != nil {
 		println("Error:", err.Error())
 	}
 }
