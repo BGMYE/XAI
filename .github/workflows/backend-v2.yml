@@ -6,6 +6,7 @@ on:
     paths:
       - 'image-studio/**'
       - 'go-cli/**'
+      - 'scripts/verify-studio-v2-browser.py'
       - '.github/workflows/backend-v2.yml'
 permissions:
   contents: read
@@ -25,8 +26,8 @@ jobs:
         with:
           name: backend-v2-source
           path: source.tar.gz
-          retention-days: 3
-  verify:
+          retention-days: 7
+  backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -39,20 +40,46 @@ jobs:
           cache-dependency-path: |
             image-studio/go.sum
             go-cli/go.sum
+      - name: Go client and provider tests
+        run: go test -race ./pkg/client/...
+        working-directory: go-cli
+      - name: Go backend and task lifecycle tests
+        run: go test -race ./backend/...
+        working-directory: image-studio
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: image-studio/frontend/package-lock.json
-      - name: Go client tests
-        run: go test -race ./pkg/client/...
-        working-directory: go-cli
-      - name: Go backend tests
-        run: go test -race ./backend/...
-        working-directory: image-studio
-      - name: Frontend dependencies
+      - name: Install locked dependencies
         run: npm ci
         working-directory: image-studio/frontend
-      - name: Frontend build
+      - name: Frontend unit tests
+        run: npm test
+        env:
+          NODE_OPTIONS: --experimental-strip-types
+        working-directory: image-studio/frontend
+      - name: Typecheck and build
         run: npm run build
         working-directory: image-studio/frontend
+      - name: Install browser test runtime
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Browser navigation and canvas persistence smoke
+        run: python scripts/verify-studio-v2-browser.py
+      - name: Browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-v2-browser-evidence
+          path: verification/studio-v2-browser/
+          if-no-files-found: warn
+          retention-days: 14
