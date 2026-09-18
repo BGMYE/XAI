@@ -1,0 +1,54 @@
+/* Studio owns its appearance even when the preserved classic editor has set
+   html.dark. Prefer a complete CJK family so Latin and Chinese use one UI stack. */
+:root {
+  --studio-font: "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+
+html:root .studio-app :is(input, select, textarea),
+html:root .studio-dialog :is(input, select, textarea) {
+  color-scheme: light;
+  color: #253c62;
+  background-color: rgba(255, 255, 255, .84);
+  font-family: var(--studio-font);
+}
+
+html:root .studio-app select option,
+html:root .studio-dialog select option {
+  color: #253c62;
+  background: #f6faff;
+}
+
+.studio-page-heading.compact {
+  min-height: 56px;
+}
+
+.studio-page-heading.compact .studio-form-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  width: auto;
+}
+
+.studio-page-heading.compact select {
+  flex: 0 1 180px;
+  width: 180px;
+}
+
+.studio-page-heading.compact .studio-muted {
+  white-space: nowrap;
+}
+
+.studio-node-body > p {
+  color: #56769f;
+}
+
+@media (max-width: 760px) {
+  .studio-page-heading.compact .studio-form-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .studio-page-heading.compact select {
+    flex: 1 1 120px;
+    width: 120px;
+  }
+}
