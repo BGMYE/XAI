@@ -13,3 +13,13 @@ type unavailableRepository struct{}
 func(unavailableRepository)Load()([]Record,error){return nil,nil}
 func(unavailableRepository)Save([]Record)error{return errors.New("disk unavailable")}
 func TestFailClosedWithoutWritableRepository(t *testing.T){if _,err:=New(context.Background(),unavailableRepository{},nil);err==nil{t.Fatal("must fail closed")};for _,id:=range []string{"../path","a/b","a\\b","","<script>"}{if ValidID(id){t.Fatal(id)}}}
+
+func TestCancellationPreservesLateRemoteID(t *testing.T){
+ m:=testManager(t);started:=make(chan struct{});release:=make(chan struct{});reported:=make(chan struct{})
+ _,err:=m.Submit(Record{ID:"late-id",Kind:"video",Queue:"video"},1,false,func(_ context.Context,report Reporter)(json.RawMessage,error){
+  close(started);<-release;err:=report("remote-paid-1","accepted");close(reported);return nil,err
+ });if err!=nil{t.Fatal(err)};<-started
+ if err=m.Cancel("late-id");err!=nil{t.Fatal(err)};close(release);<-reported
+ record,err:=m.Get("late-id");if err!=nil||record.Status!=Cancelled||record.RemoteID!="remote-paid-1"{t.Fatal(record,err)}
+ rows,err:=m.repo.Load();if err!=nil||len(rows)!=1||rows[0].RemoteID!="remote-paid-1"{t.Fatal(rows,err)}
+}

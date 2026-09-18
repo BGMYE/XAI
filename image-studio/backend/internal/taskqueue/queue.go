@@ -121,8 +121,12 @@ func(m *Manager)execute(ctx context.Context,id string,run Runner){
  func(){
   defer func(){if recover()!=nil{err=errors.New("generation worker panicked")}}()
   result,err=run(ctx,func(remoteID,stage string)error{
-   m.mu.Lock();defer m.mu.Unlock();e:=m.entries[id];if e.record.Status!=Running{return context.Canceled}
-   if remoteID!=""{e.record.RemoteID=remoteID};e.record.Stage=stage;touch(&e.record)
+   m.mu.Lock();defer m.mu.Unlock();e:=m.entries[id]
+   // A paid create request can succeed while local cancellation is racing its
+   // response. Preserve the remote ID even then, without reviving the task.
+   if remoteID!=""{e.record.RemoteID=remoteID;touch(&e.record)}
+   if e.record.Status!=Running{if err:=m.persistLocked();err!=nil{return err};return context.Canceled}
+   e.record.Stage=stage;touch(&e.record)
    // Preserve received remote IDs in memory even when the disk is full.
    return m.persistLocked()
   })

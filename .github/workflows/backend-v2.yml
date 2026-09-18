@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: image-studio/go.mod
+          go-version-file: go.work
           cache-dependency-path: |
             image-studio/go.sum
             go-cli/go.sum
@@ -75,6 +75,10 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Browser navigation and canvas persistence smoke
         run: python scripts/verify-studio-v2-browser.py
+      - name: Mocked desktop transport integration smoke
+        run: |
+          node image-studio/frontend/test/buildBrowserHarness.mjs /tmp/xai-smoke.html
+          CHROMIUM_PATH="$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')" python image-studio/frontend/test/browserSmoke.py /tmp/xai-smoke.html verification/studio-v2-browser/desktop-mock
       - name: Browser screenshots and report
         if: always()
         uses: actions/upload-artifact@v4

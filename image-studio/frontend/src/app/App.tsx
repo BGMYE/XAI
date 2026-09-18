@@ -21,7 +21,7 @@ import { useDesktopPromptImport } from "./hooks/useDesktopPromptImport";
 import { useGlobalImageImport } from "./hooks/useGlobalImageImport";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useStudioBootstrap } from "./hooks/useStudioBootstrap";
-import { XAIWorkspace } from "../components/xai/XAIWorkspace";
+import { StudioShell } from "../components/studio/StudioShell";
 
 export default function App() {
   const fullscreen = useStudioStore((state) => state.fullscreen);
@@ -51,7 +51,7 @@ export default function App() {
           onChangeAndroidView={setAndroidView}
         />
         <FooterBar />
-      </> : <XAIWorkspace onOpenSettings={openSettings} />}
+      </> : <StudioShell onOpenSettings={openSettings} />}
       <ToastContainer />
       {dragHover ? <DropImportOverlay /> : null}
       <CustomAspectRatioGate />
