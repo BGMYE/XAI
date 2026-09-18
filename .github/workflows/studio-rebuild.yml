@@ -43,15 +43,27 @@ jobs:
       - name: Frontend unit tests
         if: always()
         working-directory: image-studio/frontend
-        run: npm test
+        shell: bash
+        run: |
+          mkdir -p studio-evidence
+          set -o pipefail
+          npm test 2>&1 | tee studio-evidence/frontend-tests.log
       - name: Typecheck frontend
         if: always()
         working-directory: image-studio/frontend
+        shell: bash
         run: |
-          git rev-parse HEAD
-          git status --short
-          nl -ba src/studio/Canvas.tsx | sed -n '35,47p'
-          npx tsc --noEmit --pretty false
+          mkdir -p studio-evidence
+          git rev-parse HEAD > studio-evidence/commit.txt
+          cp src/studio/Canvas.tsx studio-evidence/Canvas.tsx.txt
+          cp tsconfig.json studio-evidence/tsconfig.json
+          node -p "JSON.stringify({typescript:require('typescript/package.json').version,reactTypes:require('@types/react/package.json').version})" > studio-evidence/dependency-versions.json
+          set -o pipefail
+          npx tsc --noEmit --pretty false 2>&1 | tee studio-evidence/typecheck.log
+      - name: Retain locked dependency snapshot for offline verification
+        if: always()
+        working-directory: image-studio/frontend
+        run: tar -czf studio-evidence/node_modules.tgz node_modules
       - name: Build frontend
         working-directory: image-studio/frontend
         run: npm run build
