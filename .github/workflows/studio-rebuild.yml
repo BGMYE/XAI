@@ -16,6 +16,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Package exact source revision
+        run: git archive --format=zip --output=studio-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-source
+          path: studio-source.zip
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -26,24 +33,28 @@ jobs:
             go.work.sum
             image-studio/go.sum
             go-cli/go.sum
+      - name: Test studio domain with race detector
+        working-directory: image-studio
+        run: go test -race -count=3 -v ./backend/studio/...
       - name: Install frontend
+        if: always()
         working-directory: image-studio/frontend
         run: npm ci
-      - name: Frontend tests and typecheck
+      - name: Frontend unit tests
+        if: always()
+        working-directory: image-studio/frontend
+        run: npm test
+      - name: Typecheck frontend
+        if: always()
         working-directory: image-studio/frontend
         run: |
-          npm test
-          npx tsc --noEmit
+          git rev-parse HEAD
+          git status --short
+          nl -ba src/studio/Canvas.tsx | sed -n '35,47p'
+          npx tsc --noEmit --pretty false
       - name: Build frontend
         working-directory: image-studio/frontend
         run: npm run build
-      - name: Test studio domain
-        shell: bash
-        run: |
-          if [ -d image-studio/backend/studio ]; then
-            cd image-studio
-            go test -race -count=1 ./backend/studio/...
-          fi
       - name: Check Windows desktop integration
         working-directory: image-studio
         env:
@@ -51,15 +62,39 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: '0'
         run: go build -o /tmp/image-studio-check.exe .
-      - name: Package source
-        run: git archive --format=zip --output=studio-source.zip HEAD
+      - name: Install browser verification tools
+        working-directory: image-studio/frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.1
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Browser interactions and screenshots
+        working-directory: image-studio/frontend
+        run: node scripts/studio-browser-smoke.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: studio-source
-          path: studio-source.zip
+          name: studio-browser-evidence
+          path: image-studio/frontend/studio-evidence
+          if-no-files-found: ignore
           retention-days: 7
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: studio-web-preview
           path: image-studio/frontend/dist
           retention-days: 7
+  windows-core:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            go.work.sum
+            image-studio/go.sum
+      - name: Test native Windows storage and core
+        working-directory: image-studio
+        run: go test -count=3 ./backend/studio/...
