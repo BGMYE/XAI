@@ -135,9 +135,10 @@ try {
     await page.locator('.studio-sidebar button').filter({hasText: '设置'}).click();
     await page.getByRole('heading', {name: '工作室设置'}).waitFor();
     assert.ok(await page.getByRole('button', {name: '保存配置', exact: true}).isDisabled());
-    const colors = await page.locator('.studio-provider-form input,.studio-provider-form select')
+    // Native checkboxes have no text glyphs; check text-bearing controls only.
+    const colors = await page.locator('.studio-provider-form input:not([type="checkbox"]),.studio-provider-form select')
       .evaluateAll(elements => elements.map(element => getComputedStyle(element).color));
-    assert.ok(colors.length > 0 && colors.every(color => color === 'rgb(37, 60, 98)'));
+    assert.ok(colors.length > 0 && colors.every(color => color === 'rgb(37, 60, 98)'), `Text-control colors: ${JSON.stringify(colors)}`);
     await page.screenshot({path: new URL('settings-1440.png', out).pathname});
     pass('Browser preview blocks key persistence; classic dark mode cannot leak into controls');
 
