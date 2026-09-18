@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { get, update } from "idb-keyval";
+import { createStore, get, update } from "idb-keyval";
 import { getService, hasServiceMethod, invokeService } from "../platform/runtime/hostBindings";
 import { canvasSnapshot, validateCanvasDocument, type CanvasDocument } from "../lib/canvasDocument";
 import { createCanvasNode } from "./canvasNodes";
@@ -15,13 +15,16 @@ export interface StudioTask {
 export const useStudioV2 = create<{ ready: boolean; saving: boolean; storageError: string; taskError: string; tasks: StudioTask[] }>(() => ({ ready: false, saving: false, storageError: "", taskError: "", tasks: [] }));
 export const studioService = <T,>(method: string, ...args: unknown[]) => invokeService<T>(() => "请在更新后的桌面应用中使用此功能", method, ...args);
 const DOCUMENT_KEY = "xai.canvas-document.v1";
+// Legacy history migration may open keyval-store without creating a keyval
+// object store. Keep the new document isolated; never upgrade or clear history.
+const canvasStore = createStore("xai-studio-canvas-v1", "documents");
 let initialized: Promise<void> | undefined;
 let revision = 0, lastSaved = "", dirty = false, saving = false, storageStopped = false;
 const applied = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 async function loadDocument(): Promise<CanvasDocument | undefined> {
-  return hasServiceMethod("LoadCanvasDocument") ? studioService<CanvasDocument>("LoadCanvasDocument") : get<CanvasDocument>(DOCUMENT_KEY);
+  return hasServiceMethod("LoadCanvasDocument") ? studioService<CanvasDocument>("LoadCanvasDocument") : get<CanvasDocument>(DOCUMENT_KEY, canvasStore);
 }
 async function saveDocument(doc: CanvasDocument): Promise<CanvasDocument> {
   if (hasServiceMethod("SaveCanvasDocument")) return studioService<CanvasDocument>("SaveCanvasDocument", doc, revision);
@@ -29,7 +32,7 @@ async function saveDocument(doc: CanvasDocument): Promise<CanvasDocument> {
   await update<CanvasDocument>(DOCUMENT_KEY, (previous) => {
     if ((previous?.revision ?? 0) !== revision) throw new Error("CANVAS_CONFLICT: 画布被其他窗口修改，请重新打开应用；未覆盖原文档");
     saved = { ...doc, revision: revision + 1 }; return saved;
-  });
+  }, canvasStore);
   return saved;
 }
 function signature(doc: CanvasDocument) { return JSON.stringify({ ...doc, revision: 0 }); }
