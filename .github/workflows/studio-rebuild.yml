@@ -1,0 +1,65 @@
+name: Studio rebuild validation
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [refactor/azure-studio-backend]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-rebuild-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            go.work.sum
+            image-studio/go.sum
+            go-cli/go.sum
+      - name: Install frontend
+        working-directory: image-studio/frontend
+        run: npm ci
+      - name: Frontend tests and typecheck
+        working-directory: image-studio/frontend
+        run: |
+          npm test
+          npx tsc --noEmit
+      - name: Build frontend
+        working-directory: image-studio/frontend
+        run: npm run build
+      - name: Test studio domain
+        shell: bash
+        run: |
+          if [ -d image-studio/backend/studio ]; then
+            cd image-studio
+            go test -race -count=1 ./backend/studio/...
+          fi
+      - name: Check Windows desktop integration
+        working-directory: image-studio
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -o /tmp/image-studio-check.exe .
+      - name: Package source
+        run: git archive --format=zip --output=studio-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-source
+          path: studio-source.zip
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-web-preview
+          path: image-studio/frontend/dist
+          retention-days: 7
