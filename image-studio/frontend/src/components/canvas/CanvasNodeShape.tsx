@@ -14,6 +14,7 @@ export function CanvasNodeShape({ node, selected, source, draggable, onSelect, o
   onDelete: () => void;
 }) {
   const image = useImageFromSource(null, undefined, node.type === "image" ? (node.src ?? source ?? null) : null);
+  const fontFamily = getComputedStyle(document.documentElement).getPropertyValue("--studio-ui-font").trim() || "system-ui, sans-serif";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoImageRef = useRef<Konva.Image | null>(null);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -72,11 +73,11 @@ export function CanvasNodeShape({ node, selected, source, draggable, onSelect, o
     <Group x={node.x} y={node.y} draggable={draggable} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }} onDragEnd={(e) => { e.cancelBubble = true; onMove(e.target.x(), e.target.y()); }}>
       {node.type === "image" && image ? <KonvaImage image={image} width={node.width} height={node.height} /> : null}
       {node.type === "video" && video && !failed ? <KonvaImage ref={videoImageRef} image={video} width={node.width} height={node.height} /> : null}
-      {(node.type === "video" && (!video || failed)) || (node.type === "image" && !image) ? <Rect width={node.width} height={node.height} fill="#eadfd8" /> : null}
-      <Rect width={node.width} height={node.height} stroke={selected ? "#c15f3c" : "rgba(39,35,32,.18)"} strokeWidth={selected ? 4 : 1} cornerRadius={16} listening={false} />
-      {node.type === "video" ? <Text text={failed ? "视频无法预览 · 点击打开" : (playing ? "暂停" : "播放")} x={12} y={12} fill="#8f3f28" fontSize={14} onClick={failed && node.src ? (e) => { e.cancelBubble = true; window.open(node.src, "_blank", "noopener,noreferrer"); } : toggleVideo} /> : null}
-      <Text text={node.type === "video" ? "VIDEO" : (node.label ?? "图片")} x={12} y={node.height - 28} fill={selected ? "#8f3f28" : "#54463f"} fontSize={13} listening={false} />
-      {selected ? <Text text="×" x={node.width - 28} y={6} fill="#8f3f28" fontSize={22} onClick={(e) => { e.cancelBubble = true; onDelete(); }} /> : null}
+      {(node.type === "video" && (!video || failed)) || (node.type === "image" && !image) ? <Rect width={node.width} height={node.height} fill="#e4edfb" /> : null}
+      <Rect width={node.width} height={node.height} stroke={selected ? "#287dff" : "rgba(38,69,112,.24)"} strokeWidth={selected ? 4 : 1} cornerRadius={16} listening={false} />
+      {node.type === "video" ? <Text fontFamily={fontFamily} text={failed ? "视频无法预览 · 点击打开" : (playing ? "暂停" : "播放")} x={12} y={12} fill="#1855a6" fontSize={14} onClick={failed && node.src ? (e) => { e.cancelBubble = true; window.open(node.src, "_blank", "noopener,noreferrer"); } : toggleVideo} /> : null}
+      <Text fontFamily={fontFamily} text={node.type === "video" ? "VIDEO" : (node.label ?? "图片")} x={12} y={node.height - 28} fill={selected ? "#1855a6" : "#4d6080"} fontSize={13} listening={false} />
+      {selected ? <Text fontFamily={fontFamily} text="×" x={node.width - 28} y={6} fill="#1855a6" fontSize={22} onClick={(e) => { e.cancelBubble = true; onDelete(); }} /> : null}
     </Group>
   );
 }

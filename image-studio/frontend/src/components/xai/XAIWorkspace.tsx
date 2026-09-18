@@ -172,9 +172,18 @@ function ProWorkspace({ setView, onOpenSettings }: { setView: (v: StudioView) =>
   const { openHistoryTimeline, pushToast, apiKey, baseURL } = useStudioStore();
   return <div className="xai-window pro-window"><div className="xai-window-bar drag-region" onDoubleClick={(event) => handleWindowTitleBarDoubleClick(event, () => pushToast("窗口控制请在桌面应用中使用。", "info"))}><XAIWindowControls onUnavailable={() => pushToast("窗口控制请在桌面应用中使用。", "info")} /><span className="xai-window-title">XAI</span><ModeSwitch view="pro" setView={setView} /><div className="xai-connected"><i />{apiKey && baseURL ? "已配置" : "未配置"}</div></div><div className="xai-window-body"><SideNav onCreate={() => setView("simple")} onHistory={openHistoryTimeline} onSettings={onOpenSettings} onHint={(label) => pushToast(`${label}功能尚未开放，当前可继续使用创作与作品历史`, "info")} /><XAIProPanels /></div></div>;
 }
-export function XAIWorkspace({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const [view, setViewState] = useState<StudioView>(() => (localStorage.getItem("xai-ui-mode") as StudioView) || "simple");
-  const [tab, setTab] = useState<MediaTab>("image");
-  const setView = (next: StudioView) => { setViewState(next); localStorage.setItem("xai-ui-mode", next); };
+export function XAIWorkspace({ onOpenSettings, controlledView, onViewChange, initialTab = "image" }: {
+  onOpenSettings: () => void; controlledView?: StudioView;
+  onViewChange?: (view: StudioView) => void; initialTab?: MediaTab;
+}) {
+  const [localView, setViewState] = useState<StudioView>(() => {
+    try { return localStorage.getItem("xai-ui-mode") === "pro" ? "pro" : "simple"; } catch { return "simple"; }
+  });
+  const view = controlledView ?? localView;
+  const [tab, setTab] = useState<MediaTab>(initialTab);
+  const setView = (next: StudioView) => {
+    setViewState(next); onViewChange?.(next);
+    try { localStorage.setItem("xai-ui-mode", next); } catch { /* storage unavailable */ }
+  };
   return <div className="xai-app">{view === "simple" ? <SimpleWorkspace tab={tab} setTab={setTab} setView={setView} /> : <ProWorkspace setView={setView} onOpenSettings={onOpenSettings} />}</div>;
 }

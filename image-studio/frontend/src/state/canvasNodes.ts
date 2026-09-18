@@ -6,6 +6,7 @@ export interface CanvasNode {
   id: string;
   type: CanvasNodeType;
   mediaId?: string;
+  savedPath?: string;
   src?: string;
   label?: string;
   x: number;
@@ -29,8 +30,8 @@ export interface CanvasViewport {
 export const DEFAULT_CANVAS_VIEWPORT: CanvasViewport = { x: 0, y: 0, scale: 1 };
 
 export function sourceHistoryItemForCanvasNode(node: CanvasNode | undefined): HistoryItem | undefined {
-  if (!node || node.type !== "image" || !node.id.startsWith("source-preview:")) return undefined;
-  const savedPath = node.id.slice("source-preview:".length);
+  if (!node || node.type !== "image") return undefined;
+  const savedPath = node.savedPath || (node.id.startsWith("source-preview:") ? node.id.slice("source-preview:".length) : "");
   if (!savedPath) return undefined;
   return {
     id: node.id,
@@ -65,6 +66,7 @@ export function createCanvasNode(input: Partial<CanvasNode> & Pick<CanvasNode, "
     id: input.id,
     type: input.type,
     mediaId: input.mediaId,
+    savedPath: input.savedPath,
     src: input.src,
     label: input.label,
     x: input.x ?? 0,
