@@ -5,8 +5,14 @@
     "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
 }
 
+/* The classic :root.dark input[type="password"] selector has higher
+   specificity than html:root .studio-app input. Match the dark root explicitly
+   so text/number/password inputs and portalled dialogs stay readable, without
+   changing the appearance of controls outside Studio. */
 html:root .studio-app :is(input, select, textarea),
-html:root .studio-dialog :is(input, select, textarea) {
+html:root .studio-dialog :is(input, select, textarea),
+html:root.dark .studio-app :is(input, select, textarea),
+html:root.dark .studio-dialog :is(input, select, textarea) {
   color-scheme: light;
   color: #253c62;
   background-color: rgba(255, 255, 255, .84);
