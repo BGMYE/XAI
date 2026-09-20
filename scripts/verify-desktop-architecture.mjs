@@ -6,7 +6,9 @@ import {fileURLToPath} from 'node:url';
 // Offline structural regression guard. Real compilation, provider HTTP mocks,
 // key-storage tests and browser interactions remain separate CI steps.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = name => readFileSync(path.join(root, name), 'utf8');
+// Git checkouts can use CRLF on Windows. Normalize text before line-based
+// parsing; the same workspace and release dependencies must pass on every OS.
+const read = name => readFileSync(path.join(root, name), 'utf8').replace(/\r\n?/g, '\n');
 const exists = name => existsSync(path.join(root, name));
 const checks = [];
 function check(name, fn) {fn(); checks.push(name); console.log(`PASS: ${name}`);}
