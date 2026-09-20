@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {chromium} from 'playwright';
+import {testDraftSaves} from './studio-save-regression.mjs';
 
 // Exercise the production build with no credentials or paid API requests.
 const out = new URL('../studio-evidence/', import.meta.url);
@@ -142,14 +143,37 @@ try {
     await page.screenshot({path: new URL('settings-1440.png', out).pathname});
     pass('Browser preview blocks key persistence; classic dark mode cannot leak into controls');
 
+    // The dialog and its explicitly typed fields must obey the same theme
+    // boundary even when the classic macOS or Windows family is selected.
+    await page.getByRole('button', {name: '添加上游', exact: true}).click();
+    await page.locator('.studio-dialog[open]').waitFor();
+    const family = await page.evaluate(() => document.documentElement.getAttribute('data-ui-family'));
+    for (const uiFamily of ['fluent', 'apple']) {
+      await page.evaluate(value => document.documentElement.setAttribute('data-ui-family', value), uiFamily);
+      const dialogColors = await page.locator('.studio-dialog input:not([type="checkbox"]),.studio-dialog select')
+        .evaluateAll(elements => elements.map(element => ({color: getComputedStyle(element).color, caret: getComputedStyle(element).caretColor})));
+      assert.ok(dialogColors.length > 0 && dialogColors.every(style => style.color === 'rgb(37, 60, 98)' && style.caret === 'rgb(37, 60, 98)'), `Dialog text colors (${uiFamily}): ${JSON.stringify(dialogColors)}`);
+    }
+    await page.evaluate(value => {
+      if (value === null) document.documentElement.removeAttribute('data-ui-family');
+      else document.documentElement.setAttribute('data-ui-family', value);
+    }, family);
+    await page.getByRole('button', {name: '关闭对话框', exact: true}).click();
+    pass('Provider dialog preserves readable text and caret under classic platform themes');
+
+
     await page.locator('.studio-sidebar button').filter({hasText: '首页'}).click();
     for (const size of [{width: 1100, height: 780}, {width: 760, height: 900}]) {
       await page.setViewportSize(size);
       await page.waitForTimeout(150);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      if (size.width === 1100) {
+        assert.ok(await page.locator('.studio-window-controls').isVisible(), 'Frameless window controls remain visible at minimum desktop width');
+      }
       await page.screenshot({path: new URL(`home-${size.width}.png`, out).pathname});
     }
-    pass('Responsive layout at 1100 and 760 pixels');
+    pass('Responsive layout at 1100 and 760 pixels, including desktop window controls');
+    for (const check of await testDraftSaves(context)) pass(check);
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
     pass('No uncaught errors or external network calls');

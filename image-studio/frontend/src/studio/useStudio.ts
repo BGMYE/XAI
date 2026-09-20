@@ -1,10 +1,12 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useContext, useEffect, useRef, useState} from 'react';
 import {client} from './client';
+import {DraftSaveContext} from './DraftSaveContext';
 import {mergeProject, newProject, orderGraph} from './graph.mjs';
 import {emptySnapshot, type Project, type Snapshot} from './types';
 type Draft = {base: Project; local: Project};
 const same = (a: Project, b: Project) => JSON.stringify(a) === JSON.stringify(b);
 export function useStudio() {
+  const registerSaver = useContext(DraftSaveContext);
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
   const [activeID, setActiveID] = useState('');
   const [version, bump] = useState(0);
@@ -80,6 +82,12 @@ export function useStudio() {
     }, 700);
     return () => clearTimeout(timer);
   }, [version, flush]);
+  // Enumerate drafts rather than the last snapshot, which may lag a new canvas.
+  // Rejections reach the navigation handler so a failed save cannot unmount it.
+  const flushAll = useCallback(async () => {
+    for (const id of drafts.current.keys()) await flush(id);
+  }, [flush]);
+  useEffect(() => registerSaver(flushAll), [registerSaver, flushAll]);
   const edit = useCallback((p: Project) => {
     try { orderGraph(p); const d = drafts.current.get(p.id); if (d) { d.local = {...p, revision: d.base.revision}; failedSaves.current.delete(p.id); bump(n => n + 1); } }
     catch (e) { report(e); }
@@ -94,5 +102,5 @@ export function useStudio() {
     if (p) { drafts.current.set(id,{base:p,local:p}); conflicts.current.delete(id); failedSaves.current.delete(id); accept(s); setError(''); }
   }, [accept]);
   const project = drafts.current.get(activeID)?.local;
-  return {getProject: (id: string) => drafts.current.get(id)?.local, snapshot, project, activeID, setActiveID, edit, create, flush, reload, refresh, ready, saving, error, setError, report, conflicted: conflicts.current.has(activeID)};
+  return {getProject: (id: string) => drafts.current.get(id)?.local, snapshot, project, activeID, setActiveID, edit, create, flush, flushAll, reload, refresh, ready, saving, error, setError, report, conflicted: conflicts.current.has(activeID)};
 }
