@@ -1,0 +1,89 @@
+name: Backend v2 verification
+on:
+  push:
+    branches: [codex/backend-v2-video-canvas]
+  pull_request:
+    paths:
+      - 'image-studio/**'
+      - 'go-cli/**'
+      - 'scripts/verify-studio-v2-browser.py'
+      - '.github/workflows/backend-v2.yml'
+permissions:
+  contents: read
+concurrency:
+  group: backend-v2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git archive --format=tar.gz --output=source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-v2-source
+          path: source.tar.gz
+          retention-days: 7
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            image-studio/go.sum
+            go-cli/go.sum
+      - name: Go client and provider tests
+        run: go test -race ./pkg/client/...
+        working-directory: go-cli
+      - name: Go backend and task lifecycle tests
+        run: go test -race ./backend/...
+        working-directory: image-studio
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+        working-directory: image-studio/frontend
+      - name: Frontend unit tests
+        run: npm test
+        env:
+          NODE_OPTIONS: --experimental-strip-types
+        working-directory: image-studio/frontend
+      - name: Typecheck and build
+        run: npm run build
+        working-directory: image-studio/frontend
+      - name: Install browser test runtime
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Browser navigation and canvas persistence smoke
+        run: python scripts/verify-studio-v2-browser.py
+      - name: Mocked desktop transport integration smoke
+        run: |
+          node image-studio/frontend/test/buildBrowserHarness.mjs /tmp/xai-smoke.html
+          CHROMIUM_PATH="$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')" python image-studio/frontend/test/browserSmoke.py /tmp/xai-smoke.html verification/studio-v2-browser/desktop-mock
+      - name: Browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-v2-browser-evidence
+          path: verification/studio-v2-browser/
+          if-no-files-found: warn
+          retention-days: 14

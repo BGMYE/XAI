@@ -1,0 +1,25 @@
+package taskqueue
+
+import("context";"encoding/json";"errors";"os";"path/filepath";"sync/atomic";"testing";"time")
+func testManager(t *testing.T)*Manager{t.Helper();m,err:=New(context.Background(),FileRepository{Path:filepath.Join(t.TempDir(),"tasks.json")},nil);if err!=nil{t.Fatal(err)};t.Cleanup(func(){ctx,c:=context.WithTimeout(context.Background(),time.Second);defer c();if err:=m.Shutdown(ctx);err!=nil{t.Error(err)}});return m}
+func await(t *testing.T,m *Manager,id string,status Status)Record{t.Helper();deadline:=time.Now().Add(3*time.Second);for time.Now().Before(deadline){r,err:=m.Get(id);if err==nil&&r.Status==status{return r};time.Sleep(time.Millisecond)};r,_:=m.Get(id);t.Fatalf("%s: got %+v, want %s",id,r,status);return r}
+func blocking(ctx context.Context,_ Reporter)(json.RawMessage,error){<-ctx.Done();return nil,ctx.Err()}
+func TestConcurrencyIsolationAndDuplicate(t *testing.T){m:=testManager(t);_,err:=m.Submit(Record{ID:"one",Kind:"image",Queue:"responses"},1,true,blocking);if err!=nil{t.Fatal(err)};if _,err=m.Submit(Record{ID:"two",Kind:"image",Queue:"responses"},1,true,blocking);err==nil{t.Fatal("expected busy")};if _,err=m.Submit(Record{ID:"one",Kind:"image",Queue:"images"},1,true,blocking);err==nil{t.Fatal("expected duplicate rejection")};if _,err=m.Submit(Record{ID:"other",Kind:"image",Queue:"images"},1,true,blocking);err!=nil{t.Fatal(err)}}
+func TestCancellationDoesNotStartQueuedOrAcceptLateResult(t *testing.T){m:=testManager(t);release:=make(chan struct{});var called atomic.Bool;first:=func(ctx context.Context,_ Reporter)(json.RawMessage,error){<-release;return json.RawMessage(`{"ok":true}`),nil};m.Submit(Record{ID:"one",Kind:"video",Queue:"video"},1,false,first);m.Submit(Record{ID:"two",Kind:"video",Queue:"video"},1,false,func(context.Context,Reporter)(json.RawMessage,error){called.Store(true);return nil,nil});if err:=m.Cancel("two");err!=nil{t.Fatal(err)};if err:=m.Cancel("one");err!=nil{t.Fatal(err)};close(release);await(t,m,"one",Cancelled);await(t,m,"two",Cancelled);time.Sleep(20*time.Millisecond);if called.Load(){t.Fatal("cancelled queued task ran")};if r,_:=m.Get("one");r.Status!=Cancelled||len(r.Result)>0{t.Fatal(r)}}
+func TestRestartAndResumeDoNotSubmitAgain(t *testing.T){path:=filepath.Join(t.TempDir(),"tasks.json");repo:=FileRepository{Path:path};if err:=repo.Save([]Record{{ID:"a",Kind:"video",Queue:"video",RemoteID:"remote-1",Status:Running}});err!=nil{t.Fatal(err)};m,err:=New(context.Background(),repo,nil);if err!=nil{t.Fatal(err)};r,_:=m.Get("a");if r.Status!=Interrupted||r.RemoteID!="remote-1"{t.Fatal(r)};_,err=m.Resume("a",func(_ context.Context,report Reporter)(json.RawMessage,error){return json.RawMessage(`{"savedPath":"/tmp/video.mp4"}`),report("remote-1","download")});if err!=nil{t.Fatal(err)};r=await(t,m,"a",Succeeded);if r.RemoteID!="remote-1"{t.Fatal(r)};if _,err=m.Resume("a",blocking);err==nil{t.Fatal("cannot resume succeeded task")};m.Shutdown(context.Background())}
+func TestWorkerPanicReleasesSlot(t *testing.T){m:=testManager(t);m.Submit(Record{ID:"panic",Kind:"video",Queue:"video"},1,false,func(context.Context,Reporter)(json.RawMessage,error){panic("do not leak this")});m.Submit(Record{ID:"next",Kind:"video",Queue:"video"},1,false,func(context.Context,Reporter)(json.RawMessage,error){return nil,nil});r:=await(t,m,"panic",Failed);if r.Error!="generation worker panicked"{t.Fatal(r)};await(t,m,"next",Succeeded)}
+func TestRepositoryCorruptionAndAtomicReplacement(t *testing.T){path:=filepath.Join(t.TempDir(),"tasks.json");repo:=FileRepository{Path:path};if err:=repo.Save([]Record{{ID:"first",Status:Succeeded}});err!=nil{t.Fatal(err)};if err:=repo.Save([]Record{{ID:"second",Status:Failed}});err!=nil{t.Fatal(err)};rows,err:=repo.Load();if err!=nil||len(rows)!=1||rows[0].ID!="second"{t.Fatal(rows,err)};os.WriteFile(path,[]byte(`{"version":99}`),0600);if _,err=repo.Load();err==nil{t.Fatal("expected unknown schema failure")}}
+type unavailableRepository struct{}
+func(unavailableRepository)Load()([]Record,error){return nil,nil}
+func(unavailableRepository)Save([]Record)error{return errors.New("disk unavailable")}
+func TestFailClosedWithoutWritableRepository(t *testing.T){if _,err:=New(context.Background(),unavailableRepository{},nil);err==nil{t.Fatal("must fail closed")};for _,id:=range []string{"../path","a/b","a\\b","","<script>"}{if ValidID(id){t.Fatal(id)}}}
+
+func TestCancellationPreservesLateRemoteID(t *testing.T){
+ m:=testManager(t);started:=make(chan struct{});release:=make(chan struct{});reported:=make(chan struct{})
+ _,err:=m.Submit(Record{ID:"late-id",Kind:"video",Queue:"video"},1,false,func(_ context.Context,report Reporter)(json.RawMessage,error){
+  close(started);<-release;err:=report("remote-paid-1","accepted");close(reported);return nil,err
+ });if err!=nil{t.Fatal(err)};<-started
+ if err=m.Cancel("late-id");err!=nil{t.Fatal(err)};close(release);<-reported
+ record,err:=m.Get("late-id");if err!=nil||record.Status!=Cancelled||record.RemoteID!="remote-paid-1"{t.Fatal(record,err)}
+ rows,err:=m.repo.Load();if err!=nil||len(rows)!=1||rows[0].RemoteID!="remote-paid-1"{t.Fatal(rows,err)}
+}

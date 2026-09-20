@@ -142,9 +142,11 @@ test("clear canvas removes all media nodes rather than only hiding currentImage"
 });
 
 test("canvas nodes can be added to an inactive workspace without changing active state", async () => {
-  const source = await readFile(new URL("../src/components/panel/VideoGenerationPanel.tsx", import.meta.url), "utf8");
-  assert.match(source, /addCanvasNodeToWorkspace\(workspaceId/);
-  assert.match(source, /const workspaceId = useStudioStore\.getState\(\)\.activeWorkspaceId/);
+  const source = await readFile(new URL("../src/state/studioV2.ts", import.meta.url), "utf8");
+  assert.match(source, /deliverVideoTask\(task: StudioTask, workspaceId = task\.workspaceId/);
+  assert.match(source, /store\.addCanvasNodeToWorkspace\(workspace\.id/);
+  assert.match(source, /automatic && applied\.has\(task\.id\)/);
+  assert.match(source, /deliverVideoTask\(task, task\.workspaceId, true\)/);
 });
 
 test("workspace-targeted node insertion mirrors the active workspace immediately", async () => {
