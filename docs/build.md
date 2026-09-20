@@ -5,7 +5,7 @@
 ## 环境要求
 
 - Go 1.25.x。当前 `go.mod` 使用 `go 1.25.5` 与 `toolchain go1.26.3`。
-- Node.js 20 或更新版本。
+- Node.js 22.18 或更新版本；当前发布流程使用 Node 24。
 - Wails CLI v2.12.0。非 macOS release workflow 使用 `go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0`。
 - Android 构建需要 JDK 17、Android SDK 34、Build Tools 34.0.0、Gradle 8.7。
 
@@ -105,41 +105,6 @@ wails build -platform linux/amd64 -clean -tags webkit2_41
 
 Ubuntu 22.04 系通常使用 `libwebkit2gtk-4.0-dev`，构建时不加 `webkit2_41` tag。
 
-## Windows / Linux Gio 测试客户端
-
-Gio 客户端位于 `gio-client/`，与 Wails / WebView2 主实现独立。它复用 `go-cli/pkg/client` 请求内核，不读取 `image-studio/frontend/dist`。
-
-Windows：
-
-```bash
-cd gio-client
-go test ./...
-go build -o ../dist/image-studio-gio.exe ./cmd/image-studio-gio
-```
-
-Linux：
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  pkg-config \
-  libegl1-mesa-dev \
-  libvulkan-dev \
-  libwayland-dev \
-  libx11-dev \
-  libx11-xcb-dev \
-  libxcursor-dev \
-  libxfixes-dev \
-  libxkbcommon-dev \
-  libxkbcommon-x11-dev
-
-cd gio-client
-go test ./...
-go build -o ../dist/image-studio-gio ./cmd/image-studio-gio
-```
-
-release workflow 会单独上传 `image-studio-gio-*` artifacts，不改变现有 `image-studio-*` Wails artifacts。
-
 ## Android APK
 
 ```bash
@@ -181,7 +146,12 @@ release workflow 会先执行：
 
 ## 验证入口
 
-常用验证：
+常用验证（只保留 Wails 主工作室及共享 Go 模块）：
+
+```bash
+# 仓库根目录，检查 workspace、发布作业和保留的入口
+node scripts/verify-desktop-architecture.mjs
+```
 
 ```bash
 cd image-studio/frontend
@@ -195,7 +165,7 @@ GOPATH="../.gopath" GOMODCACHE="../.gomodcache" GOCACHE="../.gocache" go test ./
 cd ../go-cli
 GOPATH="../.gopath" GOMODCACHE="../.gomodcache" GOCACHE="../.gocache" go test ./...
 
-cd ../gio-client
+cd ../shared/compat-go
 GOPATH="../.gopath" GOMODCACHE="../.gomodcache" GOCACHE="../.gocache" go test ./...
 ```
 

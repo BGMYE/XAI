@@ -1,6 +1,0 @@
-go test fuzz v1
-string("\n")
-bool(true)
-bool(false)
-byte('\t')
-uint16(200)
