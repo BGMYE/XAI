@@ -2,7 +2,7 @@
   "updatedAt": "2026-07-10",
   "upstreamRepo": "RoseKhlifa/Image-Studio",
   "verificationBaseline": {
-    "summaryCommand": "npm test; go test ./... (image-studio, go-cli, gio-client, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check",
+    "summaryCommand": "npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check",
     "summaryStatus": "passed",
     "summarySteps": 10,
     "frontendTests": "162/162",
@@ -22,7 +22,7 @@
     {
       "number": 49,
       "title": "[Feature]: 模板/历史里面的历史条数混乱，不够清晰的看到每一条的内容",
-      "comment": "这个需求已经完成。\n\n- Prompt 历史改为带 `01 / 02 / ...` 序号和明确分隔线的有序列表。\n- Android 使用同一编号语义。\n- Gio 客户端同步显示“历史 1 / 历史 2 / ...”，不再把连续 prompt 混成一段。\n\n主要落点：\n\n- `image-studio/frontend/src/components/panel/PromptPopover.tsx`\n- `image-studio/frontend/src/lib/promptTemplates.ts`\n- `image-studio/frontend/src/platform/android/AndroidPromptTemplateModal.tsx`\n- `gio-client/internal/ui/layout_controls.go`\n\n前端与 Gio 聚焦测试均通过，这个 issue 可以关闭。"
+      "comment": "这个需求已经完成。\n\n- Prompt 历史改为带 `01 / 02 / ...` 序号和明确分隔线的有序列表。\n- Android 使用同一编号语义。\n\n主要落点：\n\n- `image-studio/frontend/src/components/panel/PromptPopover.tsx`\n- `image-studio/frontend/src/lib/promptTemplates.ts`\n- `image-studio/frontend/src/platform/android/AndroidPromptTemplateModal.tsx`\n\n前端聚焦测试通过，这个 issue 可以关闭。"
     },
     {
       "number": 50,
@@ -37,7 +37,7 @@
     {
       "number": 53,
       "title": "[Feature]: 支持发送蒙版的API参数",
-      "comment": "可选蒙版图片功能已经完成。\n\n- Wails、Android 与 Gio 都可导入和清除蒙版图片。\n- 画布绘制蒙版与导入蒙版复用同一 `maskB64` 请求字段。\n- Responses API 按 `input_image_mask` data URL 发送。\n- Images edits 按 multipart `mask` 文件发送，并保留图片真实 MIME。\n- 无效或空蒙版会明确报错，不再静默忽略。\n\n主要落点：\n\n- `image-studio/frontend/src/state/studioStore.ts`\n- `image-studio/frontend/src/platform/android/canvas/AndroidCanvasWorkspace.tsx`\n- `gio-client/internal/ui/canvas_mask.go`\n- `go-cli/pkg/client/images_api.go`\n- `shared/kernel/requestModel.js`\n\n前端、Go、Gio 与 Android 单测均通过，这个 issue 可以关闭。官方上游若要求 PNG、同尺寸或 alpha 通道，仍需提供符合模型约束的蒙版。"
+      "comment": "可选蒙版图片功能已经完成。\n\n- Wails 与 Android 都可导入和清除蒙版图片。\n- 画布绘制蒙版与导入蒙版复用同一 `maskB64` 请求字段。\n- Responses API 按 `input_image_mask` data URL 发送。\n- Images edits 按 multipart `mask` 文件发送，并保留图片真实 MIME。\n- 无效或空蒙版会明确报错，不再静默忽略。\n\n主要落点：\n\n- `image-studio/frontend/src/state/studioStore.ts`\n- `image-studio/frontend/src/platform/android/canvas/AndroidCanvasWorkspace.tsx`\n- `go-cli/pkg/client/images_api.go`\n- `shared/kernel/requestModel.js`\n\n前端、Go 与 Android 单测均通过，这个 issue 可以关闭。官方上游若要求 PNG、同尺寸或 alpha 通道，仍需提供符合模型约束的蒙版。"
     }
   ],
   "holdOpen": [

@@ -16,7 +16,7 @@
 统一验证基线：
 
 - 2026-07-10 已重新跑通本地平台总链：
-  - `npm test; go test ./... (image-studio, go-cli, gio-client, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check`
+  - `npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check`
   - `platform-kernel-summary.json`：`status = passed`
   - 结构化结果：
 - 前端测试当前为 `162/162` 通过。
@@ -122,16 +122,14 @@ Issue: [#49](https://github.com/RoseKhlifa/Image-Studio/issues/49)
 
 - Prompt 历史改为带 `01 / 02 / ...` 序号和明确分隔线的有序列表。
 - Android 使用同一编号语义。
-- Gio 客户端同步显示“历史 1 / 历史 2 / ...”，不再把连续 prompt 混成一段。
 
 主要落点：
 
 - `image-studio/frontend/src/components/panel/PromptPopover.tsx`
 - `image-studio/frontend/src/lib/promptTemplates.ts`
 - `image-studio/frontend/src/platform/android/AndroidPromptTemplateModal.tsx`
-- `gio-client/internal/ui/layout_controls.go`
 
-前端与 Gio 聚焦测试均通过，这个 issue 可以关闭。
+前端聚焦测试通过，这个 issue 可以关闭。
 ```
 
 ## `#50` [Feature]: 生图可以支持url生图吗
@@ -189,7 +187,7 @@ Issue: [#53](https://github.com/RoseKhlifa/Image-Studio/issues/53)
 ```md
 可选蒙版图片功能已经完成。
 
-- Wails、Android 与 Gio 都可导入和清除蒙版图片。
+- Wails 与 Android 都可导入和清除蒙版图片。
 - 画布绘制蒙版与导入蒙版复用同一 `maskB64` 请求字段。
 - Responses API 按 `input_image_mask` data URL 发送。
 - Images edits 按 multipart `mask` 文件发送，并保留图片真实 MIME。
@@ -199,11 +197,10 @@ Issue: [#53](https://github.com/RoseKhlifa/Image-Studio/issues/53)
 
 - `image-studio/frontend/src/state/studioStore.ts`
 - `image-studio/frontend/src/platform/android/canvas/AndroidCanvasWorkspace.tsx`
-- `gio-client/internal/ui/canvas_mask.go`
 - `go-cli/pkg/client/images_api.go`
 - `shared/kernel/requestModel.js`
 
-前端、Go、Gio 与 Android 单测均通过，这个 issue 可以关闭。官方上游若要求 PNG、同尺寸或 alpha 通道，仍需提供符合模型约束的蒙版。
+前端、Go 与 Android 单测均通过，这个 issue 可以关闭。官方上游若要求 PNG、同尺寸或 alpha 通道，仍需提供符合模型约束的蒙版。
 ```
 
 ## 暂不建议关闭的 open issue

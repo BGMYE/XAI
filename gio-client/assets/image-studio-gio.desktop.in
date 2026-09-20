@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Image Studio Gio
-Exec="__EXECUTABLE__" %u
-Type=Application
-NoDisplay=true
-Terminal=false
-MimeType=x-scheme-handler/image-studio;
-Categories=Graphics;

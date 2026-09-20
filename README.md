@@ -4,6 +4,8 @@
 
 # XAI · Image Studio
 
+桌面主线统一为 **React + TypeScript + Wails + Go**。新版工作室支持 API Key 生图、生视频与节点式无限画布，使用步骤见 [Studio 文档](./docs/studio-v2.md)。独立 Gio 客户端已下线，Go 后端与共享模块继续保留。
+
 > BGMYE/XAI 中的开源图像生成 / 编辑客户端 · Wails（Go + React/TS）桌面端 + Android WebView 壳层 ·
 > 支持 Responses API 的 SSE / WebSocket mode 与标准 Images API
 
@@ -76,7 +78,7 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 | 仓库结构、前端分层、内核 / Worker / Android 关系 | [docs/project-structure.md](./docs/project-structure.md) |
 | 原始提示词传递策略 | [docs/no-prompt-revision/README.md](./docs/no-prompt-revision/README.md) |
 | Android 壳层维护说明 | [android-shell/README.md](./android-shell/README.md) |
-| Gio 高性能测试客户端 | [docs/gio-client.md](./docs/gio-client.md) |
+| 桌面架构与客户端精简 | [docs/desktop-architecture.md](./docs/desktop-architecture.md) |
 | 跨平台内核计划与验证背景 | [docs/cross-platform-kernel-plan.md](./docs/cross-platform-kernel-plan.md) |
 | 反馈渠道、问题提交、QQ群讨论 | [docs/feedback.md](./docs/feedback.md) |
 

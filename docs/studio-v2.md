@@ -2,13 +2,15 @@
 
 本次重构新增独立 Go 领域内核、薄 Wails 绑定和 React 创作工作室。首页采用浅蓝玻璃、柔和曲线、双模式卡片及统一字体栈；作品、任务状态与统计来自真实本地数据，不填充虚构记录。
 
+桌面主线统一维护 React + Wails + Go，独立 Gio 客户端已经下线，Go 后端和共享依赖保留。架构与旧深链关联注意事项见 [desktop-architecture.md](./desktop-architecture.md)。
+
 ## 启动
 
 使用仓库 `go.work` 指定的 Go 工具链（当前最低 1.25.5，工具链 1.26.3），Node 22.18 或以上版本，以及 Wails v2。平台系统依赖仍见 [构建说明](./build.md)。
 
 ```bash
 git fetch origin
-git switch refactor/azure-studio-backend
+git switch main
 cd image-studio/frontend
 npm ci
 npm run build

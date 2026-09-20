@@ -7,7 +7,6 @@
 ├── README.md
 ├── docs/
 ├── image-studio/
-├── gio-client/
 ├── go-cli/
 ├── shared/
 ├── cloudflare-worker/
@@ -19,7 +18,7 @@
 
 ## `image-studio/`
 
-Wails 桌面应用。
+React + TypeScript + Wails + Go 桌面主工作室。架构与精简边界见 [desktop-architecture.md](./desktop-architecture.md)。
 
 ```text
 image-studio/
@@ -31,7 +30,9 @@ image-studio/
 └── go.mod
 ```
 
-`backend/` 暴露 Wails bindings:
+`backend/studio/` 负责新版工作室的项目仓储、系统凭据引用、图片/视频任务、异步轮询、DAG 调度及素材回填；`backend/studio_v2.go` 提供薄 Wails 绑定。`frontend/src/studio/` 负责新版界面和无限画布。
+
+`backend/` 中保留的经典编辑器服务也暴露 Wails bindings:
 
 - `service.go`:Service 生命周期、Generate/Edit/Cancel、并发限制。
 - `types.go`:与前端 JSON 绑定的类型。
@@ -46,28 +47,13 @@ image-studio/
 
 关键边界:
 
-- `app/`:顶层装配、全局 hooks、modal gates。
+- `studio/`:新版首页、API Key 创作、无限画布、任务与自动保存。
+- `app/`:经典编辑器顶层装配、全局 hooks、modal gates。
 - `components/`:纯 UI 组件。
 - `platform/`:平台检测、桌面/Android 壳层、runtime host、远程内核。
 - `state/`:zustand store 和 workspace runtime。
 - `lib/`:平台无关工具。
 - `styles/`:全局样式和平台主题 token。
-
-## `gio-client/`
-
-独立 Gio 原生桌面测试客户端。
-
-```text
-gio-client/
-├── cmd/image-studio-gio/
-├── internal/ui/
-├── internal/kernel/
-└── go.mod
-```
-
-`internal/ui/` 使用 Gio immediate-mode UI 重新组织前端架构，保留桌面端控制面板、画布、日志栏的视觉结构。`internal/kernel/` 只做薄适配，真正的请求构建、SSE、Images API、重试和 proxy 行为继续来自 `go-cli/pkg/client`。
-
-该客户端不依赖 Wails、WebView2、WebKitGTK 或 `image-studio/frontend/dist`，release workflow 中作为 `image-studio-gio-*` 独立 artifact 构建。
 
 ## `go-cli/`
 
@@ -125,13 +111,14 @@ Gradle 构建时执行前端 `build:android`，把 `image-studio/frontend/dist/`
 
 - WebView 承载 React 前端。
 - `AndroidImageStudioBridge` 向 JS 暴露图片选择、MediaStore 保存、历史导入导出、native HTTP、震动、全屏等能力。
-- 前端根据窗口尺寸切换 phone / pad 壳层。
+- 前端根据窗口尺寸切换 phone / pad 布局。
 - 不使用 Wails Go backend；生成链路走前端远程内核和 Android native HTTP。
 
 ## `scripts/`
 
 常用构建和验证脚本:
 
+- `verify-desktop-architecture.mjs`:校验维护中的 Go workspace、发布作业和核心入口。
 - `package-local-macos-app.sh`:macOS universal app 构建与自签。
 - `compute-version.sh`:从 tag 或 wails.json 计算版本元数据。
 - `sync-version-metadata.mjs`:同步 wails/frontend/package 版本。

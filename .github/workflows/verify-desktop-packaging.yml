@@ -68,6 +68,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Verify maintained desktop architecture
+        run: node scripts/verify-desktop-architecture.mjs
       - name: Compute release-compatible version
         id: version
         run: |

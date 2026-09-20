@@ -2,6 +2,10 @@
 
 本文档集中展示当前应用界面与高层能力。安装包选择见 [packages.md](./packages.md)，详细功能说明见 [features.md](./features.md)，首次配置见 [usage.md](./usage.md)。
 
+## 新版工作室
+
+桌面主线为 React + TypeScript + Wails + Go：API Key 生图、生视频、异步任务以及节点式无限画布由同一工作室提供，详见 [studio-v2.md](./studio-v2.md)。以下截图和详细能力表仍包含保留的经典编辑器与 Android 界面；不能将经典蒙版工具等全部视为新版画布已实现的功能。
+
 ## 界面预览
 
 <p align="center">
@@ -35,7 +39,6 @@ Image Studio 面向 OpenAI 兼容图像上游，重点覆盖三类使用场景�
 | 平台 UI | macOS Apple 风格、Windows Fluent 风格、Linux 通用桌面风格、Android Material 3 phone/pad 自适应壳层。 |
 | 双端内核 | 桌面端优先走 Go/Wails 本地内核；Android / 浏览器预览可走前端远程内核，Android 壳层提供 native HTTP、文件和保存桥接。 |
 | 本地数据 | API Key、历史、图片和日志默认保存在本机；外部请求只发往你配置的上游 BASE_URL。 |
-| Gio 测试客户端 | Windows / Linux 可单独构建 Gio 原生 GUI 测试版，不影响当前 Wails / WebView2 主实现。 |
 
 ## 界面分工
 
