@@ -68,6 +68,33 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: '0'
         run: go build -o /tmp/image-studio-check.exe .
+      - name: Verify Studio without the optional Gio client
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_root="$PWD"
+          evidence="$source_root/image-studio/frontend/studio-evidence"
+          mkdir -p "$evidence"
+          isolated="$(mktemp -d "$RUNNER_TEMP/studio-without-gio.XXXXXX")"
+          trap 'rm -rf "$isolated"' EXIT
+          git archive HEAD | tar -x -C "$isolated"
+          # Assessment only: the tracked Gio client and workspace stay intact.
+          (
+            cd "$isolated"
+            go work edit -dropuse=./gio-client
+            rm -rf gio-client
+            mkdir -p image-studio/frontend/dist
+            cp -R "$source_root/image-studio/frontend/dist/." image-studio/frontend/dist/
+            cd image-studio
+            go test -race -count=3 -v ./backend/studio/...
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go list -deps . > "$evidence/no-gio-dependencies.txt"
+            if grep -Eq '^(gioui\.org(/|$)|image-studio/gio-client(/|$))' "$evidence/no-gio-dependencies.txt"; then
+              echo "::error::The Wails application depends on the optional Gio client"
+              exit 1
+            fi
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o "$isolated/image-studio-without-gio.exe" .
+            echo "PASS: image/video task tests and Windows build work without Gio"
+          ) 2>&1 | tee "$evidence/no-gio-assessment.log"
       - name: Install browser verification tools
         working-directory: image-studio/frontend
         run: |

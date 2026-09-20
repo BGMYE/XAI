@@ -69,3 +69,7 @@ gio-client/image-studio-gio
 # Frontend (wails-generated hash files)
 package-lock.json.md5
 package.json.md5
+
+# Studio validation and desktop packaging output
+/image-studio/frontend/studio-evidence/
+/release-ci/
