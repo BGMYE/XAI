@@ -1,0 +1,131 @@
+name: Verify release desktop packaging
+
+# Exercise the same Wails CLI and macOS packaging script used by release.yml.
+# This is a secret-free PR check: it does not sign, notarize, tag or publish.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'image-studio/**'
+      - 'go-cli/**'
+      - 'shared/compat-go/**'
+      - 'scripts/**'
+      - 'go.work*'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/verify-desktop-packaging.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-desktop-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    name: Package ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-amd64
+            runner: windows-latest
+            goos: windows
+            wails_args: '-platform windows/amd64 -clean'
+          - id: windows-arm64
+            runner: windows-11-arm
+            goos: windows
+            wails_args: '-platform windows/arm64 -clean'
+          - id: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            wails_args: '-platform linux/amd64 -clean -tags webkit2_41'
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            wails_args: '-platform linux/arm64 -clean -tags webkit2_41'
+          - id: macos-universal
+            runner: macos-latest
+            goos: darwin
+            wails_args: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            image-studio/go.sum
+            go-cli/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+      - name: Compute release-compatible version
+        id: version
+        run: |
+          eval "$(./scripts/compute-version.sh)"
+          {
+            echo "app_version=${APP_VERSION}"
+            echo "product_version=${PRODUCT_VERSION}"
+            echo "frontend_version=${FRONTEND_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Sync version metadata
+        env:
+          IMAGE_STUDIO_PRODUCT_VERSION: ${{ steps.version.outputs.product_version }}
+          IMAGE_STUDIO_FRONTEND_VERSION: ${{ steps.version.outputs.frontend_version }}
+        run: node ./scripts/sync-version-metadata.mjs
+      - name: Install locked frontend dependencies
+        working-directory: image-studio/frontend
+        run: npm ci
+      - name: Install Linux desktop dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Install release Wails CLI
+        if: matrix.goos != 'darwin'
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build with release desktop commands
+        working-directory: image-studio
+        env:
+          VITE_APP_VERSION: ${{ steps.version.outputs.app_version }}
+        run: |
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            bash ../scripts/package-local-macos-app.sh
+          else
+            wails build ${{ matrix.wails_args }} \
+              -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ steps.version.outputs.app_version }}"
+          fi
+      - name: Package unsigned validation artifact
+        run: |
+          # upload-artifact excludes dot-prefixed directories by default.
+          # Stage only built binaries in this visible directory; keep that safety default.
+          mkdir -p release-ci
+          case "${{ matrix.goos }}" in
+            windows)
+              cp image-studio/build/bin/image-studio.exe "release-ci/image-studio-${{ matrix.id }}.exe"
+              ;;
+            linux)
+              tar -C image-studio/build/bin -czf "release-ci/image-studio-${{ matrix.id }}.tar.gz" image-studio
+              ;;
+            darwin)
+              ditto -c -k --sequesterRsrc --keepParent "image-studio/build/bin/Image Studio.app" "release-ci/image-studio-${{ matrix.id }}.zip"
+              ;;
+          esac
+          git rev-parse HEAD > release-ci/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-package-${{ matrix.id }}
+          path: release-ci/
+          if-no-files-found: error
+          retention-days: 7

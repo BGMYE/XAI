@@ -1,0 +1,106 @@
+name: Studio rebuild validation
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [refactor/azure-studio-backend]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-rebuild-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package exact source revision
+        run: git archive --format=zip --output=studio-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-source
+          path: studio-source.zip
+          retention-days: 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            go.work.sum
+            image-studio/go.sum
+            go-cli/go.sum
+      - name: Test studio domain with race detector
+        working-directory: image-studio
+        run: go test -race -count=3 -v ./backend/studio/...
+      - name: Install frontend
+        if: always()
+        working-directory: image-studio/frontend
+        run: npm ci
+      - name: Frontend unit tests
+        if: always()
+        working-directory: image-studio/frontend
+        shell: bash
+        run: |
+          mkdir -p studio-evidence
+          set -o pipefail
+          npm test 2>&1 | tee studio-evidence/frontend-tests.log
+      - name: Typecheck frontend
+        if: always()
+        working-directory: image-studio/frontend
+        shell: bash
+        run: |
+          mkdir -p studio-evidence
+          git rev-parse HEAD > studio-evidence/commit.txt
+          cp src/studio/Canvas.tsx studio-evidence/Canvas.tsx.txt
+          set -o pipefail
+          npx tsc --noEmit --pretty false 2>&1 | tee studio-evidence/typecheck.log
+      - name: Build frontend
+        working-directory: image-studio/frontend
+        run: npm run build
+      - name: Check Windows desktop integration
+        working-directory: image-studio
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -o /tmp/image-studio-check.exe .
+      - name: Install browser verification tools
+        working-directory: image-studio/frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.1
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Browser interactions and screenshots
+        working-directory: image-studio/frontend
+        run: node scripts/studio-browser-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-browser-evidence
+          path: image-studio/frontend/studio-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: studio-web-preview
+          path: image-studio/frontend/dist
+          retention-days: 7
+  windows-core:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            go.work.sum
+            image-studio/go.sum
+      - name: Test native Windows storage and core
+        working-directory: image-studio
+        run: go test -count=3 ./backend/studio/...
