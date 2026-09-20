@@ -108,22 +108,24 @@ jobs:
           fi
       - name: Package unsigned validation artifact
         run: |
-          mkdir -p .release-ci
+          # upload-artifact excludes dot-prefixed directories by default.
+          # Stage only built binaries in this visible directory; keep that safety default.
+          mkdir -p release-ci
           case "${{ matrix.goos }}" in
             windows)
-              cp image-studio/build/bin/image-studio.exe ".release-ci/image-studio-${{ matrix.id }}.exe"
+              cp image-studio/build/bin/image-studio.exe "release-ci/image-studio-${{ matrix.id }}.exe"
               ;;
             linux)
-              tar -C image-studio/build/bin -czf ".release-ci/image-studio-${{ matrix.id }}.tar.gz" image-studio
+              tar -C image-studio/build/bin -czf "release-ci/image-studio-${{ matrix.id }}.tar.gz" image-studio
               ;;
             darwin)
-              ditto -c -k --sequesterRsrc --keepParent "image-studio/build/bin/Image Studio.app" ".release-ci/image-studio-${{ matrix.id }}.zip"
+              ditto -c -k --sequesterRsrc --keepParent "image-studio/build/bin/Image Studio.app" "release-ci/image-studio-${{ matrix.id }}.zip"
               ;;
           esac
-          git rev-parse HEAD > .release-ci/commit.txt
+          git rev-parse HEAD > release-ci/commit.txt
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-package-${{ matrix.id }}
-          path: .release-ci/
+          path: release-ci/
           if-no-files-found: error
           retention-days: 7
