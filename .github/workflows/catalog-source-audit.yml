@@ -2,7 +2,7 @@ name: Public prompt catalog source audit
 on:
   push:
     branches: [feat/desktop-prompt-catalog]
-    paths: ['scripts/audit-public-prompt-source.py', '.github/workflows/catalog-source-audit.yml']
+    paths: ['scripts/audit-public-prompt-source.py', 'scripts/audit-reference-registry.py', '.github/workflows/catalog-source-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +15,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Read public catalog and attribution (no API keys)
-        run: python scripts/audit-public-prompt-source.py
+        run: |
+          python scripts/audit-public-prompt-source.py
+          python scripts/audit-reference-registry.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
