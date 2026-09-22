@@ -1,0 +1,24 @@
+name: Public prompt catalog source audit
+on:
+  push:
+    branches: [feat/desktop-prompt-catalog]
+    paths: ['scripts/audit-public-prompt-source.py', '.github/workflows/catalog-source-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read public catalog and attribution (no API keys)
+        run: python scripts/audit-public-prompt-source.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-prompt-source-evidence
+          path: catalog-source-evidence
+          retention-days: 7
