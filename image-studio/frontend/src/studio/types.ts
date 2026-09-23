@@ -9,5 +9,7 @@ export interface Asset { id: string; kind: Kind; name: string; mime: string; byt
 export interface Generation { id: string; profileId: string; projectId: string; nodeId?: string; kind: Kind; prompt: string; referenceAssetId?: string; parameters: Parameters }
 export type JobState = 'queued' | 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | 'uncertain';
 export interface Job { id: string; request: Generation; profile: Profile; state: JobState; progress: number; remoteId?: string; error?: string; resultAssetId?: string; dependsOn?: string[]; createdAt: string; updatedAt: string }
-export interface Snapshot { profiles: Profile[]; projects: Project[]; assets: Asset[]; jobs: Job[] }
-export const emptySnapshot = (): Snapshot => ({profiles: [], projects: [], assets: [], jobs: []});
+export interface PromptCard { catalogKey?: string; previewURL?: string; sourceURL?: string; referenceImageURLs?: string[]; id: string; revision: number; title: string; prompt: string; kind: Kind; previewAssetId?: string; sourceJobId?: string; category: string; tags: string[]; author?: string; parameters: Parameters; favorite: boolean; createdAt: string; updatedAt: string }
+export interface PromptView extends PromptCard { key: string; origin: 'saved' | 'history' }
+export interface Snapshot { promptCards?: PromptCard[]; profiles: Profile[]; projects: Project[]; assets: Asset[]; jobs: Job[] }
+export const emptySnapshot = (): Snapshot => ({profiles: [], projects: [], assets: [], jobs: [], promptCards: []});

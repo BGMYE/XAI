@@ -11,15 +11,16 @@ import (
 )
 
 type document struct {
-	Version  int                `json:"version"`
-	Profiles map[string]Profile `json:"profiles"`
-	Projects map[string]Project `json:"projects"`
-	Assets   map[string]Asset   `json:"assets"`
-	Jobs     map[string]Job     `json:"jobs"`
+	PromptCards map[string]PromptCard `json:"promptCards"`
+	Version     int                   `json:"version"`
+	Profiles    map[string]Profile    `json:"profiles"`
+	Projects    map[string]Project    `json:"projects"`
+	Assets      map[string]Asset      `json:"assets"`
+	Jobs        map[string]Job        `json:"jobs"`
 }
 
 func emptyDocument() document {
-	return document{SchemaVersion, map[string]Profile{}, map[string]Project{}, map[string]Asset{}, map[string]Job{}}
+	return document{Version: SchemaVersion, Profiles: map[string]Profile{}, Projects: map[string]Project{}, Assets: map[string]Asset{}, Jobs: map[string]Job{}, PromptCards: map[string]PromptCard{}}
 }
 func cloneDocument(d document) document {
 	b, _ := json.Marshal(d)
@@ -58,6 +59,19 @@ func (r repository) read() (document, error) {
 	}
 	if d.Profiles == nil || d.Projects == nil || d.Assets == nil || d.Jobs == nil {
 		return document{}, errors.New("数据库结构不完整，拒绝覆盖")
+	}
+	// Schema 1 databases predating the prompt center have no promptCards field.
+	if d.PromptCards == nil {
+		d.PromptCards = map[string]PromptCard{}
+	}
+	for id, card := range d.PromptCards {
+		if card.ID != id {
+			return document{}, errors.New("提示词索引损坏，拒绝覆盖")
+		}
+		if err := card.normalize(); err != nil {
+			return document{}, err
+		}
+		d.PromptCards[id] = card
 	}
 	for id, p := range d.Profiles {
 		if p.ID != id {

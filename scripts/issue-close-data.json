@@ -2,7 +2,7 @@
   "updatedAt": "2026-07-10",
   "upstreamRepo": "RoseKhlifa/Image-Studio",
   "verificationBaseline": {
-    "summaryCommand": "npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check",
+    "summaryCommand": "npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:macos; git diff --check",
     "summaryStatus": "passed",
     "summarySteps": 10,
     "frontendTests": "162/162",
@@ -27,7 +27,7 @@
     {
       "number": 50,
       "title": "[Feature]: 生图可以支持url生图吗",
-      "comment": "Images API 返回 URL 的兼容已经完成。\n\n- `data[0].url` 会下载并转换为应用内部使用的 base64 图片。\n- 桌面 Go client、远程内核和 Android 原生 HTTP 路径均已覆盖。\n- Android 下载不再依赖 WebView `fetch`，避免 CDN CORS 阻断。\n- 下载统一限制为 50MB，并校验 HTTP 状态、URL 协议和真实 PNG/JPEG/WebP 内容。\n\n主要落点：\n\n- `go-cli/pkg/client/images_api.go`\n- `image-studio/frontend/src/platform/runtime/remote-kernel/images.ts`\n- `android-shell/app/src/main/java/top/gptcodex/imagestudio/android/AndroidImageStudioBridge.kt`\n\nfixture、Go、前端和 Android 单测均通过，这个 issue 可以关闭。"
+      "comment": "Images API 返回 URL 的兼容已经完成。\n\n- `data[0].url` 会下载并转换为应用内部使用的 base64 图片。\n- 桌面 Go client、远程内核和 Android 原生 HTTP 路径均已覆盖。\n- Android 下载不再依赖 WebView `fetch`，避免 CDN CORS 阻断。\n- 下载统一限制为 50MB，并校验 HTTP 状态、URL 协议和真实 PNG/JPEG/WebP 内容。\n\n主要落点：\n\n- `go-cli/pkg/client/images_api.go`\n- `image-studio/frontend/src/platform/runtime/remote-kernel/images.ts`\n- Android 原生 HTTP 桥（历史实现，APK 壳层现已下线）\n\nfixture、Go、前端和 Android 单测均通过，这个 issue 可以关闭。"
     },
     {
       "number": 51,

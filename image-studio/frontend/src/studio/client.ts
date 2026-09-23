@@ -1,9 +1,15 @@
 import {get, set} from 'idb-keyval';
-import type {Asset, Generation, Job, Profile, Project, Snapshot} from './types';
+import type {Asset, Generation, Job, Profile, Project, Snapshot, PromptCard} from './types';
 import {emptySnapshot} from './types';
+import {catalogURL} from './publicCatalog.mjs';
 import {orderGraph, uid} from './graph.mjs';
+import {savePromptToSnapshot, removePromptFromSnapshot, importPromptsToSnapshot} from './promptLibrary.mjs';
 interface Host {
+  GetPublicPromptCatalog?(sourceID: string): Promise<string>;
   GetSnapshot(): Promise<Snapshot>;
+  SavePromptCard?(p: PromptCard): Promise<PromptCard>;
+  DeletePromptCard?(id: string, revision: number): Promise<void>;
+  ImportPromptCards?(cards: PromptCard[]): Promise<PromptCard[]>;
   SaveAsset(id: string): Promise<boolean>;
   SaveProfile(profile: Profile, key: string): Promise<Profile>;
   DeleteProfile(id: string): Promise<void>;
@@ -28,6 +34,39 @@ async function preview(): Promise<Snapshot> {
 }
 function unavailable(): never { throw Error('浏览器仅提供本地画布预览。请在桌面应用中配置 API Key 并生成作品。'); }
 export const client = {
+  async publicCatalog(sourceID: string): Promise<string> {
+    const url = catalogURL(sourceID), desktop = host();
+    if (desktop) {
+      if (!desktop.GetPublicPromptCatalog) throw Error('请同步更新桌面后端以启用公共图库');
+      return desktop.GetPublicPromptCatalog(sourceID);
+    }
+    const response = await fetch(url, {credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: AbortSignal.timeout(25000)});
+    if (!response.ok || Number(response.headers.get('Content-Length') ?? 0) > 8*1024*1024) throw Error('公共图库暂不可用或响应过大');
+    if (!response.body) throw Error('公共图库响应为空');
+    const reader = response.body.getReader(), chunks: Uint8Array[] = []; let bytes = 0;
+    try {
+      for (;;) {const {done,value} = await reader.read(); if(done) break; bytes += value.byteLength;
+        if (bytes > 8*1024*1024) {await reader.cancel(); throw Error('图库响应超过 8 MB');} chunks.push(value);}
+    } finally {reader.releaseLock();}
+    const data = new Uint8Array(bytes); let offset=0;
+    for (const chunk of chunks) {data.set(chunk,offset); offset+=chunk.byteLength;}
+    return new TextDecoder('utf-8',{fatal:true}).decode(data);
+  },
+  async savePromptCard(p: PromptCard): Promise<PromptCard> {
+    const desktop = host();
+    if (desktop) {if (!desktop.SavePromptCard) throw Error('请更新桌面后端以启用提示词中心'); return desktop.SavePromptCard(p);}
+    return transaction(async () => {const result = savePromptToSnapshot(await preview(), p); await set(previewKey, result.snapshot); return result.saved;});
+  },
+  async deletePromptCard(id: string, revision: number): Promise<void> {
+    const desktop = host();
+    if (desktop) {if (!desktop.DeletePromptCard) throw Error('请更新桌面后端以启用提示词中心'); return desktop.DeletePromptCard(id, revision);}
+    return transaction(async () => {await set(previewKey, removePromptFromSnapshot(await preview(), id, revision));});
+  },
+  async importPromptCards(cards: PromptCard[]): Promise<PromptCard[]> {
+    const desktop = host();
+    if (desktop) {if (!desktop.ImportPromptCards) throw Error('请更新桌面后端以启用提示词中心'); return desktop.ImportPromptCards(cards);}
+    return transaction(async () => {const result = importPromptsToSnapshot(await preview(), cards); await set(previewKey, result.snapshot); return result.saved;});
+  },
   async saveAsset(id: string) { if (host()) return host()!.SaveAsset(id); const a = document.createElement("a"); a.href=mediaURL(id); a.download="xai-asset"; a.click(); return true; },
   async snapshot(): Promise<Snapshot> {
     if (host()) return host()!.GetSnapshot();

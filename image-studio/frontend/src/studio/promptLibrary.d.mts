@@ -1,0 +1,10 @@
+import type {PromptCard, PromptView, Snapshot, Project} from './types';
+export function normalizePromptCard(input: unknown): PromptCard;
+export function collectPromptCards(snapshot: Snapshot): PromptView[];
+export function filterPromptCards<T extends PromptCard>(cards: T[], filters?: {query?: string; kind?: string; category?: string; favorites?: boolean}): T[];
+export function savePromptToSnapshot(snapshot: Snapshot, card: PromptCard): {saved: PromptCard; snapshot: Snapshot};
+export function removePromptFromSnapshot(snapshot: Snapshot, id: string, revision: number): Snapshot;
+export function importPromptsToSnapshot(snapshot: Snapshot, cards: PromptCard[]): {saved: PromptCard[]; snapshot: Snapshot};
+export function exportPromptPack(cards: PromptCard[]): string;
+export function parsePromptPack(text: string): PromptCard[];
+export function addPromptToProject(project: Project, card: PromptCard): Project;

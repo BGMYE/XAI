@@ -36,7 +36,6 @@ Windows 用户需要额外注意：Actions 里的 CI artifact 如果没有经过
 | macOS universal DMG | `image-studio-<version>-macos-universal.dmg` | 打开后拖入 Applications；完整配置 Apple secrets 时，app 与 DMG 都会完成 Developer ID 签名、公证和 staple。 |
 | Linux x64 | `image-studio-<version>-linux-amd64.tar.gz` | 标准 Wails 桌面版。 |
 | Linux ARM64 | `image-studio-<version>-linux-arm64.tar.gz` | 面向 ARM64 Linux 桌面环境。 |
-| Android | `image-studio-<version>-android-release.apk` | 单 APK，运行时自适应 phone / pad 布局。 |
 
 ## 各平台选择建议
 
@@ -44,7 +43,6 @@ Windows 用户需要额外注意：Actions 里的 CI artifact 如果没有经过
 |---|---|
 | 普通桌面用户 | 对应平台的 `image-studio-<version>-...` Wails 版。 |
 | Windows 用户会直接解压后双击 `exe`，且机器上可能没有可用 WebView2 | `image-studio-<version>-windows-*-portable-fixed-webview.zip`。 |
-| 手机与平板统一安装 | `image-studio-<version>-android-release.apk`。 |
 
 ## 平台注意事项
 
@@ -75,10 +73,9 @@ xattr -dr com.apple.quarantine "Image Studio.app"
 
 - 预编译包主要面向带 GTK / WebKitGTK 依赖的桌面环境。依赖安装见 [build.md](./build.md)。
 
-### Android
+### Android（已下线）
 
-- 当前只维护一个 `android-release.apk`，运行时根据窗口尺寸和方向切换 phone / pad 布局。
-- Android 壳层会复用前端远程内核和本地桥接能力，不再分别维护两套 APK。
+不再产出新的 APK。已有设备数据与旧 Releases 不受源码删除影响。
 
 ## 相关文档
 

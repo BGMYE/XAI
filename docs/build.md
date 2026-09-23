@@ -7,7 +7,6 @@
 - Go 1.25.x。当前 `go.mod` 使用 `go 1.25.5` 与 `toolchain go1.26.3`。
 - Node.js 22.18 或更新版本；当前发布流程使用 Node 24。
 - Wails CLI v2.12.0。非 macOS release workflow 使用 `go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0`。
-- Android 构建需要 JDK 17、Android SDK 34、Build Tools 34.0.0、Gradle 8.7。
 
 ## 克隆源码
 
@@ -43,8 +42,6 @@ npm run dev
 npm run dev:macos
 npm run dev:windows
 npm run dev:linux
-npm run dev:android
-npm run dev:android-pad
 ```
 
 打包静态资源：
@@ -54,8 +51,6 @@ npm run build
 npm run build:macos
 npm run build:windows
 npm run build:linux
-npm run build:android
-npm run build:android-pad
 ```
 
 这些命令只切换 `VITE_TARGET_PLATFORM` 对应的主题和壳层，不改变主业务逻辑。
@@ -105,28 +100,9 @@ wails build -platform linux/amd64 -clean -tags webkit2_41
 
 Ubuntu 22.04 系通常使用 `libwebkit2gtk-4.0-dev`，构建时不加 `webkit2_41` tag。
 
-## Android APK
+## Android APK（已下线）
 
-```bash
-cd android-shell
-./gradlew assembleRelease
-```
-
-Gradle 会先执行 `image-studio/frontend` 的 `npm run build:android`，再把 `dist/` 拷贝进 APK assets。APK 内部运行同一个 Android 前端目标，phone / pad 布局由运行时窗口尺寸和方向决定。
-
-可选环境变量：
-
-| 变量 | 用途 |
-|---|---|
-| `IMAGE_STUDIO_ANDROID_VERSION_NAME` | Android `versionName`。 |
-| `IMAGE_STUDIO_ANDROID_VERSION_CODE` | Android `versionCode`。 |
-| `IMAGE_STUDIO_KEYSTORE_PATH` | release 签名 keystore。未提供时使用自动生成的 debug keystore。 |
-| `IMAGE_STUDIO_KEYSTORE_PASSWORD` | keystore 密码。 |
-| `IMAGE_STUDIO_KEY_ALIAS` | key alias。 |
-| `IMAGE_STUDIO_KEY_PASSWORD` | key 密码。 |
-| `IMAGE_STUDIO_ANDROID_USE_PREBUILT_FRONTEND` | 设为 `1` / `true` 时复用已有 `frontend/dist`。 |
-
-MuMu 模拟器调试流程见 [mumu-android-debug.md](./mumu-android-debug.md)。
+当前不需要 Android SDK、JDK 或 Gradle；只维护 Wails 桌面构建。
 
 ## 版本元数据
 
@@ -136,7 +112,7 @@ release workflow 会先执行：
 ./scripts/compute-version.sh
 ```
 
-它会从 tag 或 `image-studio/wails.json` 计算桌面版本、前端版本、Android `versionName` / `versionCode`。随后 `scripts/sync-version-metadata.mjs` 会同步：
+它会从 tag 或 `image-studio/wails.json` 计算桌面版本、前端版本、兼容旧工具的版本字段（不再生成 APK）。随后 `scripts/sync-version-metadata.mjs` 会同步：
 
 - `image-studio/wails.json`
 - `image-studio/frontend/package.json`
@@ -175,18 +151,17 @@ GOPATH="../.gopath" GOMODCACHE="../.gomodcache" GOCACHE="../.gocache" go test ./
 node scripts/verify-local-platform-kernel.mjs
 ```
 
-该脚本会跑前端测试 / 构建、Worker 测试、本地 live verify smoke、本地 smoke、Android shell 本地校验、Go 测试和 macOS 发布包验证。Go 部分会显式覆盖：
+该脚本会跑前端测试 / 构建、Worker 测试、本地 live verify smoke、本地 smoke、Go 测试和 macOS 发布包验证。Go 部分会显式覆盖：
 
 - `image-studio` 模块
 - `shared/compat-go`
 - `go-cli/pkg/client`
 
-是否能全绿取决于本机 Android SDK / JDK 与 macOS 构建工具是否齐全。
+总链验证需要 macOS 构建工具，不再需要 Android 工具链。
 
 其他入口：
 
 ```bash
-node scripts/verify-local-android-shell.mjs
 node scripts/verify-local-macos-release.mjs
 node scripts/verify-local-live-verify.mjs
 node scripts/local-smoke-check.mjs
@@ -251,7 +226,7 @@ IMAGE_STUDIO_VERIFY_RESULTS_DIR=.tmp/verify-results node scripts/verify-local-pl
 各脚本仍兼容原来的单文件 `*_OUTPUT_PATH` 变量；但新用法更推荐只传一个
 `IMAGE_STUDIO_VERIFY_RESULTS_DIR`。
 
-对于当前仍需 Windows 真机、Android 真机或真实高并发上游才能确认的项，统一参考：
+对于当前仍需 Windows 真机或真实高并发上游才能确认的项，统一参考：
 
 - [manual-verification.md](./manual-verification.md)
 
@@ -277,7 +252,6 @@ node scripts/prepare-external-verification-bundle.mjs
 开始手工验证前，建议先用模板脚本初始化目录：
 
 ```bash
-node scripts/init-manual-verification.mjs 36-android
 ```
 
 常用预设还有：
@@ -294,28 +268,6 @@ node scripts/init-manual-verification.mjs custom "my regression check"
 ```
 
 脚本会生成 `report.md`、`meta.json` 以及 `screenshots/`、`raw/`、`logs/` 目录，方便把实机截图、原始响应和结论统一沉淀到 `.tmp/manual-verify/<date>/...` 下。
-
-`verify-local-android-shell.mjs` 当前会校验：
-
-- `:app:testDebugUnitTest` 可完成，覆盖 Android 壳层流式事件解析等纯逻辑单测。
-- `:app:assembleDebug` 可完成。
-- `output-metadata.json` 与 APK `badging` 中的 `applicationId` / `versionCode` / `versionName` 正确。
-- APK 签名能通过 `apksigner verify -v`。
-- APK 内已经带上前端 `assets/index.html` 和构建后的静态资源。
-
-如果本机已经连了 Android 设备或模拟器，还可以额外开启 APK 安装 / 启动 smoke：
-
-```bash
-IMAGE_STUDIO_ANDROID_DEVICE_SMOKE=1 node scripts/verify-local-android-shell.mjs
-```
-
-可选地指定设备序列号：
-
-```bash
-IMAGE_STUDIO_ANDROID_DEVICE_SMOKE=1 IMAGE_STUDIO_ANDROID_SERIAL=<serial> node scripts/verify-local-android-shell.mjs
-```
-
-未开启时，脚本会明确返回 `deviceSmoke.attempted=false`，不会因为没有设备而失败。
 
 `verify-local-live-verify.mjs` 会在本地启动 `runtime-smoke-server.mjs` 作为
 mock upstream，再驱动 `live-verify.mjs` 完成一轮 direct vs worker parity。
@@ -352,7 +304,6 @@ IMAGE_STUDIO_SKIP_RUNTIME_UPDATE_PROBE=1 node scripts/verify-local-macos-release
 - `verify-platform-kernel-results/platform-kernel-summary.json`
 - `verify-platform-kernel-results/live-verify.json`
 - `verify-platform-kernel-results/local-smoke.json`
-- `verify-platform-kernel-results/android-shell.json`
 - `verify-platform-kernel-results/macos-release.json`
 
 即使验证步骤失败，artifact 上传步骤也会继续执行，尽量保留已生成的
@@ -361,7 +312,7 @@ summary 和子结果；如果某个结果文件根本没产出，只会给出 wa
 
 另外，workflow 会把 `platform-kernel-summary.json` 渲染成 Markdown，直接写到
 GitHub Actions job summary，方便不下载 artifact 时先看关键结果。summary
-里会带上 Node / 平台 / Android SDK / `JAVA_HOME` 等环境指纹。
+里会带上 Node / 平台 等环境指纹。
 
 真实上游对比验证需要先按 `scripts/live-verify.env.example` 准备 `.env.live` 或 `.env.local`。
 
@@ -380,7 +331,6 @@ worker 端口等环境指纹，并列出每条 parity check 的通过/失败情�
 
 - `local-smoke-check.mjs`
 - `verify-local-live-verify.mjs`
-- `verify-local-android-shell.mjs`
 - `verify-local-macos-release.mjs`
 
 ## CI
@@ -390,7 +340,6 @@ worker 端口等环境指纹，并列出每条 parity check 的通过/失败情�
 - 并行构建 Windows、macOS、Linux Wails 桌面产物。
 - Windows 额外产出单个自适应架构的 NSIS installer `image-studio-<version>-windows-installer.exe`，内部同时包含 amd64 与 arm64 二进制，供正式安装分发或 Microsoft Store Win32 提交使用。
 - Windows 额外产出 `image-studio-<version>-windows-x64.msix`、`image-studio-<version>-windows-arm64.msix` 与 `image-studio-<version>-windows.msixbundle`，供 Microsoft Store / 企业分发使用。
-- 单独构建一个 Android release APK。
 - tag 为 `v*` 时将所有产物附加到 GitHub Release。
 - macOS 额外产出 `image-studio-<version>-macos-universal.dmg`；DMG 内含 `/Applications` 快捷方式，用户可直接拖拽安装。
 

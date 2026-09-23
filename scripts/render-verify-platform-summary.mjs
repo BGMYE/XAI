@@ -101,24 +101,6 @@ try {
 } catch {}
 
 try {
-  const androidPath = summary.resultFiles?.androidShell;
-  if (androidPath) {
-    const android = await readJson(androidPath);
-    lines.push("");
-    lines.push("### Android Shell");
-    lines.push("");
-    lines.push(`- Status: ${android.status ?? "unknown"}`);
-    if (android.status === "failed" && android.error) {
-      lines.push(`- Error: ${String(android.error).replace(/\n/g, " ")}`);
-    }
-    lines.push(`- Unit tests: ${android.unitTests === true ? "passed" : "unknown"}`);
-    lines.push(`- APK: \`${android.metadata?.applicationId ?? "?"}\` @ \`${android.metadata?.versionName ?? "?"}\` (${android.metadata?.versionCode ?? "?"})`);
-    lines.push(`- Assets embedded: ${android.assetsVerified === true ? "yes" : "no"}`);
-    lines.push(`- Device smoke: ${android.deviceSmoke?.attempted ? `attempted on \`${android.deviceSmoke.serial}\`` : android.deviceSmoke?.reason ?? "not attempted"}`);
-  }
-} catch {}
-
-try {
   const macosPath = summary.resultFiles?.macosRelease;
   if (macosPath) {
     const macos = await readJson(macosPath);

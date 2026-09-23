@@ -14,7 +14,7 @@ const checks = [];
 function check(name, fn) {fn(); checks.push(name); console.log(`PASS: ${name}`);}
 
 check('Retired client and its dedicated launcher are absent', () => {
-  for (const name of ['gio-client', 'scripts/register-gio-linux-scheme.sh']) {
+  for (const name of ['gio-client', 'android-shell', 'scripts/register-gio-linux-scheme.sh', 'scripts/verify-local-android-shell.mjs']) {
     assert.equal(exists(name), false, `${name} must not return to the desktop distribution`);
   }
 });
@@ -46,10 +46,10 @@ check('Image/video generation, credentials and infinite canvas entry points rema
 });
 check('Release retains maintained targets and has no retired build dependency', () => {
   const release = read('.github/workflows/release.yml');
-  assert.doesNotMatch(release, /build-gio-desktop|gio-client|image-studio-gio|gioui\.org/);
+  assert.doesNotMatch(release, /build-gio-desktop|gio-client|image-studio-gio|gioui\.org|build-android-apk|android-shell|setup-android|setup-java/);
   const jobs = new Set([...release.matchAll(/^  ([\w-]+):\s*$/gm)].map(match => match[1]));
   const required = ['prepare-version', 'build-desktop', 'build-windows-installer',
-    'build-windows-msix', 'build-windows-msixbundle', 'build-android-apk', 'publish-release'];
+    'build-windows-msix', 'build-windows-msixbundle', 'publish-release'];
   for (const job of required) assert.ok(jobs.has(job), `Required release job missing: ${job}`);
   // Check literal scalar/list dependencies in this workflow. Expressions are
   // deliberately rejected rather than guessed; extend this guard if introduced.

@@ -16,7 +16,7 @@
 统一验证基线：
 
 - 2026-07-10 已重新跑通本地平台总链：
-  - `npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:android; npm run build:macos; ./gradlew :app:testDebugUnitTest; git diff --check`
+  - `npm test; go test ./... (image-studio, go-cli, shared/compat-go); npm run build:windows; npm run build:macos; git diff --check`
   - `platform-kernel-summary.json`：`status = passed`
   - 结构化结果：
 - 前端测试当前为 `162/162` 通过。
@@ -148,7 +148,7 @@ Images API 返回 URL 的兼容已经完成。
 
 - `go-cli/pkg/client/images_api.go`
 - `image-studio/frontend/src/platform/runtime/remote-kernel/images.ts`
-- `android-shell/app/src/main/java/top/gptcodex/imagestudio/android/AndroidImageStudioBridge.kt`
+- Android 原生 HTTP 桥（历史实现，APK 壳层现已下线）
 
 fixture、Go、前端和 Android 单测均通过，这个 issue 可以关闭。
 ```

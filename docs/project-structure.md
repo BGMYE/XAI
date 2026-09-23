@@ -10,7 +10,6 @@
 ├── go-cli/
 ├── shared/
 ├── cloudflare-worker/
-├── android-shell/
 ├── scripts/
 ├── go.work
 └── .github/workflows/
@@ -95,24 +94,9 @@ cloudflare-worker/
 
 它用于把前端/Android 侧请求代理到上游，并复用 `shared/kernel/` 的请求模型。部署和配置细节见 [cloudflare-worker/README.md](../cloudflare-worker/README.md)。
 
-## `android-shell/`
+## Android 状态
 
-Android WebView 壳层。
-
-```text
-android-shell/
-├── app/
-├── build.gradle.kts
-├── settings.gradle.kts
-└── README.md
-```
-
-Gradle 构建时执行前端 `build:android`，把 `image-studio/frontend/dist/` 拷贝进 APK assets。运行时:
-
-- WebView 承载 React 前端。
-- `AndroidImageStudioBridge` 向 JS 暴露图片选择、MediaStore 保存、历史导入导出、native HTTP、震动、全屏等能力。
-- 前端根据窗口尺寸切换 phone / pad 布局。
-- 不使用 Wails Go backend；生成链路走前端远程内核和 Android native HTTP。
+Android APK 壳层已下线，不再构建或发布手机/平板安装包。少量前端平台兼容类型与测试保留，避免影响经典编辑器共享代码；它们不是受维护的 APK 入口。
 
 ## `scripts/`
 
@@ -124,7 +108,6 @@ Gradle 构建时执行前端 `build:android`，把 `image-studio/frontend/dist/`
 - `sync-version-metadata.mjs`:同步 wails/frontend/package 版本。
 - `verify-local-platform-kernel.mjs`:跨平台内核本地全量验证。
 - `verify-local-live-verify.mjs`:以本地 mock upstream 驱动 `live-verify.mjs` 的 smoke 验证。
-- `verify-local-android-shell.mjs`:Android shell 本地 APK 与 JVM 单测验证。
 - `verify-local-macos-release.mjs`:macOS release 包验证。
 - `init-manual-verification.mjs`:初始化手工验证目录、报告模板与取证子目录。
 - `issue-close-data.json`:可关单 issue、暂不关闭原因、统一验证基线的结构化数据源。
@@ -141,7 +124,7 @@ Gradle 构建时执行前端 `build:android`，把 `image-studio/frontend/dist/`
 
 ## Workflows
 
-- `.github/workflows/release.yml`:并行构建桌面产物，构建 Android APK，并在 tag release 时发布。
+- `.github/workflows/release.yml`:并行构建桌面产物，并在 tag release 时发布。
 - `.github/workflows/verify-platform-kernel.yml`:自动化验证本地可证明部分。
 - `.github/workflows/verify-issue-close-tooling.yml`:手动触发 issue 关单工具链验证。
 - `.github/workflows/live-verify-platform-kernel.yml`:手动触发真实上游验证。
@@ -151,5 +134,5 @@ Gradle 构建时执行前端 `build:android`，把 `image-studio/frontend/dist/`
 - 跨平台宿主差异放进 `image-studio/frontend/src/platform/`。
 - 纯业务状态放进 `state/`，不要直接塞平台桥接细节。
 - OpenAI 请求字段规范优先收口到 `shared/kernel/` 或 `go-cli/pkg/client/`。
-- Android 不是 Wails 桌面端移植；它是 WebView 壳层 + 远程内核路径。
+- Android APK 已下线；桌面 Go 业务后端继续维护。
 - 首页 README 只保留入口级信息，功能和构建细节维护在 `docs/` 中。

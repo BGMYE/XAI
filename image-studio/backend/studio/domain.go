@@ -101,5 +101,5 @@ func(a Asset)URL()string{return "/studio-media/"+a.ID}
 type Job struct {ID string `json:"id"`;Request Request `json:"request"`;Profile Profile `json:"profile"`;Fingerprint string `json:"fingerprint"`;State string `json:"state"`;RemoteID string `json:"remoteId,omitempty"`;Progress int `json:"progress"`;Error string `json:"error,omitempty"`;ResultAssetID string `json:"resultAssetId,omitempty"`;DependsOn []string `json:"dependsOn"`;CreatedAt string `json:"createdAt"`;UpdatedAt string `json:"updatedAt"`}
 func terminal(state string)bool{switch state{case "succeeded","failed","cancelled","uncertain":return true};return false}
 func(j Job)model()string{if j.Request.Kind=="video"{return j.Profile.VideoModel};return j.Profile.ImageModel}
-type Snapshot struct {Profiles []Profile `json:"profiles"`;Projects []Project `json:"projects"`;Assets []Asset `json:"assets"`;Jobs []Job `json:"jobs"`}
+type Snapshot struct {PromptCards []PromptCard `json:"promptCards"`;Profiles []Profile `json:"profiles"`;Projects []Project `json:"projects"`;Assets []Asset `json:"assets"`;Jobs []Job `json:"jobs"`}
 func upstreamError(status int)error{switch status{case 401,403:return fmt.Errorf("上游 HTTP %d：请检查 API Key 和模型权限",status);case 429:return errors.New("上游 HTTP 429：额度或请求频率受限")};return fmt.Errorf("上游 HTTP %d：请在服务商控制台核对请求（不记录原始响应以保护密钥）",status)}

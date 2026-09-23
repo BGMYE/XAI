@@ -31,28 +31,9 @@ jobs:
             image-studio/frontend/package-lock.json
             cloudflare-worker/package-lock.json
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
       - name: Install frontend dependencies
         working-directory: image-studio/frontend
         run: npm ci
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-
-      - name: Install Android packages
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
-      - name: Prepare Android local.properties
-        run: |
-          mkdir -p .tmp/android-home/.android
-          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android-shell/local.properties
 
       - name: Prepare verification output directory
         run: mkdir -p .tmp/verify-results

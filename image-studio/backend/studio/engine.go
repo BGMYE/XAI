@@ -38,8 +38,10 @@ func(e *Engine)Close(){e.mu.Lock();if !e.closed{e.closed=true;e.stop();e.cond.Br
 func(e *Engine)mutate(fn func(*document)error)error{next:=cloneDocument(e.db);if err:=fn(&next);err!=nil{return err};if err:=e.repo.write(next);err!=nil{return fmt.Errorf("保存失败，原数据保留：%w",err)};e.db=next;return nil}
 func(e *Engine)ready()error{if e.closed{return errors.New("工作室已关闭")};return e.fatal}
 func(e *Engine)Snapshot()(Snapshot,error){
- e.mu.Lock();defer e.mu.Unlock();if e.fatal!=nil{return Snapshot{},e.fatal};d:=cloneDocument(e.db);s:=Snapshot{[]Profile{},[]Project{},[]Asset{},[]Job{}}
+ e.mu.Lock();defer e.mu.Unlock();if e.fatal!=nil{return Snapshot{},e.fatal};d:=cloneDocument(e.db);s:=Snapshot{Profiles:[]Profile{},Projects:[]Project{},Assets:[]Asset{},Jobs:[]Job{},PromptCards:[]PromptCard{}}
  for _,v:=range d.Profiles{s.Profiles=append(s.Profiles,v)};for _,v:=range d.Projects{s.Projects=append(s.Projects,v)};for _,v:=range d.Assets{s.Assets=append(s.Assets,v)};for _,v:=range d.Jobs{s.Jobs=append(s.Jobs,v)}
+ for _,v:=range d.PromptCards{s.PromptCards=append(s.PromptCards,v)}
+ sort.Slice(s.PromptCards,func(i,j int)bool{return s.PromptCards[i].UpdatedAt>s.PromptCards[j].UpdatedAt})
  sort.Slice(s.Profiles,func(i,j int)bool{return s.Profiles[i].Name<s.Profiles[j].Name});sort.Slice(s.Projects,func(i,j int)bool{return s.Projects[i].UpdatedAt>s.Projects[j].UpdatedAt});sort.Slice(s.Assets,func(i,j int)bool{return s.Assets[i].CreatedAt>s.Assets[j].CreatedAt});sort.Slice(s.Jobs,func(i,j int)bool{return s.Jobs[i].CreatedAt>s.Jobs[j].CreatedAt});return s,nil
 }
 func(e *Engine)SaveProject(p Project)(Project,error){

@@ -79,7 +79,7 @@ async function writeReadme({
   lines.push("## Remaining external-condition items");
   lines.push("");
   lines.push("- `#30`: Windows 真机标题栏 / 标题区颜色一致性确认");
-  lines.push("- `#36`: Android / Windows 真机 + 真实高并发上游长链路验证");
+  lines.push("- `#36`: Windows 真机 + 真实高并发上游长链路验证");
   lines.push("");
   lines.push("## Included evidence");
   lines.push("");
@@ -89,13 +89,11 @@ async function writeReadme({
   lines.push("## Manual verification templates");
   lines.push("");
   lines.push(`- #30 Windows: \`${manual.issue30.reportPath}\``);
-  lines.push(`- #36 Android: \`${manual.issue36Android.reportPath}\``);
   lines.push(`- #36 Windows: \`${manual.issue36Windows.reportPath}\``);
   lines.push("");
   lines.push("## Suggested next steps");
   lines.push("");
   lines.push("1. 在 Windows 真机打开 `manual-verify/issue-30-windows/report.md`，补亮色/暗色/workspace 截图。");
-  lines.push("2. 在 Android 真机或模拟器打开 `manual-verify/issue-36-android/report.md`，补并发/大尺寸矩阵。");
   lines.push("3. 在 Windows 真机打开 `manual-verify/issue-36-windows/report.md`，补桌面高并发矩阵。");
   lines.push("4. 如果需要维护 GitHub issue，可从 `issue-close-bundle/` 取出 `issue-24.md` ... `issue-42.md` 作为评论模板。");
   lines.push("");
@@ -128,28 +126,23 @@ await mkdir(evidenceRoot, { recursive: true });
 await mkdir(issueCloseRoot, { recursive: true });
 
 const issue30 = await ensureManualTemplate("30-windows");
-const issue36Android = await ensureManualTemplate("36-android");
 const issue36Windows = await ensureManualTemplate("36-windows");
 
 await cp(path.join(platformResultsDir, "platform-kernel-summary.json"), path.join(evidenceRoot, "platform-kernel-summary.json"));
 await cp(path.join(platformResultsDir, "live-verify.json"), path.join(evidenceRoot, "live-verify.json"));
 await cp(path.join(platformResultsDir, "local-smoke.json"), path.join(evidenceRoot, "local-smoke.json"));
-await cp(path.join(platformResultsDir, "android-shell.json"), path.join(evidenceRoot, "android-shell.json"));
 await cp(path.join(platformResultsDir, "macos-release.json"), path.join(evidenceRoot, "macos-release.json"));
 await cp(path.join(platformResultsDir, "issue-close-tooling.json"), path.join(evidenceRoot, "issue-close-tooling.json"));
 
 await cp(issueCloseBundleDir, issueCloseRoot, { recursive: true });
 
 const manualIssue30Dir = path.join(manualRoot, "issue-30-windows");
-const manualIssue36AndroidDir = path.join(manualRoot, "issue-36-android");
 const manualIssue36WindowsDir = path.join(manualRoot, "issue-36-windows");
 
 await mkdir(manualIssue30Dir, { recursive: true });
-await mkdir(manualIssue36AndroidDir, { recursive: true });
 await mkdir(manualIssue36WindowsDir, { recursive: true });
 
 await cp(path.dirname(issue30.reportPath), manualIssue30Dir, { recursive: true });
-await cp(path.dirname(issue36Android.reportPath), manualIssue36AndroidDir, { recursive: true });
 await cp(path.dirname(issue36Windows.reportPath), manualIssue36WindowsDir, { recursive: true });
 
 await writeReadme({
@@ -157,9 +150,6 @@ await writeReadme({
   manual: {
     issue30: {
       reportPath: relativeToRoot(path.join(manualIssue30Dir, path.basename(issue30.reportPath))),
-    },
-    issue36Android: {
-      reportPath: relativeToRoot(path.join(manualIssue36AndroidDir, path.basename(issue36Android.reportPath))),
     },
     issue36Windows: {
       reportPath: relativeToRoot(path.join(manualIssue36WindowsDir, path.basename(issue36Windows.reportPath))),

@@ -1,7 +1,6 @@
 name: Release
 
-# Build desktop targets in parallel and produce Android APKs for phone and pad
-# shells from the bundled WebView wrapper in `android-shell/`.
+# Build the maintained React + Wails + Go desktop targets.
 
 on:
   push:
@@ -25,8 +24,6 @@ jobs:
       product_version: ${{ steps.version.outputs.product_version }}
       app_version: ${{ steps.version.outputs.app_version }}
       frontend_version: ${{ steps.version.outputs.frontend_version }}
-      android_version_name: ${{ steps.version.outputs.android_version_name }}
-      android_version_code: ${{ steps.version.outputs.android_version_code }}
       version_channel: ${{ steps.version.outputs.version_channel }}
       version_sha: ${{ steps.version.outputs.version_sha }}
     steps:
@@ -54,8 +51,6 @@ jobs:
             echo "product_version=${PRODUCT_VERSION}"
             echo "app_version=${APP_VERSION}"
             echo "frontend_version=${FRONTEND_VERSION}"
-            echo "android_version_name=${ANDROID_VERSION_NAME}"
-            echo "android_version_code=${ANDROID_VERSION_CODE}"
             echo "version_channel=${VERSION_CHANNEL}"
             echo "version_sha=${VERSION_SHA}"
           } >> "$GITHUB_OUTPUT"
@@ -539,94 +534,6 @@ jobs:
           path: dist/msixbundle/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows.msixbundle
           retention-days: 14
 
-  build-android-apk:
-    name: Build android apk
-    runs-on: ubuntu-24.04
-    needs: prepare-version
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: image-studio/frontend/package-lock.json
-
-      - name: Sync version metadata
-        shell: bash
-        env:
-          IMAGE_STUDIO_PRODUCT_VERSION: ${{ needs.prepare-version.outputs.product_version }}
-          IMAGE_STUDIO_FRONTEND_VERSION: ${{ needs.prepare-version.outputs.frontend_version }}
-        run: node ./scripts/sync-version-metadata.mjs
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-
-      - name: Install Android packages
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
-      - name: Prepare Android user home
-        run: mkdir -p .tmp/android-home/.android
-
-      - name: Write Android local.properties
-        run: |
-          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android-shell/local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.7"
-
-      - name: Build android apk
-        env:
-          ANDROID_USER_HOME: ${{ github.workspace }}/.tmp/android-home/.android
-          ANDROID_SDK_HOME: ${{ github.workspace }}/.tmp/android-home
-          HOME: ${{ github.workspace }}/.tmp/android-home
-          IMAGE_STUDIO_ANDROID_VERSION_NAME: ${{ needs.prepare-version.outputs.android_version_name }}
-          IMAGE_STUDIO_ANDROID_VERSION_CODE: ${{ needs.prepare-version.outputs.android_version_code }}
-          VITE_APP_VERSION: ${{ needs.prepare-version.outputs.app_version }}
-        run: |
-          gradle -p android-shell --no-daemon assembleRelease
-
-      - name: Verify signed apk
-        env:
-          ANDROID_USER_HOME: ${{ github.workspace }}/.tmp/android-home/.android
-          ANDROID_SDK_HOME: ${{ github.workspace }}/.tmp/android-home
-          HOME: ${{ github.workspace }}/.tmp/android-home
-        run: |
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify -v "android-shell/app/build/outputs/apk/release/app-release.apk"
-
-      - name: Stage apk artifact
-        id: package
-        shell: bash
-        run: |
-          mkdir -p dist
-          artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-android-release.apk"
-          artifact_path="dist/${artifact_name}"
-          cp android-shell/app/build/outputs/apk/release/app-release.apk "$artifact_path"
-          ls -la dist/
-          {
-            echo "artifact_name=${artifact_name}"
-            echo "artifact_path=${artifact_path}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Upload apk artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.package.outputs.artifact_name }}
-          path: ${{ steps.package.outputs.artifact_path }}
-          retention-days: 14
-
   publish-release:
     name: Publish release assets
     runs-on: ubuntu-24.04
@@ -636,7 +543,6 @@ jobs:
       - build-windows-installer
       - build-windows-msix
       - build-windows-msixbundle
-      - build-android-apk
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download all artifacts

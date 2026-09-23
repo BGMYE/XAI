@@ -1,10 +1,12 @@
 import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {ArrowDownToLine, ArrowRight, Bell, Box, Check, CheckCircle2, ChevronDown, Clock3, ExternalLink, FileImage, Folder, Home, ImagePlus, KeyRound, Layers3, Loader2, Maximize2, Minus, Monitor, Play, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Upload, Video, Workflow, X} from 'lucide-react';
 import {Canvas} from './Canvas';
+import {PromptCenter} from './PromptCenter';
+import {addPromptToProject} from './promptLibrary.mjs';
 import {client, downloadText, isDesktop, mediaURL} from './client';
 import {exportTemplate, importTemplate, newProject, uid} from './graph.mjs';
 import {useStudio} from './useStudio';
-import type {Asset, Generation, Job, Kind, Parameters, Profile, Project, StudioNode} from './types';
+import type {Asset, Generation, Job, Kind, Parameters, Profile, Project, StudioNode, PromptCard} from './types';
 
 type Page = 'home'|'create'|'works'|'assets'|'canvas'|'projects'|'history'|'settings';
 const stateNames: Record<string,string> = {queued:'排队中',running:'生成中',paused:'已暂停',succeeded:'已完成',failed:'失败',cancelled:'已取消',uncertain:'需核对上游'};
@@ -50,6 +52,7 @@ function ProviderForm({profile,onSave,onTest,report,disabled}:{profile?:Profile;
 export function StudioApp({isMac,onClassic}:{isMac:boolean;onClassic():void}) {
   const studio=useStudio();
   const [page,setPage]=useState<Page>('home'),[kind,setKind]=useState<Kind>('image'),[prompt,setPrompt]=useState(''),[parameters,setParameters]=useState<Parameters>({}),[referenceID,setReferenceID]=useState('');
+  const [resourcesOpen,setResourcesOpen]=useState(false);
   const [profileID,setProfileID]=useState(''),[query,setQuery]=useState(''),[filter,setFilter]=useState<'all'|Kind>('all'),[viewAsset,setViewAsset]=useState<Asset|null>(null),[providerEdit,setProviderEdit]=useState<Profile|null|undefined>(undefined);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const busyRef=useRef(false),searchRef=useRef<HTMLInputElement>(null),imageInput=useRef<HTMLInputElement>(null),templateInput=useRef<HTMLInputElement>(null),importTarget=useRef<string|undefined>();
@@ -89,6 +92,15 @@ export function StudioApp({isMac,onClassic}:{isMac:boolean;onClassic():void}) {
     if(lastRun.current?.signature!==signature)lastRun.current={signature,id:uid()};
     await client.run(p.id,profile.id,lastRun.current.id);lastRun.current=null;await studio.refresh();setNotice('工作流已进入队列，可在历史中查看进度');
   });
+  const useLibraryPrompt = async (card: PromptCard) => {
+    const target = await ensureProject();
+    const current = studio.getProject(target.id) ?? target;
+    const next = addPromptToProject(current, card);
+    studio.edit(next);
+    await studio.flush(next.id);
+    setPage('canvas'); setResourcesOpen(false);
+    setNotice('已添加提示词和生成节点；尚未发起 API 请求');
+  };
   const nativeWindow=(method:string)=>{const runtime=(window as unknown as {runtime?:Record<string,()=>void>}).runtime;runtime?.[method]?.();};
   const generatedIDs=new Set(studio.snapshot.jobs.map(j=>j.resultAssetId).filter(Boolean));
   const relevantAssets=studio.snapshot.assets.filter(a=>page==='assets'||generatedIDs.has(a.id));
@@ -109,7 +121,7 @@ export function StudioApp({isMac,onClassic}:{isMac:boolean;onClassic():void}) {
       <button className="studio-notifications" title="任务历史" onClick={()=>setPage('history')}><Bell size={21}/>{activeJobs.length>0&&<i/>}</button><div className="studio-account"><span>✦</span><div>本地工作室<small>{desktop?'桌面端':'浏览器预览'}</small></div><ChevronDown size={13}/></div>
       {!isMac&&<div className="studio-window-controls"><button disabled={!desktop} title="最小化" onClick={()=>nativeWindow('WindowMinimise')}><Minus size={15}/></button><button disabled={!desktop} title="最大化或还原" onClick={()=>nativeWindow('WindowToggleMaximise')}><Maximize2 size={13}/></button><button disabled={!desktop} title="关闭应用" onClick={()=>nativeWindow('Quit')}><X size={16}/></button></div>}
     </header>
-    <nav className="studio-sidebar" aria-label="主导航"><div>{nav.map(n=><button key={n.id} className={page===n.id||(n.id==='projects'&&page==='canvas')?'active':''} onClick={()=>setPage(n.id)}><n.icon size={21}/><span>{n.label}</span></button>)}</div><div className="studio-sidebar-bottom"><button onClick={()=>{void runAction(async()=>{for(const p of studio.snapshot.projects)await studio.flush(p.id);onClassic();});}} title="保留原有图像编辑与 Responses API 功能"><Monitor size={20}/><span>经典编辑</span></button><button className={page==='settings'?'active':''} onClick={()=>setPage('settings')}><Settings2 size={21}/><span>设置</span></button><footer><b>XAI</b><span>From Imagination<br/>to Everything</span></footer></div></nav>
+    <nav className="studio-sidebar" aria-label="主导航"><div>{nav.map(n=><button key={n.id} className={(n.id==='assets'&&page==='canvas'&&resourcesOpen)||page===n.id||(n.id==='projects'&&page==='canvas'&&!resourcesOpen)?'active':''} onClick={()=>{if(n.id==='assets'&&page==='canvas'){setResourcesOpen(v=>!v);}else{setResourcesOpen(false);setPage(n.id);}}}><n.icon size={21}/><span>{n.label}</span></button>)}</div><div className="studio-sidebar-bottom"><button onClick={()=>{void runAction(async()=>{for(const p of studio.snapshot.projects)await studio.flush(p.id);onClassic();});}} title="保留原有图像编辑与 Responses API 功能"><Monitor size={20}/><span>经典编辑</span></button><button className={page==='settings'?'active':''} onClick={()=>setPage('settings')}><Settings2 size={21}/><span>设置</span></button><footer><b>XAI</b><span>From Imagination<br/>to Everything</span></footer></div></nav>
     <main className={`studio-main ${page==='canvas'?'canvas-page':''}`}>
       {page==='home'?<>
         <section className="studio-welcome"><div><span className="studio-eyebrow">YOUR CREATIVE SPACE</span><h1>用 AI，创造无限可能</h1><p>从灵感到作品，XAI 与你一起，让想象力触手可及。</p></div><span className="studio-welcome-note">想象 · 探索 · 创造 · 分享<small>From Imagination to Everything</small></span></section>
@@ -120,8 +132,9 @@ export function StudioApp({isMac,onClassic}:{isMac:boolean;onClassic():void}) {
         {assets.length?gallery(assets,5):<section className="studio-empty-works"><div className="studio-empty-icon"><ImagePlus size={29}/></div><div><strong>你的第一份灵感，即将在这里呈现</strong><p>这里展示真实生成的作品，不包含示例图片或虚构使用记录。</p></div><button className="studio-secondary" onClick={()=>setPage('create')}>开始创作 <ArrowRight size={16}/></button></section>}
         <div className="studio-local-note"><ShieldCheck size={14}/>项目与素材保存在本机，只有生成时选定的提示词和参考图会发送到你配置的上游。</div>
       </>:page==='canvas'?<>
-        <div className="studio-page-heading compact"><div><span className="studio-eyebrow">PRO WORKSPACE</span><h1>无限画布</h1></div><div className="studio-form-actions"><span className="studio-muted">{studio.saving?'正在保存…':studio.conflicted?'保存冲突':'自动保存'}</span><select aria-label="选择画布" value={studio.activeID} onChange={e=>studio.setActiveID(e.target.value)}>{studio.snapshot.projects.map(p=><option key={p.id} value={p.id}>{studio.getProject(p.id)?.name??p.name}</option>)}</select><button className="studio-secondary" onClick={newCanvas}><Plus size={16}/>新建</button></div></div>
+        <div className="studio-page-heading compact"><div><span className="studio-eyebrow">PRO WORKSPACE</span><h1>无限画布</h1></div><div className="studio-form-actions"><button className="studio-secondary pc-open-button" aria-expanded={resourcesOpen} onClick={()=>setResourcesOpen(v=>!v)}><Layers3 size={16}/>资源 · 提示词</button><span className="studio-muted">{studio.saving?'正在保存…':studio.conflicted?'保存冲突':'自动保存'}</span><select aria-label="选择画布" value={studio.activeID} onChange={e=>studio.setActiveID(e.target.value)}>{studio.snapshot.projects.map(p=><option key={p.id} value={p.id}>{studio.getProject(p.id)?.name??p.name}</option>)}</select><button className="studio-secondary" onClick={newCanvas}><Plus size={16}/>新建</button></div></div>
         {studio.project?<Canvas project={studio.project} assets={studio.snapshot.assets} onChange={studio.edit} onRun={workflowRun} onImport={()=>askImage(studio.activeID)} report={studio.report} running={busy}/>:<div className="studio-empty-panel"><Workflow size={42}/><h2>一个画布，无限可能</h2><button className="studio-primary" onClick={newCanvas}>新建画布</button></div>}
+      {resourcesOpen&&<PromptCenter snapshot={studio.snapshot} refresh={studio.refresh} onUse={useLibraryPrompt} onClose={()=>setResourcesOpen(false)}/>}
       </>:page==='create'?<>
         <div className="studio-page-heading"><div><span className="studio-eyebrow">MAKE SOMETHING WONDERFUL</span><h1>把想象，变成作品</h1><p>专注灵感，让创作自然发生。</p></div><button className="studio-secondary" onClick={goCanvas}><Workflow size={16}/>打开专业画布</button></div>
         <div className="studio-create-layout"><form className="studio-generation-form" onSubmit={e=>{e.preventDefault();submit();}}><div className="studio-tabs"><button type="button" className={kind==='image'?'active':''} onClick={()=>{setKind('image');setParameters({});}}><ImagePlus size={18}/>生成图片</button><button type="button" className={kind==='video'?'active':''} onClick={()=>{setKind('video');setParameters({});}}><Video size={18}/>生成视频</button></div>
@@ -133,8 +146,8 @@ export function StudioApp({isMac,onClassic}:{isMac:boolean;onClassic():void}) {
           <label>结果画布<select value={studio.activeID} onChange={e=>studio.setActiveID(e.target.value)}><option value="">自动创建创作画布</option>{studio.snapshot.projects.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
           <button className="studio-primary full" disabled={busy||!studio.ready} type="submit">{busy?<Loader2 size={18} className="spin"/>:<Sparkles size={18}/>}生成{kind==='image'?'图片':'视频'} <ArrowRight size={18}/></button><small>使用你配置的 {kind==='video'?(profile?.videoModel||'视频模型'):(profile?.imageModel||'图像模型')}；费用与生成能力由上游决定。</small>
         </form><section className="studio-generation-results"><div className="studio-section-title"><h3>创作动态</h3><span>{activeJobs.length} 个进行中</span></div>{studio.snapshot.jobs.length?jobsPanel(studio.snapshot.jobs.slice(0,8)):<div className="studio-empty-panel"><Sparkles size={44}/><h3>一切，从一个想法开始</h3><p>写下提示词并提交，图片与视频会自动加入结果画布。</p></div>}</section></div>
-      </>:page==='works'||page==='assets'?<>
-        <div className="studio-page-heading"><div><span className="studio-eyebrow">YOUR CREATIVE LIBRARY</span><h1>{page==='works'?'我的作品':'素材资源'}</h1><p>{page==='works'?'每一个灵感，都值得被珍藏。':'管理本地参考图和生成素材。'}</p></div><button className="studio-primary" onClick={()=>askImage()}><Upload size={16}/>导入图片</button></div><div className="studio-section-title"><div className="studio-filter">{(['all','image','video']as const).map(f=><button key={f} className={filter===f?'active':''} onClick={()=>setFilter(f)}>{f==='all'?'全部':f==='image'?'图片':'视频'}</button>)}</div><span>{assets.length} 项{query?` · 搜索“${query}”`:''}</span></div>{assets.length?gallery(assets):<div className="studio-empty-panel"><Folder size={46}/><h2>{query?'没有匹配的作品':'这里还没有作品'}</h2><p>生成或导入你的第一张图片，开始建立创作资料库。</p></div>}
+      </>:page==='assets'?<PromptCenter snapshot={studio.snapshot} refresh={studio.refresh} onUse={useLibraryPrompt}/>:page==='works'?<>
+        <div className="studio-page-heading"><div><span className="studio-eyebrow">YOUR CREATIVE LIBRARY</span><h1>我的作品</h1><p>每一个灵感，都值得被珍藏。</p></div><button className="studio-primary" onClick={()=>askImage()}><Upload size={16}/>导入图片</button></div><div className="studio-section-title"><div className="studio-filter">{(['all','image','video']as const).map(f=><button key={f} className={filter===f?'active':''} onClick={()=>setFilter(f)}>{f==='all'?'全部':f==='image'?'图片':'视频'}</button>)}</div><span>{assets.length} 项{query?` · 搜索“${query}”`:''}</span></div>{assets.length?gallery(assets):<div className="studio-empty-panel"><Folder size={46}/><h2>{query?'没有匹配的作品':'这里还没有作品'}</h2><p>生成或导入你的第一张图片，开始建立创作资料库。</p></div>}
       </>:page==='projects'?<>
         <div className="studio-page-heading"><div><span className="studio-eyebrow">CONNECTED IDEAS</span><h1>你的工作流</h1><p>把创作步骤连接起来，复用你的灵感。</p></div><div className="studio-form-actions"><button className="studio-secondary" onClick={()=>templateInput.current?.click()}><Upload size={16}/>导入模板</button><button className="studio-primary" onClick={newCanvas}><Plus size={17}/>新建画布</button></div></div><div className="studio-project-grid">{studio.snapshot.projects.map(p=><button className="studio-project-card" key={p.id} onClick={()=>{studio.setActiveID(p.id);setPage('canvas');}}><div className="studio-project-art"><Workflow size={43}/><span>{p.nodes.length} NODES</span></div><h3>{studio.getProject(p.id)?.name??p.name}</h3><p>{p.nodes.length} 个节点 · {p.edges.length} 条连线</p><small>{dateLabel(p.updatedAt)} <ArrowRight size={15}/></small></button>)}<button className="studio-project-new" onClick={newCanvas}><Plus size={30}/><strong>开始新的创作</strong><span>无限画布，从这里展开</span></button></div><div className="studio-callout">模板只包含节点、连线与参数，不包含 API Key 和本地媒体文件。导入后请重新绑定素材；实际运行前会校验整个工作流。</div>
       </>:page==='history'?<>

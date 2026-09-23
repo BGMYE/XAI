@@ -6,14 +6,14 @@
 
 桌面主线统一为 **React + TypeScript + Wails + Go**。新版工作室支持 API Key 生图、生视频与节点式无限画布，使用步骤见 [Studio 文档](./docs/studio-v2.md)。独立 Gio 客户端已下线，Go 后端与共享模块继续保留。
 
-> BGMYE/XAI 中的开源图像生成 / 编辑客户端 · Wails（Go + React/TS）桌面端 + Android WebView 壳层 ·
+> BGMYE/XAI 中的开源图像生成 / 编辑客户端 · Wails（Go + React/TS）桌面端 ·
 > 支持 Responses API 的 SSE / WebSocket mode 与标准 Images API
 
 ![license](https://img.shields.io/badge/license-AGPLv3-b22222)
 ![go](https://img.shields.io/badge/go-%3E%3D1.25-00ADD8)
 ![react](https://img.shields.io/badge/react-18-61DAFB)
 ![wails](https://img.shields.io/badge/wails-v2.12-DF0000)
-![platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux%20%7C%20android-lightgrey)
+![platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey)
 
 Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推理在 Cloudflare / Nginx 后面容易遇到的 524/504 断连问题。Responses API 模式支持 `HTTP SSE` 与 `WebSocket mode` 两种传输；Images API 模式则兼容标准 `/v1/images/generations` 与 `/v1/images/edits`。
 
@@ -55,7 +55,7 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 提 Issue 前建议先做这几步:
 
 1. 在当前 profile 里点一次「测试连接」，确认 `BASE_URL`、`API Key`、文本模型 ID、图像模型 ID 真实可用。
-2. 对照 [docs/troubleshooting.md](./docs/troubleshooting.md) 自查 `524/504`、`401/403`、`model not found`、多参考图/蒙版不生效、Android 保存目录行为等常见非软件问题。
+2. 对照 [docs/troubleshooting.md](./docs/troubleshooting.md) 自查 `524/504`、`401/403`、`model not found`、多参考图/蒙版不生效等常见非软件问题。
 3. 从历史详情或 raw 响应里确认真实 HTTP 状态码和上游报错，不要只看页面 toast。
 4. 如果同样的 `BASE_URL + Key + 模型 ID` 在 curl、Postman 或上游自带调试页里也失败，优先联系你的上游服务商，而不是提交本仓库 Issue。
 5. 仍然怀疑是软件问题时，再按 [docs/feedback.md](./docs/feedback.md) 准备最少复现信息提交 Issue。
@@ -75,9 +75,9 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 | 首次配置、API 形态选择、参数策略 | [docs/usage.md](./docs/usage.md) |
 | 配套项目 Image-Prompts 与提示词导入 | [docs/prompt-import.md](./docs/prompt-import.md) |
 | 提 Issue 前自查、数据存储位置、524/504、模型权限、字段兼容问题 | [docs/troubleshooting.md](./docs/troubleshooting.md) |
-| 仓库结构、前端分层、内核 / Worker / Android 关系 | [docs/project-structure.md](./docs/project-structure.md) |
+| 仓库结构、前端分层、内核 / Worker 关系 | [docs/project-structure.md](./docs/project-structure.md) |
 | 原始提示词传递策略 | [docs/no-prompt-revision/README.md](./docs/no-prompt-revision/README.md) |
-| Android 壳层维护说明 | [android-shell/README.md](./android-shell/README.md) |
+| 提示词中心与桌面精简 | [docs/prompt-center.md](./docs/prompt-center.md) |
 | 桌面架构与客户端精简 | [docs/desktop-architecture.md](./docs/desktop-architecture.md) |
 | 跨平台内核计划与验证背景 | [docs/cross-platform-kernel-plan.md](./docs/cross-platform-kernel-plan.md) |
 | 反馈渠道、问题提交、QQ群讨论 | [docs/feedback.md](./docs/feedback.md) |

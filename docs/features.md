@@ -26,7 +26,7 @@
 - 标注:矩形、箭头、自由画笔、文字、颜色选择、选中删除。
 - 图像变换:
   - macOS 桌面端优先走 Core Image / Metal。
-  - Android、Windows、Linux 与浏览器预览优先走 WebGL 或 canvas 路径，再把结果持久化回宿主可读路径。
+  - Windows、Linux 与浏览器预览优先走 WebGL 或 canvas 路径，再把结果持久化回宿主可读路径。
   - 不可用时回退 CPU / canvas。
   - 旋转、翻转、裁剪是就地编辑当前画板图，不创建新的生成历史条目。
 - 历史对比:Shift + 点击历史项进入左右分屏对比，可拖动分割条。
@@ -51,10 +51,9 @@
 - 上游配置:API 形态、BASE_URL、API Key、文本模型 ID、图像模型 ID、连接测试。
 - API Key:
   - 桌面端使用系统安全存储(Keychain / Credential Manager / Secret Service)。
-  - Android 壳层使用应用私有 SharedPreferences。
 - 主题:深色 / 浅色。
 - 字号:小 / 中 / 大。
-- 参数编辑:桌面端与 Android 端都共用同一套比例 / 分辨率 / 质量语义，差异只体现在展示形态与触控交互。
+- 参数编辑:桌面端共用同一套比例 / 分辨率 / 质量语义，差异只体现在展示形态与触控交互。
 - 输出目录选择、打开输出目录、历史导入 / 导出、清除 API Key、清空历史。
 - 关于窗口:版本号、AGPLv3 协议、GitHub、Issues。
 
@@ -65,10 +64,9 @@
 | macOS | Apple 风格主题 | Wails + Go 本地内核；图像变换优先 Core Image / Metal；本地自签 universal app。 |
 | Windows | Fluent 风格主题 | Wails + Go 本地内核；WebView2；图像变换走 WebGL/canvas 或本地持久化回退。 |
 | Linux | 通用桌面主题 | Wails + Go 本地内核；依赖 GTK/WebKitGTK；图像变换走 WebGL/canvas 或本地持久化回退。 |
-| Android | Material 3 phone/pad 自适应 | WebView 壳层 + 前端远程内核；壳层提供 native HTTP、图片选择、MediaStore 保存、历史导入导出、震动与全屏。 |
 | 浏览器预览 | 按目标平台预览 | 主要用于前端调试；文件、保存和 raw 响应通过浏览器能力或内存虚拟路径回退。 |
 
-Android APK 统一构建 `android` 前端目标，运行时根据窗口尺寸和方向切换 phone / pad 壳层，不再分别维护 phone/pad 两套 APK。
+Android APK 已下线。
 
 ## 快捷键
 

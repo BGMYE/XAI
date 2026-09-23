@@ -4,10 +4,6 @@ import path from "node:path";
 import { resolveVerifyOutputPath } from "./verify-output-paths.mjs";
 
 const root = process.cwd();
-const androidSdkRoot = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME || `${root}/.tmp/android-sdk`;
-const javaHome = process.env.IMAGE_STUDIO_JAVA_HOME || process.env.JAVA_HOME || `${root}/.tmp/jdk/jdk-17.0.19+10/Contents/Home`;
-const androidUserHome = process.env.ANDROID_USER_HOME || `${root}/.tmp/android-home/.android`;
-const homeDir = process.env.HOME || `${root}/.tmp/android-home`;
 const summaryOutputPath = resolveVerifyOutputPath("IMAGE_STUDIO_PLATFORM_KERNEL_OUTPUT_PATH", "platform-kernel-summary.json");
 const includeIssueCloseVerify = /^(1|true)$/i.test(process.env.IMAGE_STUDIO_INCLUDE_ISSUE_CLOSE_VERIFY ?? "");
 const defaultIssueCloseGitHubSyncSkip = (process.env.IMAGE_STUDIO_SKIP_ISSUE_CLOSE_GITHUB_SYNC ?? "").trim()
@@ -76,23 +72,6 @@ const steps = [
     resultFile: resultFileEntry("IMAGE_STUDIO_SMOKE_VERIFY_OUTPUT_PATH", "local-smoke.json"),
   },
   {
-    label: "android shell verify",
-    cmd: "node",
-    args: ["scripts/verify-local-android-shell.mjs"],
-    cwd: root,
-    env: {
-      JAVA_HOME: javaHome,
-      ANDROID_HOME: androidSdkRoot,
-      ANDROID_SDK_ROOT: androidSdkRoot,
-      ANDROID_USER_HOME: androidUserHome,
-      HOME: homeDir,
-      GRADLE_USER_HOME: `${root}/.tmp/gradle-home-arm64`,
-      // Let Gradle build the Android target instead of reusing the desktop dist above.
-      IMAGE_STUDIO_ANDROID_USE_PREBUILT_FRONTEND: "0",
-    },
-    resultFile: resultFileEntry("IMAGE_STUDIO_ANDROID_VERIFY_OUTPUT_PATH", "android-shell.json"),
-  },
-  {
     label: "image-studio go test",
     cmd: "go",
     args: ["test", "./..."],
@@ -154,10 +133,6 @@ const summary = {
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
-    androidSdkRoot,
-    javaHome,
-    androidUserHome,
-    homeDir,
     runtimeUpdateProbeSkipped: /^(1|true)$/i.test(process.env.IMAGE_STUDIO_SKIP_RUNTIME_UPDATE_PROBE ?? ""),
     issueCloseVerifyIncluded: includeIssueCloseVerify,
     issueCloseGitHubSyncSkippedByDefault: defaultIssueCloseGitHubSyncSkip !== "",
@@ -165,7 +140,6 @@ const summary = {
   resultFiles: {
     liveVerify: resultFileEntry("IMAGE_STUDIO_LIVE_VERIFY_OUTPUT_PATH", "live-verify.json"),
     localSmoke: resultFileEntry("IMAGE_STUDIO_SMOKE_VERIFY_OUTPUT_PATH", "local-smoke.json"),
-    androidShell: resultFileEntry("IMAGE_STUDIO_ANDROID_VERIFY_OUTPUT_PATH", "android-shell.json"),
     macosRelease: resultFileEntry("IMAGE_STUDIO_MACOS_VERIFY_OUTPUT_PATH", "macos-release.json"),
     issueCloseTooling: resultFileEntry("IMAGE_STUDIO_ISSUE_CLOSE_VERIFY_OUTPUT_PATH", "issue-close-tooling.json"),
     issueCloseExportManifest: resultFileEntry("IMAGE_STUDIO_ISSUE_CLOSE_EXPORT_MANIFEST_PATH", "issue-close-export-bundle/manifest.json"),

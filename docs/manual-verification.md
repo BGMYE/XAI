@@ -1,3 +1,7 @@
+# Android 下线说明
+
+Android APK 已退出维护；本文中的 Android 条目仅记录旧版本验证范围，不再执行其构建命令。当前验证以桌面工作室及提示词中心为准。
+
 # 手工验证手册
 
 本文档只覆盖当前仍然需要外部条件的验证项:
@@ -76,15 +80,7 @@ node scripts/init-manual-verification.mjs custom "my regression check"
 
 - 至少一条真实可用上游，且能稳定返回图像
 - 已知正常的 `BASE_URL` / `API Key` / 文本模型 ID / 图像模型 ID
-- 如果是 Android:
-  - 已接入真机或模拟器
-  - 可先执行：
-
-```bash
-IMAGE_STUDIO_ANDROID_DEVICE_SMOKE=1 node scripts/verify-local-android-shell.mjs
-```
-
-若用 MuMu，可参考 [mumu-android-debug.md](./mumu-android-debug.md)。
+- 本版本只验收 Wails 桌面端。Android APK 壳层与模拟器验证入口已下线；历史 Android 记录不代表当前支持范围。详见 [桌面架构](./desktop-architecture.md)。
 
 ### 建议矩阵
 

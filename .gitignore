@@ -6,17 +6,6 @@
 /image-studio/frontend/dist/
 /image-studio/frontend/dist-file-preview/
 /image-studio/frontend/node_modules/
-/android-shell/.gradle/
-/android-shell/.gradle-wrapper/
-/android-shell/.kotlin/
-/android-shell/build/
-/android-shell/app/build/
-/android-shell/local.properties
-/android-shell/*.jks
-/android-shell/*.keystore
-/android-shell/app/src/main/assets/web/
-/android-shell/app/src/phone/assets/web/
-/android-shell/app/src/pad/assets/web/
 
 # Generated images, raw SSE dumps, imported sources
 # (raw SSE files include request headers — may leak API keys)
@@ -71,3 +60,5 @@ package.json.md5
 # Studio validation and desktop packaging output
 /image-studio/frontend/studio-evidence/
 /release-ci/
+
+/catalog-source-evidence/

@@ -15,13 +15,13 @@
 
 任务路径为：React 操作 → Wails 绑定 → Go 本地任务引擎 → 用户配置的上游 API → 本地媒体文件 → 原画布结果节点。生成由远端模型服务执行，不是在本机运行生成模型；本机 Go 后端不需要另租服务器。
 
-`go.work` 保留 `image-studio`、`go-cli` 和 `shared/compat-go` 三个模块。`go-cli/` 与 `shared/` 仍被主工作室使用，不属于本次下线范围。经典编辑器、Android 壳层和可选 Worker 的现有实现也保留，不借此次清理删除其他功能。
+`go.work` 保留 `image-studio`、`go-cli` 和 `shared/compat-go` 三个模块。`go-cli/` 与 `shared/` 仍被主工作室使用，不属于本次下线范围。经典编辑器与可选 Worker 保留。Android APK 壳层已下线，主线只维护桌面程序。
 
 新版浏览器模式仍只是本地画布预览，不保存 API Key、不代理生成请求。桌面端的 API Key 生图、生视频及节点工作流说明见 [studio-v2.md](./studio-v2.md)。本次精简不新增多人云端服务、时间线剪辑或其他供应商适配器。
 
 ## 发布与环境
 
-`release.yml` 保留 Wails Windows、macOS、Linux，以及 Windows 安装器/MSIX 和 Android 的构建发布链路；不再包含独立 Gio 作业或发布依赖。Windows 主工作室仍需 WebView2，Linux 仍需 GTK/WebKitGTK。构建环境见 [build.md](./build.md)，产物选择见 [packages.md](./packages.md)。
+`release.yml` 保留 Wails Windows、macOS、Linux，以及 Windows 安装器/MSIX 的构建发布链路；不再包含独立 Gio 作业或发布依赖。Windows 主工作室仍需 WebView2，Linux 仍需 GTK/WebKitGTK。构建环境见 [build.md](./build.md)，产物选择见 [packages.md](./packages.md)。
 
 本次不升级共享模块依赖，不重写 Git 历史，不清除已有 Releases，也不会访问或删除用户电脑上的凭据、作品、画布、历史记录或兼容状态文件。删除源码不会自动卸载用户此前下载的旧程序。
 
@@ -48,3 +48,9 @@ npm run build
 ```
 
 CI 在实际已移除客户端的源码树上运行核心测试、依赖清单检查、Windows 交叉编译、浏览器画布回归及五个桌面目标的打包验证。结构检查不能代替功能测试；最终通过情况以对应提交的 Actions 记录为准。现有 HTTP 测试使用本地 mock，不提交真实收费请求；凭据库、原生对话框、各系统视频播放与实际模型权限仍需目标设备验收。
+
+## Android APK 下线与公共提示词中心
+
+`android-shell/` 已移除，Release 不再构建或发布 APK；主工作室继续使用 React + Wails + Go。专用 Android SDK/JDK CI 步骤与 Android 验证结果依赖已移除。旧的共享平台类型、检测与兼容测试保留，避免破坏经典编辑器；这不意味着仍提供 APK。用户设备中已安装的程序、数据和旧 Releases 不会被删除。
+
+专业模式新增同源公共图库与本地提示词中心，见 [prompt-center.md](./prompt-center.md)。`cloudflare-worker/` 保留原实现，它不是图库或视频通用网关。
