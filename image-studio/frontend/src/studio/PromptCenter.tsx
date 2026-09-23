@@ -5,7 +5,7 @@ import {client, downloadText, mediaURL} from './client';
 import {collectPromptCards, exportPromptPack, filterPromptCards, normalizePromptCard, parsePromptPack} from './promptLibrary.mjs';
 import {copyPromptText} from './clipboard';
 import './prompt-center.css';
-import {PublicCatalog,SourcePreview} from './PublicCatalog';
+import {PublicCatalog,SourcePreview} from './PublicPromptCatalog';
 
 type Props = {snapshot: Snapshot; refresh(): Promise<void>; onUse(card: PromptCard): Promise<void>; onClose?(): void};
 const blank = (asset?: Asset): PromptCard => ({id: '', revision: 0, title: asset?.name ?? '', prompt: '', kind: asset?.kind ?? 'image', previewAssetId: asset?.id ?? '', category: '未分类', tags: [], author: '', parameters: {}, favorite: false, createdAt: '', updatedAt: ''});

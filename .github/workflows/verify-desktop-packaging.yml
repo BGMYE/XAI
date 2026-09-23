@@ -13,6 +13,18 @@ on:
       - 'go.work*'
       - '.github/workflows/release.yml'
       - '.github/workflows/verify-desktop-packaging.yml'
+  # Direct pushes to main must exercise native Windows/macOS filesystems too.
+  # Cross-compiling Go on Linux does not catch frontend resolver case collisions.
+  push:
+    branches: [main]
+    paths:
+      - 'image-studio/**'
+      - 'go-cli/**'
+      - 'shared/compat-go/**'
+      - 'scripts/**'
+      - 'go.work*'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/verify-desktop-packaging.yml'
   workflow_dispatch:
 permissions:
   contents: read
