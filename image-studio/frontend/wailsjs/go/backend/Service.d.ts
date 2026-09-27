@@ -3,6 +3,7 @@
 import {backend} from '../models';
 import {compat} from '../models';
 import {http} from '../models';
+import {context} from '../models';
 
 export function ActivatePromptImportListener():Promise<backend.PromptImportActivation>;
 
@@ -111,6 +112,10 @@ export function SetKeepLogsEnabled(arg1:boolean):Promise<void>;
 export function SetOutputDir(arg1:string):Promise<void>;
 
 export function SetStoredAPIKey(arg1:string,arg2:string):Promise<void>;
+
+export function Shutdown(arg1:context.Context):Promise<void>;
+
+export function Startup(arg1:context.Context):Promise<void>;
 
 export function UpscaleImage(arg1:string,arg2:number):Promise<backend.UpscaleResult>;
 

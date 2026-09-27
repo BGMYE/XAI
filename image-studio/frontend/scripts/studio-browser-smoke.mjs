@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 import {testDraftSaves} from './studio-save-regression.mjs';
 
@@ -49,7 +50,7 @@ try {
       .evaluateAll(elements => elements.map(element => getComputedStyle(element).fontFamily));
     assert.equal(new Set(fonts).size, 1);
     assert.ok(fonts[0].includes('Noto Sans CJK SC'), 'Complete CJK fallback is available');
-    await page.screenshot({path: new URL('home-1440.png', out).pathname});
+    await page.screenshot({path: fileURLToPath(new URL('home-1440.png', out))});
     pass('Homepage uses actual empty data and unified CJK typography');
 
     await page.locator('.studio-quick-grid button').filter({hasText: '新建工作流'}).click();
@@ -96,7 +97,7 @@ try {
     pass('Canvas drag, delete, undo, fit and pointer zoom');
     await page.waitForTimeout(1800);
     assert.equal(await page.locator('.studio-error-banner').count(), 0);
-    await page.screenshot({path: new URL('canvas-1440.png', out).pathname});
+    await page.screenshot({path: fileURLToPath(new URL('canvas-1440.png', out))});
 
     const downloading = page.waitForEvent('download');
     await page.getByRole('button', {name: '导出无密钥模板'}).click();
@@ -132,16 +133,36 @@ try {
     await page.evaluate(() => document.documentElement.classList.add('dark'));
     const canvasSelectColor = await page.getByRole('combobox', {name: '选择画布'})
       .evaluate(element => getComputedStyle(element).color);
-    assert.equal(canvasSelectColor, 'rgb(37, 60, 98)');
+    assert.equal(canvasSelectColor, 'rgb(54, 85, 120)');
     await page.locator('.studio-sidebar button').filter({hasText: '设置'}).click();
     await page.getByRole('heading', {name: '工作室设置'}).waitFor();
     assert.ok(await page.getByRole('button', {name: '保存配置', exact: true}).isDisabled());
     // Native checkboxes have no text glyphs; check text-bearing controls only.
     const colors = await page.locator('.studio-provider-form input:not([type="checkbox"]),.studio-provider-form select')
       .evaluateAll(elements => elements.map(element => getComputedStyle(element).color));
-    assert.ok(colors.length > 0 && colors.every(color => color === 'rgb(37, 60, 98)'), `Text-control colors: ${JSON.stringify(colors)}`);
-    await page.screenshot({path: new URL('settings-1440.png', out).pathname});
+    assert.ok(colors.length > 0 && colors.every(color => color === 'rgb(54, 85, 120)'), `Text-control colors: ${JSON.stringify(colors)}`);
+    await page.screenshot({path: fileURLToPath(new URL('settings-1440.png', out))});
     pass('Browser preview blocks key persistence; classic dark mode cannot leak into controls');
+
+    const protocol = page.locator('.studio-main').getByRole('combobox', {name: '接口协议'});
+    const picker = await protocol.evaluate(element => {
+      const style = getComputedStyle(element, '::picker(select)');
+      return {appearance: style.appearance, background: style.backgroundColor};
+    });
+    assert.deepEqual(picker, {appearance: 'base-select', background: 'rgb(246, 250, 255)'});
+    await protocol.click();
+    assert.ok(await protocol.evaluate(element => element.matches(':open')));
+    const selectedBackground = await protocol.locator('option:checked').evaluate(element => getComputedStyle(element).backgroundColor);
+    assert.ok(['rgb(219, 234, 255)', 'rgb(231, 241, 255)'].includes(selectedBackground));
+    await page.screenshot({path: fileURLToPath(new URL('settings-picker.png', out))});
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    assert.equal(await protocol.inputValue(), 'openai');
+    assert.match(await page.locator('.studio-main .studio-protocol-help').textContent(), /seconds/);
+    await protocol.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await protocol.evaluate(element => element.matches(':open')), false);
+    pass('Blue dropdown selection and keyboard controls preserve protocol behavior');
 
     // The dialog and its explicitly typed fields must obey the same theme
     // boundary even when the classic macOS or Windows family is selected.
@@ -152,7 +173,17 @@ try {
       await page.evaluate(value => document.documentElement.setAttribute('data-ui-family', value), uiFamily);
       const dialogColors = await page.locator('.studio-dialog input:not([type="checkbox"]),.studio-dialog select')
         .evaluateAll(elements => elements.map(element => ({color: getComputedStyle(element).color, caret: getComputedStyle(element).caretColor})));
-      assert.ok(dialogColors.length > 0 && dialogColors.every(style => style.color === 'rgb(37, 60, 98)' && style.caret === 'rgb(37, 60, 98)'), `Dialog text colors (${uiFamily}): ${JSON.stringify(dialogColors)}`);
+      assert.ok(dialogColors.length > 0 && dialogColors.every(style => style.color === 'rgb(54, 85, 120)' && style.caret === 'rgb(57, 127, 235)'), `Dialog text colors (${uiFamily}): ${JSON.stringify(dialogColors)}`);
+      const dialogProtocol = page.locator('.studio-dialog[open]').getByRole('combobox', {name: '接口协议'});
+      const descriptions = await page.locator('select[aria-describedby]').evaluateAll(elements => elements.map(element => element.getAttribute('aria-describedby')));
+      assert.equal(new Set(descriptions).size, descriptions.length, 'Each form has its own protocol description');
+      assert.match(await dialogProtocol.evaluate(element => document.getElementById(element.getAttribute('aria-describedby')).textContent), /duration/);
+      await dialogProtocol.click();
+      const option = dialogProtocol.locator('option[value=openai]');
+      await option.hover();
+      assert.equal(await option.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(231, 241, 255)');
+      await page.keyboard.press('Escape');
+      assert.ok(await page.locator('.studio-dialog[open]').isVisible(), 'Escape closes only the picker');
     }
     await page.evaluate(value => {
       if (value === null) document.documentElement.removeAttribute('data-ui-family');
@@ -170,7 +201,7 @@ try {
       if (size.width === 1100) {
         assert.ok(await page.locator('.studio-window-controls').isVisible(), 'Frameless window controls remain visible at minimum desktop width');
       }
-      await page.screenshot({path: new URL(`home-${size.width}.png`, out).pathname});
+      await page.screenshot({path: fileURLToPath(new URL(`home-${size.width}.png`, out))});
     }
     pass('Responsive layout at 1100 and 760 pixels, including desktop window controls');
     for (const check of await testDraftSaves(context)) pass(check);
@@ -178,7 +209,7 @@ try {
     assert.deepEqual(external, []);
     pass('No uncaught errors or external network calls');
   } catch (error) {
-    await page.screenshot({path: new URL('failure.png', out).pathname}).catch(() => {});
+    await page.screenshot({path: fileURLToPath(new URL('failure.png', out))}).catch(() => {});
     throw error;
   }
 } finally {
