@@ -1062,3 +1062,401 @@ export namespace compat {
 
 }
 
+export namespace studio {
+	
+	export class Asset {
+	    id: string;
+	    kind: string;
+	    name: string;
+	    mime: string;
+	    bytes: number;
+	    createdAt: string;
+	    fileName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Asset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.mime = source["mime"];
+	        this.bytes = source["bytes"];
+	        this.createdAt = source["createdAt"];
+	        this.fileName = source["fileName"];
+	    }
+	}
+	export class Edge {
+	    id: string;
+	    from: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Edge(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
+	export class Profile {
+	    id: string;
+	    name: string;
+	    baseUrl: string;
+	    imageModel: string;
+	    videoModel: string;
+	    protocol: string;
+	    allowLocal: boolean;
+	    hasKey: boolean;
+	    credentialId?: string;
+	    verifiedAt?: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Profile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.baseUrl = source["baseUrl"];
+	        this.imageModel = source["imageModel"];
+	        this.videoModel = source["videoModel"];
+	        this.protocol = source["protocol"];
+	        this.allowLocal = source["allowLocal"];
+	        this.hasKey = source["hasKey"];
+	        this.credentialId = source["credentialId"];
+	        this.verifiedAt = source["verifiedAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class Parameters {
+	    size?: string;
+	    seconds?: number;
+	    aspectRatio?: string;
+	    resolution?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Parameters(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.size = source["size"];
+	        this.seconds = source["seconds"];
+	        this.aspectRatio = source["aspectRatio"];
+	        this.resolution = source["resolution"];
+	    }
+	}
+	export class Request {
+	    id: string;
+	    profileId: string;
+	    projectId: string;
+	    nodeId?: string;
+	    kind: string;
+	    prompt: string;
+	    referenceAssetId?: string;
+	    parameters: Parameters;
+	
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.profileId = source["profileId"];
+	        this.projectId = source["projectId"];
+	        this.nodeId = source["nodeId"];
+	        this.kind = source["kind"];
+	        this.prompt = source["prompt"];
+	        this.referenceAssetId = source["referenceAssetId"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Job {
+	    id: string;
+	    request: Request;
+	    profile: Profile;
+	    fingerprint: string;
+	    state: string;
+	    remoteId?: string;
+	    progress: number;
+	    error?: string;
+	    resultAssetId?: string;
+	    dependsOn: string[];
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Job(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.request = this.convertValues(source["request"], Request);
+	        this.profile = this.convertValues(source["profile"], Profile);
+	        this.fingerprint = source["fingerprint"];
+	        this.state = source["state"];
+	        this.remoteId = source["remoteId"];
+	        this.progress = source["progress"];
+	        this.error = source["error"];
+	        this.resultAssetId = source["resultAssetId"];
+	        this.dependsOn = source["dependsOn"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Node {
+	    id: string;
+	    kind: string;
+	    x: number;
+	    y: number;
+	    title: string;
+	    text?: string;
+	    assetId?: string;
+	    parameters: Parameters;
+	
+	    static createFrom(source: any = {}) {
+	        return new Node(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.title = source["title"];
+	        this.text = source["text"];
+	        this.assetId = source["assetId"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class Viewport {
+	    x: number;
+	    y: number;
+	    zoom: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Viewport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.zoom = source["zoom"];
+	    }
+	}
+	export class Project {
+	    id: string;
+	    name: string;
+	    revision: number;
+	    updatedAt: string;
+	    viewport: Viewport;
+	    nodes: Node[];
+	    edges: Edge[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Project(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.revision = source["revision"];
+	        this.updatedAt = source["updatedAt"];
+	        this.viewport = this.convertValues(source["viewport"], Viewport);
+	        this.nodes = this.convertValues(source["nodes"], Node);
+	        this.edges = this.convertValues(source["edges"], Edge);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PromptCard {
+	    catalogKey?: string;
+	    previewURL?: string;
+	    sourceURL?: string;
+	    referenceImageURLs?: string[];
+	    id: string;
+	    revision: number;
+	    title: string;
+	    prompt: string;
+	    kind: string;
+	    previewAssetId?: string;
+	    sourceJobId?: string;
+	    category: string;
+	    tags: string[];
+	    author?: string;
+	    parameters: Parameters;
+	    favorite: boolean;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PromptCard(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.catalogKey = source["catalogKey"];
+	        this.previewURL = source["previewURL"];
+	        this.sourceURL = source["sourceURL"];
+	        this.referenceImageURLs = source["referenceImageURLs"];
+	        this.id = source["id"];
+	        this.revision = source["revision"];
+	        this.title = source["title"];
+	        this.prompt = source["prompt"];
+	        this.kind = source["kind"];
+	        this.previewAssetId = source["previewAssetId"];
+	        this.sourceJobId = source["sourceJobId"];
+	        this.category = source["category"];
+	        this.tags = source["tags"];
+	        this.author = source["author"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	        this.favorite = source["favorite"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class Snapshot {
+	    promptCards: PromptCard[];
+	    profiles: Profile[];
+	    projects: Project[];
+	    assets: Asset[];
+	    jobs: Job[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Snapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.promptCards = this.convertValues(source["promptCards"], PromptCard);
+	        this.profiles = this.convertValues(source["profiles"], Profile);
+	        this.projects = this.convertValues(source["projects"], Project);
+	        this.assets = this.convertValues(source["assets"], Asset);
+	        this.jobs = this.convertValues(source["jobs"], Job);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+

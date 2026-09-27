@@ -5,25 +5,202 @@
     "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
 }
 
-/* The classic :root.dark input[type="password"] selector has higher
-   specificity than html:root .studio-app input. Match the dark root explicitly
-   so text/number/password inputs and portalled dialogs stay readable, without
-   changing the appearance of controls outside Studio. */
-html:root .studio-app :is(input, select, textarea),
-html:root .studio-dialog :is(input, select, textarea),
-html:root.dark .studio-app :is(input, select, textarea),
-html:root.dark .studio-dialog :is(input, select, textarea) {
+:is(.studio-app, .studio-dialog) {
   color-scheme: light;
-  color: #253c62;
-  caret-color: #253c62;
-  background-color: rgba(255, 255, 255, .84);
+  accent-color: #397feb;
+  --studio-control-bg: #f6faff;
+  --studio-control-text: #365578;
+  --studio-control-border: #c7dbef;
+  --studio-control-hover: #e7f1ff;
+  --studio-control-selected: #dbeaff;
+  --studio-control-accent: #245fae;
+  scrollbar-color: #b6cfea #edf5ff;
+}
+
+html:root :is(.studio-app, .studio-dialog) * {
+  scrollbar-color: #b6cfea #edf5ff;
+}
+
+html:root :is(.studio-app, .studio-dialog) ::selection {
+  color: #203f6b;
+  background: #cce2ff;
+}
+
+html:root :is(.studio-app, .studio-dialog) ::-webkit-scrollbar-thumb {
+  background: #b6cfea;
+  border-color: #edf5ff;
+}
+
+html:root :is(.studio-app, .studio-dialog) ::-webkit-scrollbar-thumb:hover {
+  background: #8eb6e0;
+}
+
+/* Outrank the classic Windows controls, including typed inputs and dark mode.
+   Keep Studio's fields and portalled dialogs on the same light blue palette. */
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, select, textarea),
+html:root[data-platform].dark :is(.studio-app, .studio-dialog) :is(input, select, textarea) {
+  color-scheme: light;
+  color: var(--studio-control-text);
+  caret-color: #397feb;
+  background-color: rgba(248, 252, 255, .78);
+  border-color: var(--studio-control-border);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
   font-family: var(--studio-font);
+  font-weight: 400;
+  outline: none;
+}
+
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, select, textarea):focus,
+html:root[data-platform].dark :is(.studio-app, .studio-dialog) :is(input, select, textarea):focus {
+  border-color: #79abe5;
+  box-shadow: 0 0 0 3px rgba(79, 143, 225, .12);
+  outline: none;
+}
+
+html:root[data-platform] :is(.studio-app, .studio-dialog) select {
+  appearance: auto;
+  background-image: none;
+  padding-right: 12px;
+}
+
+.studio-search:focus-within,
+.studio-app .pc-search:focus-within {
+  border-color: #79abe5;
+  box-shadow: 0 0 0 3px rgba(79, 143, 225, .12);
 }
 
 html:root .studio-app select option,
 html:root .studio-dialog select option {
-  color: #253c62;
-  background: #f6faff;
+  color: var(--studio-control-text);
+  background: var(--studio-control-bg);
+}
+
+/* Use the browser's accessible select with a CSS-painted top-layer picker.
+   Native OS popups ignore option hover colors on Windows. Older engines
+   retain the light native select above. */
+@supports (appearance: base-select) {
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select,
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select::picker(select) {
+    appearance: base-select;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select::picker(select) {
+    color-scheme: light;
+    color: var(--studio-control-text);
+    background: var(--studio-control-bg);
+    border: 1px solid var(--studio-control-border);
+    border-radius: 12px;
+    padding: 5px;
+    margin-block: 5px;
+    max-height: min(320px, 50vh);
+    overflow-y: auto;
+    box-shadow: 0 10px 28px #396dab24, inset 0 1px 0 #fff;
+    font-family: var(--studio-font);
+    scrollbar-width: thin;
+    scrollbar-color: #b6cfea var(--studio-control-bg);
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select::picker-icon {
+    color: #6b93c1;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select:open::picker-icon {
+    rotate: 180deg;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-weight: 400;
+    cursor: pointer;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select option:checked {
+    color: var(--studio-control-accent);
+    background: var(--studio-control-selected);
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select option:not(:disabled):is(:hover, :focus) {
+    color: var(--studio-control-accent);
+    background: var(--studio-control-hover);
+    outline: 1px solid #96bce9;
+    outline-offset: -1px;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select option::checkmark {
+    color: #397feb;
+  }
+
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select option:disabled {
+    color: #8ca2bd;
+    cursor: default;
+  }
+}
+
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::placeholder {
+  color: #7d96b5;
+  opacity: 1;
+}
+
+.studio-protocol-help {
+  color: #607e9e;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.studio-generation-form,
+.studio-generation-results {
+  background: linear-gradient(145deg, #ffffffa6, #f1f8ffc2);
+  box-shadow: inset 0 1px 0 #fff, 0 8px 24px #6087b30a;
+}
+
+.studio-generation-form label,
+.studio-dialog label {
+  color: #526f91;
+  font-weight: 500;
+}
+
+.studio-generation-form :is(input, select, textarea),
+.studio-dialog :is(input, select, textarea) {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.studio-generation-form textarea {
+  padding: 14px 15px;
+  resize: vertical;
+}
+
+.studio-reference-row {
+  align-items: flex-end;
+}
+
+.studio-reference-row > .studio-secondary {
+  min-height: 44px;
+  margin-bottom: 15px;
+  border-radius: 12px;
+}
+
+.studio-generation-form > small {
+  color: #6e87a6;
+  font-size: 11px;
+}
+
+.studio-tabs button {
+  color: #607ea3;
+  font-weight: 500;
 }
 
 .studio-page-heading.compact {

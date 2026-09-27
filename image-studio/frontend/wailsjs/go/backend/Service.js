@@ -218,6 +218,14 @@ export function SetStoredAPIKey(arg1, arg2) {
   return window['go']['backend']['Service']['SetStoredAPIKey'](arg1, arg2);
 }
 
+export function Shutdown(arg1) {
+  return window['go']['backend']['Service']['Shutdown'](arg1);
+}
+
+export function Startup(arg1) {
+  return window['go']['backend']['Service']['Startup'](arg1);
+}
+
 export function UpscaleImage(arg1, arg2) {
   return window['go']['backend']['Service']['UpscaleImage'](arg1, arg2);
 }
