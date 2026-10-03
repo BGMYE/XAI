@@ -23,7 +23,7 @@ func imageServer(t *testing.T, failStatus int, healthy *atomic.Bool, posts, down
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/images/generations":
+		case "/v1/images/generations":
 			posts.Add(1)
 			fmt.Fprintf(w, `{"data":[{"url":%q}]}`, server.URL+"/result.png")
 		case "/result.png":
@@ -51,7 +51,7 @@ func httpFixture(t *testing.T, baseURL string) (*Engine, Request) {
 		t.Fatal(err)
 	}
 	t.Cleanup(e.Close)
-	if _, err = e.SaveProfile(Profile{ID: "upstream", Name: "Mock", BaseURL: baseURL, Protocol: "openai", AllowLocal: true, ImageModel: "img"}, "LOCAL-TEST-ONLY"); err != nil {
+	if _, err = e.SaveProfile(Profile{ID: "upstream", Name: "Mock", BaseURL: baseURL + "/v1", Protocol: "openai", AllowLocal: true, ImageModel: "img"}, "LOCAL-TEST-ONLY"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.SaveProject(Project{ID: "project", Name: "画布", Viewport: Viewport{Zoom: 1}}); err != nil {

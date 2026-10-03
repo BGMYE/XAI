@@ -17,6 +17,11 @@ type document struct {
 	Projects    map[string]Project    `json:"projects"`
 	Assets      map[string]Asset      `json:"assets"`
 	Jobs        map[string]Job        `json:"jobs"`
+	// Network is the proxy setting shared with the classic editor.
+	Network NetworkSettings `json:"network,omitzero"`
+	// RetiredProfileIDs lists recently deleted upstreams, so an import from
+	// the classic editor's own copy never brings one back.
+	RetiredProfileIDs []string `json:"retiredProfileIds,omitempty"`
 }
 
 func emptyDocument() document {
@@ -87,6 +92,10 @@ func (r repository) read() (document, error) {
 		if err := p.Validate(); err != nil {
 			return document{}, err
 		}
+		d.Profiles[id] = p
+	}
+	if err := d.Network.Validate(); err != nil {
+		return document{}, err
 	}
 	for id, a := range d.Assets {
 		if checkID(id) != nil || a.ID != id || filepath.Base(a.FileName) != a.FileName || !strings.HasPrefix(a.FileName, id+".") {

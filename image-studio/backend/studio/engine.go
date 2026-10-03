@@ -81,6 +81,10 @@ type Engine struct {
 	runner  Runner
 	epoch   string
 
+	// provider talks to upstreams for connection tests, and runs jobs unless
+	// Options.Runner replaces it.
+	provider *HTTPProvider
+
 	ctx    context.Context
 	stop   context.CancelFunc
 	wg     sync.WaitGroup
@@ -152,8 +156,9 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 		runs: map[string]*jobRun{}, onChange: opts.OnChange, onProgress: opts.OnProgress,
 		notify: make(chan struct{}, 1),
 	}
+	e.provider = &HTTPProvider{PollInterval: opts.PollInterval, MediaDir: repo.mediaDir(), Network: e.Network}
 	if e.runner == nil {
-		e.runner = &HTTPProvider{PollInterval: opts.PollInterval, MediaDir: repo.mediaDir()}
+		e.runner = e.provider
 	}
 	e.cur.Store(&state{doc: d, rev: 1, logStart: 1})
 	e.wg.Add(1)
@@ -321,7 +326,7 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 	if len(t.doc.Jobs) >= 10000 {
 		return Job{}, errors.New("任务历史达到上限，请归档数据库后继续")
 	}
-	j := Job{ID: r.ID, Request: r, Profile: p, Fingerprint: fingerprint(r, deps), State: "queued",
+	j := Job{ID: r.ID, Request: r, Profile: p.forJob(), Fingerprint: fingerprint(r, deps), State: "queued",
 		DependsOn: append([]string{}, deps...), CreatedAt: now(), UpdatedAt: now()}
 	t.putJob(j)
 	return j, nil

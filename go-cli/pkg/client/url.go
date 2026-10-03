@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -67,13 +68,23 @@ func openAIAPIEndpoint(baseURL, endpointPath string) string {
 	return OpenAIAPIEndpoint(baseURL, endpointPath)
 }
 
+// apiVersionSegment matches a path segment that names an API version, such as
+// v1, v3 or v1beta.
+var apiVersionSegment = regexp.MustCompile(`^v[0-9]+(?:(?:alpha|beta)[0-9]*)?$`)
+
+// isVersionedOpenAICompatibilityBaseURL reports whether a base URL already
+// names a versioned API root (".../api/v3", ".../v1beta/openai"), so endpoint
+// paths are appended to it as is instead of after "/v1".
 func isVersionedOpenAICompatibilityBaseURL(raw string) bool {
 	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(raw), "/"))
 	if err != nil {
 		return false
 	}
 	path := strings.ToLower(strings.TrimRight(u.Path, "/"))
-	return strings.HasSuffix(path, "/openai")
+	if strings.HasSuffix(path, "/openai") {
+		return true
+	}
+	return apiVersionSegment.MatchString(path[strings.LastIndex(path, "/")+1:])
 }
 
 func isOfficialGoogleGeminiBaseURL(raw string) bool {

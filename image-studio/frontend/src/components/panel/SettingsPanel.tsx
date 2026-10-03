@@ -6,8 +6,8 @@ import {
 import { useStudioStore } from "../../state/studioStore";
 import {
   GetOutputDir, OpenOutputDir, OpenExternalURL, ChooseOutputDir, SetOutputDir,
-  GetStoredAPIKey,
 } from "../../platform/runtime/host";
+import { readAPIKey } from "../../state/studioStore.profiles";
 import * as HostRuntime from "../../platform/runtime/host";
 import type { KernelRuntimeMode, ProxyMode, SystemNotificationPermissionState } from "../../types/domain";
 import { MAX_AUTO_RETRY_COUNT } from "../../../../../shared/kernel/requestModel.js";
@@ -26,7 +26,6 @@ import {
   SettingsSegButton,
 } from "./settingsPrimitives";
 import { importCompletionSoundFile } from "../../lib/completionSound";
-import { keyringUserFor } from "../../lib/profiles";
 import type { UpstreamProfile } from "../../types/domain";
 import { buildUpstreamModelCatalog, type UpstreamModelCatalog } from "../../lib/upstreamModels.ts";
 import "../../styles/_xai-typography.css";
@@ -138,7 +137,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     setInlineModelCatalog(profile?.modelIDs?.length ? buildUpstreamModelCatalog(profile.modelIDs.map((id) => ({ id }))) : null);
     setCustomModelID("");
     if (profile) {
-      GetStoredAPIKey(keyringUserFor(profile.id)).then((key) => setUpstreamDraftKey(key ?? "")).catch(() => undefined);
+      readAPIKey(profile.id).then((key) => setUpstreamDraftKey(key ?? "")).catch(() => undefined);
     }
   }, [activeProfileId, profiles]);
 

@@ -6,6 +6,10 @@ export function CancelJob(arg1) {
   return window['go']['backend']['StudioV2']['CancelJob'](arg1);
 }
 
+export function ClearProfileKey(arg1) {
+  return window['go']['backend']['StudioV2']['ClearProfileKey'](arg1);
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['backend']['StudioV2']['DeleteProfile'](arg1);
 }
@@ -14,8 +18,16 @@ export function DeletePromptCard(arg1, arg2) {
   return window['go']['backend']['StudioV2']['DeletePromptCard'](arg1, arg2);
 }
 
+export function DuplicateProfile(arg1) {
+  return window['go']['backend']['StudioV2']['DuplicateProfile'](arg1);
+}
+
 export function GetChanges(arg1, arg2) {
   return window['go']['backend']['StudioV2']['GetChanges'](arg1, arg2);
+}
+
+export function GetProfileKey(arg1) {
+  return window['go']['backend']['StudioV2']['GetProfileKey'](arg1);
 }
 
 export function GetPublicPromptCatalog(arg1) {
@@ -30,8 +42,16 @@ export function ImportImage(arg1, arg2) {
   return window['go']['backend']['StudioV2']['ImportImage'](arg1, arg2);
 }
 
+export function ImportClassicProfiles(arg1) {
+  return window['go']['backend']['StudioV2']['ImportClassicProfiles'](arg1);
+}
+
 export function ImportPromptCards(arg1) {
   return window['go']['backend']['StudioV2']['ImportPromptCards'](arg1);
+}
+
+export function ListProfiles() {
+  return window['go']['backend']['StudioV2']['ListProfiles']();
 }
 
 export function MediaHandler(arg1) {
@@ -60,6 +80,10 @@ export function SaveProject(arg1) {
 
 export function SavePromptCard(arg1) {
   return window['go']['backend']['StudioV2']['SavePromptCard'](arg1);
+}
+
+export function SetNetworkProxy(arg1, arg2) {
+  return window['go']['backend']['StudioV2']['SetNetworkProxy'](arg1, arg2);
 }
 
 export function Shutdown(arg1) {

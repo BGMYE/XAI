@@ -5,6 +5,9 @@ export interface Parameters {
   aspectRatio?: string;
   resolution?: string;
 }
+export type ImageAPI = "images" | "responses";
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+/** An upstream shared by the Studio and the classic editor. */
 export interface Profile {
   credentialId?: string;
   id: string;
@@ -15,7 +18,20 @@ export interface Profile {
   videoModel: string;
   hasKey: boolean;
   allowLocal: boolean;
+  /** OpenAI-compatible image contract; empty means the streamed Images API. */
+  imageApi?: ImageAPI | "";
+  responsesTransport?: "sse" | "websocket" | "";
+  requestPolicy?: "openai" | "compat" | "";
+  imagesNewApiCompat?: boolean;
+  /** Plain HTTP to a remote host and no certificate checks. */
+  allowInsecure?: boolean;
+  textModel?: string;
+  reasoningEffort?: ReasoningEffort | "";
+  modelIds?: string[];
+  concurrencyLimit?: number;
+  fallbackProfileId?: string;
   verifiedAt?: string;
+  createdAt?: string;
   updatedAt: string;
 }
 export interface Viewport {
@@ -76,6 +92,8 @@ export interface Job {
   remoteId?: string;
   error?: string;
   resultAssetId?: string;
+  /** Set while a generated image waits to be downloaded. */
+  resultUrl?: string;
   dependsOn?: string[];
   createdAt: string;
   updatedAt: string;
@@ -105,6 +123,9 @@ export interface PromptView extends PromptCard {
   origin: "saved" | "history";
 }
 export interface Snapshot {
+  /** Identifies the desktop process whose revisions follow. */
+  epoch?: string;
+  revision?: number;
   promptCards?: PromptCard[];
   profiles: Profile[];
   projects: Project[];

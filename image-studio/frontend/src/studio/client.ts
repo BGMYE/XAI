@@ -4,6 +4,7 @@ import { emptySnapshot } from "./types";
 import { catalogURL } from "./publicCatalog.mjs";
 import { orderGraph, uid } from "./graph.mjs";
 import { savePromptToSnapshot, removePromptFromSnapshot, importPromptsToSnapshot } from "./promptLibrary.mjs";
+import { prepareSharedUpstreams } from "../lib/upstreamRegistry";
 interface Host {
   GetPublicPromptCatalog?(sourceID: string): Promise<string>;
   GetSnapshot(): Promise<Snapshot>;
@@ -122,7 +123,11 @@ export const client = {
     return true;
   },
   async snapshot(): Promise<Snapshot> {
-    if (host()) return host()!.GetSnapshot();
+    if (host()) {
+      // The first read waits until the classic editor's upstreams are shared.
+      await prepareSharedUpstreams().catch(() => undefined);
+      return host()!.GetSnapshot();
+    }
     const s = await preview();
     await Promise.all(
       s.assets.map(async (a) => {

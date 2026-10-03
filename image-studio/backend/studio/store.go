@@ -18,6 +18,9 @@ const (
 	colAssets
 	colJobs
 	colPromptCards
+	// colSettings marks document-level settings. Settings are not part of
+	// change feeds; the change only advances the revision.
+	colSettings
 )
 
 // change records that one entity was written or removed by a transaction.
@@ -54,7 +57,7 @@ type state struct {
 // already made in this transaction.
 type tx struct {
 	doc     document
-	cloned  [5]bool
+	cloned  [colSettings]bool
 	changes []change
 }
 
@@ -123,6 +126,22 @@ func (t *tx) putPromptCard(p PromptCard) {
 func (t *tx) deletePromptCard(id string) {
 	delete(t.promptCards(), id)
 	t.touch(colPromptCards, id, true)
+}
+
+func (t *tx) setNetwork(n NetworkSettings) {
+	t.doc.Network = n
+	t.touch(colSettings, "network", false)
+}
+
+// retireProfile remembers a deleted profile ID. The slice is replaced, never
+// appended in place: the published document may share its backing array.
+func (t *tx) retireProfile(id string) {
+	ids := append(slices.Clip(t.doc.RetiredProfileIDs), id)
+	if over := len(ids) - maxRetiredProfiles; over > 0 {
+		ids = slices.Clone(ids[over:])
+	}
+	t.doc.RetiredProfileIDs = ids
+	t.touch(colSettings, "retiredProfiles", false)
 }
 
 // errFatal wraps an error that stopped the engine.
@@ -355,7 +374,10 @@ func withProgress(jobs []Job, progress map[string]int) []Job {
 	return jobs
 }
 
-func cloneProfile(p Profile) Profile { return p }
+func cloneProfile(p Profile) Profile {
+	p.ModelIDs = slices.Clone(p.ModelIDs)
+	return p
+}
 
 func cloneProject(p Project) Project {
 	p.Nodes = slices.Clone(p.Nodes)

@@ -16,7 +16,7 @@ import (
 )
 
 // StudioV2 is a thin Wails host. The core contains no Wails/runtime dependency.
-// Old Service bindings remain available to the classic editor and Android path.
+// Its upstream registry is shared with the classic editor.
 type StudioV2 struct {
 	mu      sync.Mutex
 	ctx     context.Context
@@ -97,7 +97,82 @@ func (s *StudioV2) DeleteProfile(id string) error {
 	if err != nil {
 		return err
 	}
-	return e.DeleteProfile(id)
+	if err = e.DeleteProfile(id); err != nil {
+		return err
+	}
+	// An imported classic profile may still have its original key entry.
+	if classicKeyID(id) {
+		_ = s.keys.Delete("api-key:profile:" + id)
+	}
+	return nil
+}
+
+// ListProfiles returns the shared upstreams in creation order. The classic
+// editor reads its upstream list from here on the desktop.
+func (s *StudioV2) ListProfiles() ([]studio.Profile, error) {
+	e, err := s.core()
+	if err != nil {
+		return nil, err
+	}
+	return e.Profiles()
+}
+
+// DuplicateProfile copies an upstream together with its key.
+func (s *StudioV2) DuplicateProfile(id string) (studio.Profile, error) {
+	e, err := s.core()
+	if err != nil {
+		return studio.Profile{}, err
+	}
+	return e.DuplicateProfile(id)
+}
+
+// GetProfileKey returns an upstream's key for the classic editor, which sends
+// it with its own requests. The Studio never needs it in the window.
+func (s *StudioV2) GetProfileKey(id string) (string, error) {
+	e, err := s.core()
+	if err != nil {
+		return "", err
+	}
+	return e.ProfileKey(id)
+}
+
+// ClearProfileKey removes an upstream's saved key.
+func (s *StudioV2) ClearProfileKey(id string) (studio.Profile, error) {
+	e, err := s.core()
+	if err != nil {
+		return studio.Profile{}, err
+	}
+	return e.ClearProfileKey(id)
+}
+
+// ImportClassicProfiles copies upstreams the classic editor kept in browser
+// storage into the shared registry, with their keys. It is idempotent.
+func (s *StudioV2) ImportClassicProfiles(profiles []studio.Profile) (int, error) {
+	e, err := s.core()
+	if err != nil {
+		return 0, err
+	}
+	return e.ImportProfiles(profiles, func(id string) (string, error) {
+		if !classicKeyID(id) {
+			return "", nil
+		}
+		return s.keys.Get("api-key:profile:" + id)
+	})
+}
+
+// SetNetworkProxy applies the classic editor's proxy setting to Studio jobs.
+func (s *StudioV2) SetNetworkProxy(mode, proxyURL string) (studio.NetworkSettings, error) {
+	e, err := s.core()
+	if err != nil {
+		return studio.NetworkSettings{}, err
+	}
+	return e.SetNetwork(studio.NetworkSettings{ProxyMode: mode, ProxyURL: proxyURL})
+}
+
+// classicKeyID accepts the IDs the classic editor used in keychain entries.
+func classicKeyID(id string) bool {
+	_, err := normalizeKeyringUser("profile:" + id)
+	return err == nil
 }
 func (s *StudioV2) TestProfile(id string) ([]string, error) {
 	e, err := s.core()

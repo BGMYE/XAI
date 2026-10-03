@@ -29,10 +29,16 @@ export function normalizeBaseURL(raw) {
   return trimmed.replace(/\/v1$/i, "");
 }
 
+// A base URL that already names a versioned API root (".../api/v3",
+// ".../v1beta/openai") takes endpoint paths as is instead of after "/v1".
+// Mirrors isVersionedOpenAICompatibilityBaseURL in go-cli/pkg/client/url.go.
+const API_VERSION_SEGMENT = /^v[0-9]+(?:(?:alpha|beta)[0-9]*)?$/;
+
 export function isVersionedOpenAICompatibilityBaseURL(raw) {
   try {
-    const parsed = new URL(normalizeBaseURL(raw));
-    return parsed.pathname.replace(/\/+$/, "").toLowerCase().endsWith("/openai");
+    const path = new URL(normalizeBaseURL(raw)).pathname.replace(/\/+$/, "").toLowerCase();
+    if (path.endsWith("/openai")) return true;
+    return API_VERSION_SEGMENT.test(path.slice(path.lastIndexOf("/") + 1));
   } catch {
     return false;
   }

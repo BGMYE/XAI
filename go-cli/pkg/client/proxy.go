@@ -66,6 +66,12 @@ func normalizeCustomProxyURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
+// ProxyFunc returns the proxy selector for config, or nil for direct
+// connections. System mode follows the operating system's proxy settings.
+func ProxyFunc(config ProxyConfig) (func(*http.Request) (*url.URL, error), error) {
+	return proxyFunc(config)
+}
+
 func proxyFunc(config ProxyConfig) (func(*http.Request) (*url.URL, error), error) {
 	normalized, err := NormalizeProxyConfig(config.Mode, config.URL)
 	if err != nil {

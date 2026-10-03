@@ -1112,9 +1112,20 @@ export namespace studio {
 	    videoModel: string;
 	    protocol: string;
 	    allowLocal: boolean;
+	    imageApi?: string;
+	    responsesTransport?: string;
+	    requestPolicy?: string;
+	    imagesNewApiCompat?: boolean;
+	    allowInsecure?: boolean;
+	    textModel?: string;
+	    reasoningEffort?: string;
+	    modelIds?: string[];
+	    concurrencyLimit?: number;
+	    fallbackProfileId?: string;
 	    hasKey: boolean;
 	    credentialId?: string;
 	    verifiedAt?: string;
+	    createdAt?: string;
 	    updatedAt: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1130,10 +1141,35 @@ export namespace studio {
 	        this.videoModel = source["videoModel"];
 	        this.protocol = source["protocol"];
 	        this.allowLocal = source["allowLocal"];
+	        this.imageApi = source["imageApi"];
+	        this.responsesTransport = source["responsesTransport"];
+	        this.requestPolicy = source["requestPolicy"];
+	        this.imagesNewApiCompat = source["imagesNewApiCompat"];
+	        this.allowInsecure = source["allowInsecure"];
+	        this.textModel = source["textModel"];
+	        this.reasoningEffort = source["reasoningEffort"];
+	        this.modelIds = source["modelIds"];
+	        this.concurrencyLimit = source["concurrencyLimit"];
+	        this.fallbackProfileId = source["fallbackProfileId"];
 	        this.hasKey = source["hasKey"];
 	        this.credentialId = source["credentialId"];
 	        this.verifiedAt = source["verifiedAt"];
+	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class NetworkSettings {
+	    proxyMode?: string;
+	    proxyUrl?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NetworkSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.proxyMode = source["proxyMode"];
+	        this.proxyUrl = source["proxyUrl"];
 	    }
 	}
 	export class Parameters {

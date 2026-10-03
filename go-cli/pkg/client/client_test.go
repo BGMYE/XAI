@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -772,5 +773,19 @@ func TestRequestResponsesWithWebSocketReplayFallsBackToSSEOnHandshakeFailure(t *
 	}
 	if !strings.Contains(raw.String(), "websocket-error-1") {
 		t.Fatalf("expected raw log to record websocket handshake failure, got %q", raw.String())
+	}
+}
+
+func TestNativeTransportReportsStatusCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, `{"error":{"message":"slow down"}}`)
+	}))
+	defer srv.Close()
+	err := (&NativeTransport{}).Stream(context.Background(), Request{URL: srv.URL, APIKey: "sk-test", Payload: []byte(`{}`)}, io.Discard, nil)
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusTooManyRequests || err.Error() != "upstream HTTP 429" {
+		t.Fatalf("err = %#v", err)
 	}
 }

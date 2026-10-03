@@ -6,11 +6,17 @@ import {context} from '../models';
 
 export function CancelJob(arg1:string):Promise<void>;
 
+export function ClearProfileKey(arg1:string):Promise<studio.Profile>;
+
 export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeletePromptCard(arg1:string,arg2:number):Promise<void>;
 
+export function DuplicateProfile(arg1:string):Promise<studio.Profile>;
+
 export function GetChanges(arg1:string,arg2:number):Promise<studio.ChangeSet>;
+
+export function GetProfileKey(arg1:string):Promise<string>;
 
 export function GetPublicPromptCatalog(arg1:string):Promise<string>;
 
@@ -18,7 +24,11 @@ export function GetSnapshot():Promise<studio.Snapshot>;
 
 export function ImportImage(arg1:string,arg2:string):Promise<studio.Asset>;
 
+export function ImportClassicProfiles(arg1:Array<studio.Profile>):Promise<number>;
+
 export function ImportPromptCards(arg1:Array<studio.PromptCard>):Promise<Array<studio.PromptCard>>;
+
+export function ListProfiles():Promise<Array<studio.Profile>>;
 
 export function MediaHandler(arg1:http.Handler):Promise<http.Handler>;
 
@@ -33,6 +43,8 @@ export function SaveProfile(arg1:studio.Profile,arg2:string):Promise<studio.Prof
 export function SaveProject(arg1:studio.Project):Promise<studio.Project>;
 
 export function SavePromptCard(arg1:studio.PromptCard):Promise<studio.PromptCard>;
+
+export function SetNetworkProxy(arg1:string,arg2:string):Promise<studio.NetworkSettings>;
 
 export function Shutdown(arg1:context.Context):Promise<void>;
 

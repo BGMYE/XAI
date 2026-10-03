@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/yuanhua/image-gptcodex/pkg/client"
 )
 
 // UncertainError deliberately contains no upstream body, URL or bearer token.
@@ -65,7 +67,31 @@ type HTTPProvider struct {
 	// MediaDir, when set, receives downloaded and decoded results as temporary
 	// files, so large media is streamed to disk instead of held in memory.
 	MediaDir string
+	// Network returns the current proxy settings. Without it, connections are
+	// direct.
+	Network func() NetworkSettings
 }
+
+func (p *HTTPProvider) network() NetworkSettings {
+	if p.Network == nil {
+		return NetworkSettings{ProxyMode: client.ProxyModeNone}
+	}
+	return p.Network()
+}
+
+// clients builds the API and media clients for one job. Media downloads are
+// not bounded by the API client's total timeout.
+func (p *HTTPProvider) clients(profile Profile) (api, media *http.Client, err error) {
+	network := p.network()
+	if api, err = newClient(profile, network, apiRequest); err != nil {
+		return nil, nil, &NotSentError{Reason: "网络代理设置无效：" + err.Error()}
+	}
+	if media, err = newClient(profile, network, mediaRequest); err != nil {
+		return nil, nil, &NotSentError{Reason: "网络代理设置无效：" + err.Error()}
+	}
+	return api, media, nil
+}
+
 type mediaResult struct {
 	URL               string `json:"url"`
 	B64               string `json:"b64_json"`
@@ -82,63 +108,12 @@ type upstreamResult struct {
 	B64       string        `json:"b64_json"`
 }
 
-var blockedNetworks = func() []*net.IPNet {
-	nets := []*net.IPNet{}
-	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "64:ff9b::/96"} {
-		_, network, _ := net.ParseCIDR(cidr)
-		nets = append(nets, network)
-	}
-	return nets
-}()
-
-func allowedIP(ip net.IP, allowLocal bool) bool {
-	if ip.IsLoopback() {
-		return allowLocal
-	}
-	for _, network := range blockedNetworks {
-		if network.Contains(ip) {
-			return false
-		}
-	}
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() && !ip.IsUnspecified()
-}
-func secureClient(allowLocal bool) *http.Client {
-	transport := &http.Transport{
-		// Resolve and pin the checked address at connection time to prevent DNS
-		// rebinding. Environment HTTP proxies are intentionally not inherited.
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, errors.New("无效网络地址")
-			}
-			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-			if err != nil || len(ips) == 0 {
-				return nil, errors.New("无法解析上游域名")
-			}
-			for _, a := range ips {
-				if !allowedIP(a.IP, allowLocal) {
-					return nil, errors.New("拒绝访问本地、私有或链路本地地址")
-				}
-			}
-			dialer := net.Dialer{Timeout: 20 * time.Second, KeepAlive: 30 * time.Second}
-			for _, a := range ips {
-				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(a.IP.String(), port))
-				if err == nil {
-					return conn, nil
-				}
-			}
-			return nil, errors.New("无法连接上游")
-		}, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 3 * time.Minute, IdleConnTimeout: 30 * time.Second, MaxIdleConns: 4,
-	}
-	return &http.Client{Transport: transport, Timeout: 5 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-}
-func closeClient(c *http.Client) { c.CloseIdleConnections() }
-func request(ctx context.Context, client *http.Client, p Profile, key, method, path, contentType string, body io.Reader) (*http.Response, error) {
+func request(ctx context.Context, c *http.Client, p Profile, key, method, path, contentType string, body io.Reader) (*http.Response, error) {
 	// Whether any part of the request was written decides between "certainly
 	// not sent" and "may have been accepted" when the call fails.
 	var wrote atomic.Bool
 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wrote.Store(true) }})
-	req, err := http.NewRequestWithContext(ctx, method, p.BaseURL+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, client.OpenAIAPIEndpoint(p.BaseURL, path), body)
 	if err != nil {
 		return nil, &NotSentError{Reason: "无法建立上游请求"}
 	}
@@ -147,7 +122,7 @@ func request(ctx context.Context, client *http.Client, p Profile, key, method, p
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		if method == "POST" {
 			if wrote.Load() {
@@ -214,7 +189,13 @@ func readJSON(resp *http.Response, post bool) (upstreamResult, error) {
 	return r, nil
 }
 func (p *HTTPProvider) Models(ctx context.Context, profile Profile, key string) ([]string, error) {
-	c := secureClient(profile.AllowLocal)
+	if profile.BaseURL == "" {
+		return nil, errors.New("请先填写上游地址")
+	}
+	c, err := newClient(profile, p.network(), apiRequest)
+	if err != nil {
+		return nil, errors.New("网络代理设置无效：" + err.Error())
+	}
 	defer closeClient(c)
 	response, err := request(ctx, c, profile, key, "GET", "/models", "", nil)
 	if err != nil {
@@ -246,12 +227,19 @@ func (p *HTTPProvider) Models(ctx context.Context, profile Profile, key string) 
 	return result, nil
 }
 func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Output, checkpoint Checkpoint) (Output, error) {
-	client := secureClient(j.Profile.AllowLocal)
-	defer closeClient(client)
+	api, media, err := p.clients(j.Profile)
+	if err != nil {
+		return Output{}, err
+	}
+	defer closeClient(api)
+	defer closeClient(media)
 	if j.ResultURL != "" {
 		// The upstream already produced this result; only the download remains.
-		out, err := p.fetchMedia(ctx, client, j.Profile, j.ResultURL, 0)
+		out, err := p.fetchMedia(ctx, media, j.Profile, j.ResultURL, 0)
 		return out, expiredLink(err)
+	}
+	if j.Request.Kind == "image" && j.Profile.Protocol == "openai" {
+		return p.runOpenAIImage(ctx, j, key, reference, media, checkpoint)
 	}
 	remoteID := j.RemoteID
 	if remoteID != "" && !validRemoteID(remoteID) {
@@ -262,7 +250,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 		if err != nil {
 			return Output{}, err
 		}
-		response, err := request(ctx, client, j.Profile, key, "POST", endpoint, contentType, body)
+		response, err := request(ctx, api, j.Profile, key, "POST", endpoint, contentType, body)
 		if err != nil {
 			return Output{}, err
 		}
@@ -274,7 +262,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 			if len(result.Data) == 0 {
 				return Output{}, errors.New("上游未返回图片；没有自动重试")
 			}
-			return p.imageResult(ctx, client, j.Profile, result.Data[0], checkpoint)
+			return p.imageResult(ctx, media, j.Profile, result.Data[0], checkpoint)
 		}
 		remoteID = result.ID
 		if j.Profile.Protocol == "xai" {
@@ -296,7 +284,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 		if err := wait(ctx, delay); err != nil {
 			return Output{}, err
 		}
-		response, err := request(ctx, client, j.Profile, key, "GET", "/videos/"+remoteID, "", nil)
+		response, err := request(ctx, api, j.Profile, key, "GET", "/videos/"+remoteID, "", nil)
 		if err != nil {
 			if ctx.Err() != nil {
 				return Output{}, ctx.Err()
@@ -324,22 +312,23 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 		case "failed", "expired", "cancelled", "canceled":
 			return Output{}, errors.New("上游视频任务失败、过期或已取消；请在上游核对原因")
 		case "done", "completed", "succeeded":
-			media := result.Video
-			if media.URL == "" && media.B64 == "" && len(result.Data) > 0 {
-				media = result.Data[0]
+			file := result.Video
+			if file.URL == "" && file.B64 == "" && len(result.Data) > 0 {
+				file = result.Data[0]
 			}
-			if media.URL == "" && media.B64 == "" {
-				media.URL = result.URL
-				media.B64 = result.B64
+			if file.URL == "" && file.B64 == "" {
+				file.URL = result.URL
+				file.B64 = result.B64
 			}
-			if media.URL != "" || media.B64 != "" {
-				return p.fetchResult(ctx, client, j.Profile, media)
+			if file.URL != "" || file.B64 != "" {
+				return p.fetchResult(ctx, media, j.Profile, file)
 			}
 			if j.Profile.Protocol == "xai" {
 				return Output{}, errors.New("上游标记完成，但没有提供视频文件")
 			}
-			// OpenAI-compatible jobs can expose authenticated content instead of URLs.
-			response, err := request(ctx, client, j.Profile, key, "GET", "/videos/"+remoteID+"/content", "", nil)
+			// OpenAI-compatible jobs can expose authenticated content instead of
+			// URLs. The download is not bounded by the API client's timeout.
+			response, err := request(ctx, media, j.Profile, key, "GET", "/videos/"+remoteID+"/content", "", nil)
 			if err != nil {
 				return Output{}, &ResumeError{}
 			}
@@ -350,7 +339,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 					return Output{}, errors.New("视频下载重定向无效")
 				}
 				// Bearer token is NEVER sent to a CDN, even for a subdomain of the API.
-				return p.fetchMedia(ctx, client, j.Profile, location.String(), 0)
+				return p.fetchMedia(ctx, media, j.Profile, location.String(), 0)
 			}
 			return p.readMedia(response)
 		default:
@@ -517,8 +506,8 @@ func (p *HTTPProvider) fetchMedia(ctx context.Context, c *http.Client, profile P
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return Output{}, errors.New("上游媒体地址无效")
 	}
-	if u.Scheme != "https" && !(profile.AllowLocal && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
-		return Output{}, errors.New("媒体下载仅允许 HTTPS，或已启用的本地回环服务")
+	if u.Scheme != "https" && !(u.Scheme == "http" && (profile.AllowInsecure || (profile.AllowLocal && isLoopbackHost(u.Hostname())))) {
+		return Output{}, errors.New("媒体下载仅允许 HTTPS；HTTP 需启用本地回环服务或不安全连接")
 	}
 	if redirects > 3 {
 		return Output{}, errors.New("媒体下载重定向次数过多")

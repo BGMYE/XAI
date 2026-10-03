@@ -24,6 +24,7 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 			const key = "LOCAL-INTEGRATION-TEST-ONLY"
 			var server *httptest.Server
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				path := strings.TrimPrefix(r.URL.Path, "/v1")
 				if r.URL.Path == "/media/result.mp4" {
 					downloads.Add(1)
 					if r.Header.Get("Authorization") != "" {
@@ -38,7 +39,7 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 				}
 				w.Header().Set("Content-Type", "application/json")
 				switch {
-				case r.Method == "POST" && r.URL.Path == "/images/generations":
+				case r.Method == "POST" && path == "/images/generations":
 					imagePosts.Add(1)
 					var body map[string]any
 					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -48,7 +49,7 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 						t.Errorf("wrong image payload: %#v", body)
 					}
 					_ = json.NewEncoder(w).Encode(map[string]any{"data": []mediaResult{{B64: base64.StdEncoding.EncodeToString(pixel())}}})
-				case r.Method == "POST" && (r.URL.Path == "/videos/generations" || r.URL.Path == "/videos"):
+				case r.Method == "POST" && (path == "/videos/generations" || path == "/videos"):
 					videoPosts.Add(1)
 					if protocol == "xai" {
 						var body struct {
@@ -60,7 +61,7 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 							t.Error(err)
 						}
 						wantImage := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pixel())
-						if r.URL.Path != "/videos/generations" || body.Model != "test-video" || body.Prompt != "镜头向前" || body.Duration != 8 || body.Image.URL != wantImage {
+						if path != "/videos/generations" || body.Model != "test-video" || body.Prompt != "镜头向前" || body.Duration != 8 || body.Image.URL != wantImage {
 							t.Errorf("wrong xAI video payload: %#v", body)
 						}
 						_, _ = io.WriteString(w, `{"request_id":"remote-video"}`)
@@ -82,12 +83,12 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 						if err != nil || !bytes.Equal(data, pixel()) || header.Header.Get("Content-Type") != "image/png" {
 							t.Error("image result was not passed to the video adapter intact")
 						}
-						if r.URL.Path != "/videos" || r.FormValue("model") != "test-video" || r.FormValue("seconds") != "8" || r.FormValue("prompt") != "镜头向前" {
+						if path != "/videos" || r.FormValue("model") != "test-video" || r.FormValue("seconds") != "8" || r.FormValue("prompt") != "镜头向前" {
 							t.Error("wrong OpenAI-compatible video fields")
 						}
 						_, _ = io.WriteString(w, `{"id":"remote-video"}`)
 					}
-				case r.Method == "GET" && r.URL.Path == "/videos/remote-video":
+				case r.Method == "GET" && path == "/videos/remote-video":
 					polls.Add(1)
 					_ = json.NewEncoder(w).Encode(upstreamResult{Status: "completed", Video: mediaResult{URL: server.URL + "/media/result.mp4"}})
 				default:
@@ -101,7 +102,7 @@ func TestHTTPWorkflowImageToVideo(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer e.Close()
-			profile, err := e.SaveProfile(Profile{ID: "p", Name: "Mock", BaseURL: server.URL, Protocol: protocol, AllowLocal: true, ImageModel: "test-image", VideoModel: "test-video"}, key)
+			profile, err := e.SaveProfile(Profile{ID: "p", Name: "Mock", BaseURL: server.URL + "/v1", Protocol: protocol, AllowLocal: true, ImageModel: "test-image", VideoModel: "test-video"}, key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -153,7 +154,7 @@ func TestHTTPVideoResumeAfterDownloadFailureDoesNotRepost(t *testing.T) {
 	var available atomic.Bool
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
+		switch strings.TrimPrefix(r.URL.Path, "/v1") {
 		case "/videos/generations":
 			creates.Add(1)
 			_, _ = io.WriteString(w, `{"request_id":"recoverable"}`)
@@ -173,7 +174,7 @@ func TestHTTPVideoResumeAfterDownloadFailureDoesNotRepost(t *testing.T) {
 	}))
 	defer server.Close()
 	e, _, _ := fixture(t, &HTTPProvider{PollInterval: time.Millisecond})
-	if _, err := e.SaveProfile(Profile{ID: "upstream", Name: "Mock", BaseURL: server.URL, Protocol: "xai", AllowLocal: true, VideoModel: "test-video"}, "LOCAL-TEST-ONLY"); err != nil {
+	if _, err := e.SaveProfile(Profile{ID: "upstream", Name: "Mock", BaseURL: server.URL + "/v1", Protocol: "xai", AllowLocal: true, VideoModel: "test-video"}, "LOCAL-TEST-ONLY"); err != nil {
 		t.Fatal(err)
 	}
 	r := req("resume-download")

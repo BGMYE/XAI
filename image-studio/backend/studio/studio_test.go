@@ -500,7 +500,7 @@ func TestNetworkAndMediaGuards(t *testing.T) {
 
 func TestDefaultDurationAndTemplateReferenceValidation(t *testing.T) {
 	for _, protocol := range []string{"xai", "openai"} {
-		p := Profile{ID: "upstream", Protocol: protocol, VideoModel: "video", HasKey: true}
+		p := Profile{ID: "upstream", BaseURL: "https://example.com/v1", Protocol: protocol, VideoModel: "video", HasKey: true}
 		r := Request{ID: "request", ProjectID: "project", ProfileID: "upstream", Kind: "video", Prompt: "test"}
 		if err := r.Validate(p); err != nil {
 			t.Fatal(err)

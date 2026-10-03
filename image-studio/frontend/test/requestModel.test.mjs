@@ -72,6 +72,23 @@ test("OpenAI endpoint helper preserves Google compatibility base path", () => {
   );
 });
 
+test("OpenAI endpoint helper keeps explicit API versions like the Go client", () => {
+  const cases = {
+    "https://relay.example.com": "https://relay.example.com/v1/models",
+    "https://relay.example.com/v1": "https://relay.example.com/v1/models",
+    "https://relay.example.com/api/v1/": "https://relay.example.com/api/v1/models",
+    "https://ark.example.com/api/v3": "https://ark.example.com/api/v3/models",
+    "https://relay.example.com/v1beta": "https://relay.example.com/v1beta/models",
+    "https://relay.example.com/v2alpha1": "https://relay.example.com/v2alpha1/models",
+    "https://relay.example.com/video": "https://relay.example.com/video/v1/models",
+    "https://relay.example.com/v1x": "https://relay.example.com/v1x/v1/models",
+    "https://generativelanguage.googleapis.com/v1beta/openai": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+  };
+  for (const [base, want] of Object.entries(cases)) {
+    assert.equal(openAIAPIEndpoint(base, "models"), want, base);
+  }
+});
+
 test("Gemini and Imagen image models use non-streaming Images compat mode", () => {
   assert.equal(shouldUseImagesNewAPICompat({ imageModelID: "gemini-3.1-flash-image" }), true);
   assert.equal(shouldUseImagesNewAPICompat({ imageModelID: "imagen-4.0-generate-001" }), true);

@@ -6,14 +6,12 @@ import { Modal } from "../common/Modal";
 import { useStudioStore } from "../../state/studioStore";
 import {
   ExportUpstreamConfigToFile,
-  GetStoredAPIKey,
   ImportUpstreamConfigFromFile,
   LoadCodexAPIConfig,
-  SetStoredAPIKey,
   canLoadCodexAPIConfig,
   probeCurrentUpstream,
 } from "../../platform/runtime/host";
-import { genProfileId, keyringUserFor } from "../../lib/profiles";
+import { readAPIKey } from "../../state/studioStore.profiles";
 import type { APIMode, RequestPolicy, UpstreamProfile } from "../../types/domain";
 import { FAQModal } from "./FAQModal";
 import { UpstreamProfileEditor } from "./UpstreamProfileEditor";
@@ -75,7 +73,7 @@ export function UpstreamConfigModal({
     setModelCatalog(null);
     setModelCatalogError(null);
     if (p) {
-      GetStoredAPIKey(keyringUserFor(p.id))
+      readAPIKey(p.id)
         .then((k) => { setDraftKey(k ?? ""); setSavedKeyLoaded(true); })
         .catch(() => setSavedKeyLoaded(true));
     } else {
@@ -205,7 +203,7 @@ export function UpstreamConfigModal({
     if (selectedProfile) {
       setSelectedId(selectedProfile.id);
       setDraft(selectedProfile);
-      setDraftKey(await GetStoredAPIKey(keyringUserFor(selectedProfile.id)).catch(() => ""));
+      setDraftKey(await readAPIKey(selectedProfile.id).catch(() => ""));
       setSavedKeyLoaded(true);
     }
     pushToast(`${successPrefix} ${result.importedCount} 组上游配置记录`, "success");

@@ -34,6 +34,9 @@ func checkID(id string) error {
 	return nil
 }
 
+// Profile is an upstream configuration shared by the Studio and the classic
+// editor. Fields after AllowLocal mirror the classic editor's options; the
+// Studio uses those it can honor and ignores the rest.
 type Profile struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -42,12 +45,36 @@ type Profile struct {
 	VideoModel string `json:"videoModel"`
 	Protocol   string `json:"protocol"`
 	AllowLocal bool   `json:"allowLocal"`
-	HasKey     bool   `json:"hasKey"`
+	// ImageAPI selects the OpenAI-compatible image contract: the streamed
+	// Images API ("images", the default) or the Responses API image tool
+	// ("responses"), which is driven by TextModel.
+	ImageAPI           string `json:"imageApi,omitempty"`
+	ResponsesTransport string `json:"responsesTransport,omitempty"`
+	RequestPolicy      string `json:"requestPolicy,omitempty"`
+	ImagesNewAPICompat bool   `json:"imagesNewApiCompat,omitempty"`
+	// AllowInsecure permits plain HTTP to a remote host and skips certificate
+	// verification. It is an explicit opt-in for one upstream.
+	AllowInsecure     bool     `json:"allowInsecure,omitempty"`
+	TextModel         string   `json:"textModel,omitempty"`
+	ReasoningEffort   string   `json:"reasoningEffort,omitempty"`
+	ModelIDs          []string `json:"modelIds,omitempty"`
+	ConcurrencyLimit  int      `json:"concurrencyLimit,omitempty"`
+	FallbackProfileID string   `json:"fallbackProfileId,omitempty"`
+	HasKey            bool     `json:"hasKey"`
 	// Opaque reference, NEVER the secret itself. Jobs pin their credential version.
 	CredentialID string `json:"credentialId,omitempty"`
 	VerifiedAt   string `json:"verifiedAt,omitempty"`
+	CreatedAt    string `json:"createdAt,omitempty"`
 	UpdatedAt    string `json:"updatedAt"`
 }
+
+const (
+	maxModelIDs        = 500
+	maxConcurrency     = 1000
+	defaultImageAPI    = "images"
+	responsesImageAPI  = "responses"
+	defaultRequestMode = "openai"
+)
 
 func (p Profile) secretSlot() string {
 	if p.CredentialID != "" {
@@ -55,11 +82,33 @@ func (p Profile) secretSlot() string {
 	}
 	return p.ID
 }
+
+// forJob is the copy a job pins: what is needed to run and resume it, without
+// editor-only metadata such as the model catalog.
+func (p Profile) forJob() Profile {
+	p.ModelIDs = nil
+	p.ConcurrencyLimit = 0
+	p.FallbackProfileID = ""
+	p.VerifiedAt = ""
+	return p
+}
+
+// connection reports the fields that decide where a key is sent. A change to
+// any of them invalidates a successful connection test.
+func (p Profile) connection() [4]string {
+	return [4]string{p.BaseURL, p.Protocol, fmt.Sprint(p.AllowLocal), fmt.Sprint(p.AllowInsecure)}
+}
+
+// Validate normalizes and checks a profile. A profile may be saved before its
+// address is known (the classic editor creates drafts that way); requests
+// check that it is complete.
 func (p *Profile) Validate() error {
 	p.Name = strings.TrimSpace(p.Name)
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.ImageModel = strings.TrimSpace(p.ImageModel)
 	p.VideoModel = strings.TrimSpace(p.VideoModel)
+	p.TextModel = strings.TrimSpace(p.TextModel)
+	p.FallbackProfileID = strings.TrimSpace(p.FallbackProfileID)
 	if err := checkID(p.ID); err != nil {
 		return err
 	}
@@ -69,18 +118,93 @@ func (p *Profile) Validate() error {
 	if p.Protocol != "openai" && p.Protocol != "xai" {
 		return errors.New("请选择明确的接口协议")
 	}
-	u, err := url.Parse(p.BaseURL)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return errors.New("Base URL 必须是无密钥、无查询参数的完整 API 根地址")
+	if p.BaseURL != "" {
+		u, err := url.Parse(p.BaseURL)
+		if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("Base URL 必须是无密钥、无查询参数的完整 API 根地址")
+		}
+		switch {
+		case u.Scheme == "https":
+		case u.Scheme == "http" && (p.AllowInsecure || (p.AllowLocal && isLoopbackHost(u.Hostname()))):
+		default:
+			return errors.New("上游必须使用 HTTPS；仅显式启用本地服务或不安全连接时允许 HTTP")
+		}
 	}
-	if u.Scheme != "https" && !(p.AllowLocal && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
-		return errors.New("上游必须使用 HTTPS；仅显式启用本地服务时允许回环 HTTP")
+	switch p.ImageAPI {
+	case "", defaultImageAPI, responsesImageAPI:
+	default:
+		return errors.New("图像接口只能是 Images API 或 Responses API")
 	}
-	if len(p.BaseURL) > 2048 || len(p.ImageModel) > 200 || len(p.VideoModel) > 200 {
+	if p.Protocol == "xai" && p.ImageAPI == responsesImageAPI {
+		return errors.New("xAI 协议不支持 Responses API 图像接口")
+	}
+	switch p.ResponsesTransport {
+	case "", "sse", "websocket":
+	default:
+		return errors.New("Responses 传输方式无效")
+	}
+	switch p.RequestPolicy {
+	case "", defaultRequestMode, "compat":
+	default:
+		return errors.New("请求策略无效")
+	}
+	switch p.ReasoningEffort {
+	case "", "low", "medium", "high", "xhigh":
+	default:
+		return errors.New("推理强度无效")
+	}
+	if p.ConcurrencyLimit < 0 || p.ConcurrencyLimit > maxConcurrency {
+		return fmt.Errorf("并发上限必须为 0–%d", maxConcurrency)
+	}
+	if p.FallbackProfileID != "" && (checkID(p.FallbackProfileID) != nil || p.FallbackProfileID == p.ID) {
+		return errors.New("备用上游无效")
+	}
+	models := make([]string, 0, len(p.ModelIDs))
+	seen := map[string]bool{}
+	for _, m := range p.ModelIDs {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		if len(m) > 200 {
+			return errors.New("模型 ID 过长")
+		}
+		seen[m] = true
+		models = append(models, m)
+	}
+	if len(models) > maxModelIDs {
+		return fmt.Errorf("模型列表最多 %d 项", maxModelIDs)
+	}
+	if len(models) == 0 {
+		models = nil
+	}
+	p.ModelIDs = models
+	if len(p.BaseURL) > 2048 || len(p.ImageModel) > 200 || len(p.VideoModel) > 200 || len(p.TextModel) > 200 {
 		return errors.New("上游配置过长")
 	}
 	return nil
 }
+
+// usableFor explains why a profile cannot run a request of the given kind.
+func (p Profile) usableFor(kind string) error {
+	if p.BaseURL == "" {
+		return errors.New("请先填写上游地址")
+	}
+	if !p.HasKey {
+		return errors.New("请先保存 API Key")
+	}
+	if kind == "image" && p.ImageModel == "" {
+		return errors.New("请显式配置图像模型 ID")
+	}
+	if kind == "image" && p.ImageAPI == responsesImageAPI && p.TextModel == "" {
+		return errors.New("Responses API 需要填写文本模型 ID；不会使用默认模型替代")
+	}
+	if kind == "video" && p.VideoModel == "" {
+		return errors.New("请显式配置视频模型 ID；不会使用图像模型替代")
+	}
+	return nil
+}
+
 func isLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
@@ -241,14 +365,8 @@ func (r Request) Validate(p Profile) error {
 	if strings.TrimSpace(r.Prompt) == "" || len(r.Prompt) > 16000 {
 		return errors.New("提示词不能为空，且最多 16000 字节")
 	}
-	if !p.HasKey {
-		return errors.New("请先保存 API Key")
-	}
-	if r.Kind == "image" && p.ImageModel == "" {
-		return errors.New("请显式配置图像模型 ID")
-	}
-	if r.Kind == "video" && p.VideoModel == "" {
-		return errors.New("请显式配置视频模型 ID；不会使用图像模型替代")
+	if err := p.usableFor(r.Kind); err != nil {
+		return err
 	}
 	if r.Kind == "video" && r.Parameters.Seconds != 0 {
 		s := r.Parameters.Seconds

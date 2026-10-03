@@ -75,7 +75,7 @@ func (t *NativeTransport) Stream(ctx context.Context, req Request, rawSink io.Wr
 	// If the response code wasn't 2xx and body was empty/non-SSE, surface it.
 	if resp.StatusCode >= 400 {
 		// We've already streamed whatever body came through; signal upstream failure.
-		return fmt.Errorf("upstream HTTP %d", resp.StatusCode)
+		return statusError(resp.StatusCode, "upstream HTTP %d", resp.StatusCode)
 	}
 	return nil
 }

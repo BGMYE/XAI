@@ -187,7 +187,8 @@ import {
   withMediaAssetRef,
 } from "./studioStore.runtime";
 import { createMediaActions } from "./studioStore.media";
-import { createProfileActions } from "./studioStore.profiles";
+import { createProfileActions, readAPIKey, storeAPIKey } from "./studioStore.profiles";
+import { shareProxySetting, syncClassicProfiles } from "../lib/upstreamRegistry";
 import { createWorkspaceActions } from "./studioStore.workspaces";
 import { createImageActions } from "./studioStore.images";
 import { saveHistoryItemToDirectory, saveHistoryItemToDirectoryAs } from "../lib/saveResultImage";
@@ -1118,8 +1119,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       if (typeof console !== "undefined") console.warn("setAPIKey: 没有 active profile,丢弃");
       return;
     }
+    const activeProfile = get().profiles.find((profile) => profile.id === activeId);
     try {
-      await SetStoredAPIKey(keyringUserFor(activeId), trimmed);
+      if (activeProfile) await storeAPIKey(activeProfile, trimmed);
+      else await SetStoredAPIKey(keyringUserFor(activeId), trimmed);
     } catch {
       throw new Error("系统凭据存储写入失败，API Key 未更改");
     }
@@ -1229,7 +1232,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       ? s.profiles.find((profile) => profile.id === activeProfile.fallbackProfileId) ?? null
       : null;
     const fallbackProfileKey = fallbackProfile
-      ? await GetStoredAPIKey(keyringUserFor(fallbackProfile.id)).catch(() => "")
+      ? await readAPIKey(fallbackProfile.id).catch(() => "")
       : "";
     if (concurrencyLimit > 0) {
       const activeCount = workspaceRunningCount(s, s.apiMode);
@@ -1847,6 +1850,14 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       }
     }
 
+    // 桌面端：上游配置由后端统一保存，与新版工作室共用。先把本地旧配置导入，
+    // 再以后端列表为准；浏览器保存的列表只作为镜像保留。
+    const sharedProfiles = await syncClassicProfiles(profiles);
+    if (sharedProfiles) {
+      profiles = sharedProfiles;
+      persistProfiles(profiles);
+    }
+    shareProxySetting(proxyConfig, 0);
     // 决定 active profile 与对应顶层镜像。空列表 → 全置空,后面会自动弹首次配置。
     const activeProfile = pickActiveProfile(profiles, activeProfileId);
     if (activeProfile && activeProfile.id !== activeProfileId) {
@@ -1867,7 +1878,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const imageModelID = activeProfile?.imageModelID ?? "";
     const reasoningEffort = activeProfile?.reasoningEffort ?? "xhigh";
     const activeKey = activeProfile
-      ? await GetStoredAPIKey(keyringUserFor(activeProfile.id)).catch(() => "")
+      ? await readAPIKey(activeProfile.id).catch(() => "")
       : "";
     // Apply theme + font scale to root immediately.
     applyTheme(theme);
@@ -2255,6 +2266,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const nextURL = (url ?? get().proxyURL).trim();
     set({ proxyMode: normalizedMode, proxyURL: nextURL });
     persistProxyConfig(normalizedMode, nextURL);
+    shareProxySetting({ mode: normalizedMode, url: nextURL });
   },
 
   testAPIKey: async () => {
@@ -2318,7 +2330,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       s.pushToast("允许不安全连接的 AI 渠道需要桌面本地内核", "warn", 5000);
       return;
     }
-    const apiKey = (await GetStoredAPIKey(keyringUserFor(aiProfile.id)).catch(() => "")).trim();
+    const apiKey = (await readAPIKey(aiProfile.id).catch(() => "")).trim();
     const baseURL = cleanBaseURL(aiProfile.baseURL);
     if (!apiKey) {
       s.pushToast(`AI 渠道「${aiProfile.name}」缺少 API Key`, "warn", 5000);
@@ -2382,7 +2394,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       s.pushToast("允许不安全连接的 AI 渠道需要桌面本地内核", "warn", 5000);
       return;
     }
-    const apiKey = (await GetStoredAPIKey(keyringUserFor(aiProfile.id)).catch(() => "")).trim();
+    const apiKey = (await readAPIKey(aiProfile.id).catch(() => "")).trim();
     const baseURL = cleanBaseURL(aiProfile.baseURL);
     if (!apiKey || !baseURL) {
       s.pushToast(`AI 渠道「${aiProfile.name}」配置不完整`, "warn", 5000);

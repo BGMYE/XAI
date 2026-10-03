@@ -72,6 +72,26 @@ func TestOpenAIAPIEndpointKeepsVersionedOpenAICompatibilityBase(t *testing.T) {
 	}
 }
 
+func TestOpenAIAPIEndpointKeepsExplicitAPIVersions(t *testing.T) {
+	t.Parallel()
+
+	for base, want := range map[string]string{
+		"https://relay.example.com":                               "https://relay.example.com/v1/models",
+		"https://relay.example.com/v1":                            "https://relay.example.com/v1/models",
+		"https://relay.example.com/api/v1/":                       "https://relay.example.com/api/v1/models",
+		"https://ark.example.com/api/v3":                          "https://ark.example.com/api/v3/models",
+		"https://relay.example.com/v1beta":                        "https://relay.example.com/v1beta/models",
+		"https://relay.example.com/v2alpha1":                      "https://relay.example.com/v2alpha1/models",
+		"https://relay.example.com/video":                         "https://relay.example.com/video/v1/models",
+		"https://relay.example.com/v1x":                           "https://relay.example.com/v1x/v1/models",
+		"https://generativelanguage.googleapis.com/v1beta/openai": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+	} {
+		if got := OpenAIAPIEndpoint(base, "models"); got != want {
+			t.Errorf("OpenAIAPIEndpoint(%q) = %q, want %q", base, got, want)
+		}
+	}
+}
+
 func TestGoogleInteractionsEndpointIsNarrowToOfficialNanoBanana2(t *testing.T) {
 	t.Parallel()
 

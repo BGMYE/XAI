@@ -40,11 +40,13 @@ import { useStudio } from "./useStudio";
 import type {
   Asset,
   Generation,
+  ImageAPI,
   Job,
   Kind,
   Parameters,
   Profile,
   Project,
+  ReasoningEffort,
   StudioNode,
   PromptCard,
 } from "./types";
@@ -327,6 +329,67 @@ function ProviderForm({
           <option key={m} value={m} />
         ))}
       </datalist>
+      {draft.protocol === "openai" && (
+        <>
+          <div className="studio-form-row">
+            <label>
+              图像接口
+              <select
+                value={draft.imageApi || "images"}
+                onChange={(e) => patch({ imageApi: e.target.value as ImageAPI })}
+              >
+                <option value="images">Images API（流式，推荐）</option>
+                <option value="responses">Responses API（图像工具）</option>
+              </select>
+            </label>
+            {draft.imageApi === "responses" ? (
+              <label>
+                文本模型 ID
+                <input
+                  list="studio-model-list"
+                  value={draft.textModel ?? ""}
+                  onChange={(e) => patch({ textModel: e.target.value })}
+                  placeholder="驱动图像工具的文本模型"
+                />
+              </label>
+            ) : (
+              <label>
+                请求策略
+                <select
+                  value={draft.requestPolicy || "openai"}
+                  onChange={(e) => patch({ requestPolicy: e.target.value as "openai" | "compat" })}
+                >
+                  <option value="openai">OpenAI 标准字段</option>
+                  <option value="compat">兼容中转扩展字段</option>
+                </select>
+              </label>
+            )}
+          </div>
+          {draft.imageApi === "responses" ? (
+            <label>
+              推理强度
+              <select
+                value={draft.reasoningEffort || "xhigh"}
+                onChange={(e) => patch({ reasoningEffort: e.target.value as ReasoningEffort })}
+              >
+                <option value="xhigh">xhigh</option>
+                <option value="high">high</option>
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+              </select>
+            </label>
+          ) : (
+            <label className="studio-checkbox">
+              <input
+                type="checkbox"
+                checked={draft.imagesNewApiCompat === true}
+                onChange={(e) => patch({ imagesNewApiCompat: e.target.checked })}
+              />
+              兼容不支持流式的中转（长时间生成更容易被网关超时中断）
+            </label>
+          )}
+        </>
+      )}
       <label className="studio-checkbox">
         <input
           type="checkbox"
@@ -334,6 +397,14 @@ function ProviderForm({
           onChange={(e) => patch({ allowLocal: e.target.checked })}
         />
         允许本机回环地址（localhost / 127.0.0.1）
+      </label>
+      <label className="studio-checkbox">
+        <input
+          type="checkbox"
+          checked={draft.allowInsecure === true}
+          onChange={(e) => patch({ allowInsecure: e.target.checked })}
+        />
+        允许不安全连接（远程 HTTP、跳过证书校验；密钥可能被截获）
       </label>
       <div className="studio-callout">
         不会自动替换模型、猜测接口或反复重发收费请求。切换 Base URL
