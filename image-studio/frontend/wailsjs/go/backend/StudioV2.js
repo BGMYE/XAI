@@ -14,6 +14,10 @@ export function DeletePromptCard(arg1, arg2) {
   return window['go']['backend']['StudioV2']['DeletePromptCard'](arg1, arg2);
 }
 
+export function GetChanges(arg1, arg2) {
+  return window['go']['backend']['StudioV2']['GetChanges'](arg1, arg2);
+}
+
 export function GetPublicPromptCatalog(arg1) {
   return window['go']['backend']['StudioV2']['GetPublicPromptCatalog'](arg1);
 }

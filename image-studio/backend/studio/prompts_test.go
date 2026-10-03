@@ -72,15 +72,15 @@ func TestPromptRevisionsAndDiskFailure(t *testing.T) {
 	if err = e.DeletePromptCard(p.ID, old.Revision); !errors.Is(err, ErrPromptConflict) {
 		t.Fatal("stale delete accepted", err)
 	}
-	e.mu.Lock()
+	e.writeMu.Lock()
 	root := e.repo.root
 	e.repo.root = filepath.Join(root, "missing")
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	p.Prompt = "must not publish"
 	_, err = e.SavePromptCard(p)
-	e.mu.Lock()
+	e.writeMu.Lock()
 	e.repo.root = root
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	if err == nil {
 		t.Fatal("ignored disk failure")
 	}

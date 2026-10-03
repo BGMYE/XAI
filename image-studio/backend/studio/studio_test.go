@@ -140,17 +140,17 @@ func TestAtomicRevisionAndCorruption(t *testing.T) {
 		t.Fatalf("want conflict: %v", err)
 	}
 	// Failed disk write cannot publish a new in-memory revision.
-	e.mu.Lock()
+	e.writeMu.Lock()
 	root := e.repo.root
 	e.repo.root = filepath.Join(root, "missing")
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	saved.Name = "must not appear"
 	if _, err = e.SaveProject(saved); err == nil {
 		t.Fatal("write should fail")
 	}
-	e.mu.Lock()
+	e.writeMu.Lock()
 	e.repo.root = root
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	s, _ := e.Snapshot()
 	if s.Projects[0].Name != "changed" {
 		t.Fatal("uncommitted state leaked")
@@ -403,12 +403,12 @@ func TestXAIProtocolAndUnauthenticatedMedia(t *testing.T) {
 	defer server.Close()
 	j := Job{Profile: Profile{BaseURL: server.URL + "/v1", Protocol: "xai", VideoModel: "video-model", AllowLocal: true}, Request: Request{Kind: "video", Prompt: "animate", Parameters: Parameters{Seconds: 8, AspectRatio: "16:9"}}}
 	checkpoints := []string{}
-	out, err := (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", &Output{Data: pixel(), MIME: "image/png"}, func(id string, _ int) error { checkpoints = append(checkpoints, id); return nil })
+	out, err := (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", &Output{Data: pixel(), MIME: "image/png"}, func(p Progress) error { checkpoints = append(checkpoints, p.RemoteID); return nil })
 	if err != nil || !bytes.Equal(out.Data, mp4()) || posts.Load() != 1 || polls.Load() != 2 || len(checkpoints) < 2 {
 		t.Fatal(err, posts.Load(), polls.Load(), checkpoints)
 	}
 	j.RemoteID = "remote-job"
-	_, err = (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", nil, func(string, int) error { return nil })
+	_, err = (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", nil, func(Progress) error { return nil })
 	if err != nil || posts.Load() != 1 {
 		t.Fatal("resume submitted POST", err)
 	}
@@ -447,7 +447,7 @@ func TestOpenAIMultipartAndContent(t *testing.T) {
 	}))
 	defer server.Close()
 	j := Job{Profile: Profile{BaseURL: server.URL + "/v1", Protocol: "openai", VideoModel: "explicit-video", AllowLocal: true}, Request: Request{Kind: "video", Prompt: "animate", Parameters: Parameters{Seconds: 8, Size: "1280x720"}}}
-	out, err := (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", &Output{Data: pixel(), MIME: "image/png"}, func(string, int) error { return nil })
+	out, err := (&HTTPProvider{PollInterval: time.Millisecond}).Run(context.Background(), j, "secret", &Output{Data: pixel(), MIME: "image/png"}, func(Progress) error { return nil })
 	if err != nil || !bytes.Equal(out.Data, mp4()) {
 		t.Fatal(err)
 	}
@@ -463,7 +463,7 @@ func TestAmbiguousCreationIsNotRetried(t *testing.T) {
 			}))
 			defer s.Close()
 			j := Job{Profile: Profile{BaseURL: s.URL, Protocol: "xai", VideoModel: "v", AllowLocal: true}, Request: Request{Kind: "video"}}
-			_, err := (&HTTPProvider{}).Run(context.Background(), j, "secret", nil, func(string, int) error { return nil })
+			_, err := (&HTTPProvider{}).Run(context.Background(), j, "secret", nil, func(Progress) error { return nil })
 			var uncertain *UncertainError
 			if !errors.As(err, &uncertain) || calls.Load() != 1 || strings.Contains(err.Error(), "secret") {
 				t.Fatal(err, calls.Load())
@@ -482,7 +482,7 @@ func TestNetworkAndMediaGuards(t *testing.T) {
 	}
 	for _, raw := range []string{"file:///etc/passwd", "http://example.com/video", "https://user:password@example.com/video"} {
 		c := secureClient(false)
-		_, err := fetchMedia(context.Background(), c, Profile{}, raw, 0)
+		_, err := (&HTTPProvider{}).fetchMedia(context.Background(), c, Profile{}, raw, 0)
 		closeClient(c)
 		if err == nil {
 			t.Fatal("unsafe media URL accepted")
@@ -544,17 +544,17 @@ func TestCredentialRotationIsTransactional(t *testing.T) {
 	if oldSlot == "" {
 		t.Fatal("expected opaque credential slot")
 	}
-	e.mu.Lock()
+	e.writeMu.Lock()
 	root := e.repo.root
 	e.repo.root = filepath.Join(root, "missing")
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	p.BaseURL = "https://different.example/v1"
 	if _, err := e.SaveProfile(p, "NEW-SECRET"); err == nil {
 		t.Fatal("disk failure was ignored")
 	}
-	e.mu.Lock()
+	e.writeMu.Lock()
 	e.repo.root = root
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	snapshot, _ := e.Snapshot()
 	if snapshot.Profiles[0].CredentialID != oldSlot {
 		t.Fatal("uncommitted key reference published")

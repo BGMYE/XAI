@@ -22,17 +22,24 @@ type document struct {
 func emptyDocument() document {
 	return document{Version: SchemaVersion, Profiles: map[string]Profile{}, Projects: map[string]Project{}, Assets: map[string]Asset{}, Jobs: map[string]Job{}, PromptCards: map[string]PromptCard{}}
 }
-func cloneDocument(d document) document {
-	b, _ := json.Marshal(d)
-	var out document
-	_ = json.Unmarshal(b, &out)
-	return out
-}
 
 type repository struct{ root string }
 
+func (r repository) mediaDir() string { return filepath.Join(r.root, "media") }
+
+// removeStaleTemporaries deletes partial files left by an interrupted write or
+// download. They are never referenced by the database.
+func (r repository) removeStaleTemporaries() {
+	for _, pattern := range []string{filepath.Join(r.root, ".studio-tmp-*"), filepath.Join(r.mediaDir(), ".studio-tmp-*"), filepath.Join(r.mediaDir(), ".incoming-*")} {
+		matches, _ := filepath.Glob(pattern)
+		for _, m := range matches {
+			_ = os.Remove(m)
+		}
+	}
+}
+
 func (r repository) read() (document, error) {
-	if err := os.MkdirAll(filepath.Join(r.root, "media"), 0700); err != nil {
+	if err := os.MkdirAll(r.mediaDir(), 0700); err != nil {
 		return document{}, err
 	}
 	f, err := os.Open(filepath.Join(r.root, "studio.json"))

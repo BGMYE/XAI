@@ -278,18 +278,22 @@ type Asset struct {
 func (a Asset) URL() string { return "/studio-media/" + a.ID }
 
 type Job struct {
-	ID            string   `json:"id"`
-	Request       Request  `json:"request"`
-	Profile       Profile  `json:"profile"`
-	Fingerprint   string   `json:"fingerprint"`
-	State         string   `json:"state"`
-	RemoteID      string   `json:"remoteId,omitempty"`
-	Progress      int      `json:"progress"`
-	Error         string   `json:"error,omitempty"`
-	ResultAssetID string   `json:"resultAssetId,omitempty"`
-	DependsOn     []string `json:"dependsOn"`
-	CreatedAt     string   `json:"createdAt"`
-	UpdatedAt     string   `json:"updatedAt"`
+	ID            string  `json:"id"`
+	Request       Request `json:"request"`
+	Profile       Profile `json:"profile"`
+	Fingerprint   string  `json:"fingerprint"`
+	State         string  `json:"state"`
+	RemoteID      string  `json:"remoteId,omitempty"`
+	Progress      int     `json:"progress"`
+	Error         string  `json:"error,omitempty"`
+	ResultAssetID string  `json:"resultAssetId,omitempty"`
+	// ResultURL is set once the upstream has produced an image but before it
+	// is downloaded. It lets an interrupted download resume without
+	// regenerating (and paying for) the image.
+	ResultURL string   `json:"resultUrl,omitempty"`
+	DependsOn []string `json:"dependsOn"`
+	CreatedAt string   `json:"createdAt"`
+	UpdatedAt string   `json:"updatedAt"`
 }
 
 func terminal(state string) bool {
@@ -307,6 +311,9 @@ func (j Job) model() string {
 }
 
 type Snapshot struct {
+	// Epoch and Revision let clients request deltas through Engine.Changes.
+	Epoch       string       `json:"epoch"`
+	Revision    uint64       `json:"revision"`
 	PromptCards []PromptCard `json:"promptCards"`
 	Profiles    []Profile    `json:"profiles"`
 	Projects    []Project    `json:"projects"`

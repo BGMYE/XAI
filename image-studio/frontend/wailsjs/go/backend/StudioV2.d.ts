@@ -10,6 +10,8 @@ export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeletePromptCard(arg1:string,arg2:number):Promise<void>;
 
+export function GetChanges(arg1:string,arg2:number):Promise<studio.ChangeSet>;
+
 export function GetPublicPromptCatalog(arg1:string):Promise<string>;
 
 export function GetSnapshot():Promise<studio.Snapshot>;

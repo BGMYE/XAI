@@ -7,8 +7,11 @@ import (
 	"time"
 )
 
-// Credential rotation creates an immutable keychain slot first, then commits
-// the pointer. A failed database write cannot change keys for an old endpoint.
+// SaveProfile creates or updates an upstream. Credential rotation creates an
+// immutable keychain slot first, then commits the pointer, so a failed
+// database write cannot change the key used by an existing endpoint.
+// Keychain calls run under the write lock: they are rare, and readers are
+// never blocked by it.
 func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	if p.ID == "" {
 		p.ID = NewID()
@@ -16,16 +19,16 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	if err := p.Validate(); err != nil {
 		return Profile{}, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return Profile{}, err
-	}
-	old := e.db.Profiles[p.ID]
 	key = strings.TrimSpace(key)
 	if len(key) > 8192 {
 		return Profile{}, errors.New("API Key 过长")
 	}
+	e.writeMu.Lock()
+	defer e.writeMu.Unlock()
+	if err := e.ready(); err != nil {
+		return Profile{}, err
+	}
+	old := e.cur.Load().doc.Profiles[p.ID]
 	if key == "" && old.HasKey && old.BaseURL != p.BaseURL {
 		return Profile{}, errors.New("修改上游地址时请重新填写 API Key，避免将旧密钥发送到新地址")
 	}
@@ -42,7 +45,8 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 		p.CredentialID = slot
 		p.HasKey = true
 	}
-	if err := e.mutate(func(d *document) error { d.Profiles[p.ID] = p; return nil }); err != nil {
+	st, err := e.updateLocked(func(t *tx) error { t.putProfile(p); return nil })
+	if err != nil {
 		if slot != "" {
 			_ = e.secrets.Delete(slot)
 		}
@@ -52,7 +56,7 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	// replaced slots can be removed without affecting requests already queued.
 	if old.HasKey && old.secretSlot() != p.secretSlot() {
 		used := false
-		for _, j := range e.db.Jobs {
+		for _, j := range st.doc.Jobs {
 			if j.Profile.secretSlot() == old.secretSlot() && !terminal(j.State) {
 				used = true
 				break
@@ -64,21 +68,23 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	}
 	return p, nil
 }
+
 func (e *Engine) DeleteProfile(id string) error {
 	if err := checkID(id); err != nil {
 		return err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.writeMu.Lock()
+	defer e.writeMu.Unlock()
 	if err := e.ready(); err != nil {
 		return err
 	}
-	p, ok := e.db.Profiles[id]
+	doc := e.cur.Load().doc
+	p, ok := doc.Profiles[id]
 	if !ok {
 		return errors.New("上游不存在")
 	}
 	slots := map[string]bool{p.secretSlot(): true}
-	for _, j := range e.db.Jobs {
+	for _, j := range doc.Jobs {
 		if j.Request.ProfileID == id {
 			if !terminal(j.State) {
 				return errors.New("上游仍有未结束任务，请先取消任务")
@@ -95,12 +101,12 @@ func (e *Engine) DeleteProfile(id string) error {
 			}
 		}
 	}
-	return e.mutate(func(d *document) error { delete(d.Profiles, id); return nil })
+	_, err := e.updateLocked(func(t *tx) error { t.deleteProfile(id); return nil })
+	return err
 }
+
 func (e *Engine) TestProfile(ctx context.Context, id string) ([]string, error) {
-	e.mu.Lock()
-	p, ok := e.db.Profiles[id]
-	e.mu.Unlock()
+	p, ok := e.cur.Load().doc.Profiles[id]
 	if !ok {
 		return nil, errors.New("上游不存在")
 	}
@@ -114,14 +120,13 @@ func (e *Engine) TestProfile(ctx context.Context, id string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return nil, err
-	}
-	if current, ok := e.db.Profiles[id]; ok && current == p {
-		p.VerifiedAt = now()
-		err = e.mutate(func(d *document) error { d.Profiles[id] = p; return nil })
-	}
+	err = e.update(func(t *tx) error {
+		// Record success only for the exact configuration that was tested.
+		if current, ok := t.doc.Profiles[id]; ok && current.UpdatedAt == p.UpdatedAt && current.CredentialID == p.CredentialID {
+			current.VerifiedAt = now()
+			t.putProfile(current)
+		}
+		return nil
+	})
 	return names, err
 }

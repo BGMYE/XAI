@@ -3,6 +3,8 @@ package studio
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,11 +13,15 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/textproto"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,11 +39,33 @@ func (*ResumeError) Error() string {
 	return "远端任务已提交，但暂时无法读取结果；可恢复查询，不重新提交"
 }
 
+// NotSentError reports a failure before the request left this machine (DNS,
+// connection, TLS or a blocked address). Such a request was certainly not
+// accepted or billed, so it is reported as a plain failure and may be resent.
+type NotSentError struct{ Reason string }
+
+func (e *NotSentError) Error() string { return e.Reason }
+
 var remoteIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$`)
 
 func validRemoteID(id string) bool { return remoteIDPattern.MatchString(id) }
 
-type HTTPProvider struct{ PollInterval time.Duration }
+// validResultURL checks the shape of a result link before it is persisted as a
+// recovery handle. fetchMedia applies the network policy when it is used.
+func validResultURL(raw string) bool {
+	if len(raw) > 8192 {
+		return false
+	}
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Hostname() != "" && u.User == nil
+}
+
+type HTTPProvider struct {
+	PollInterval time.Duration
+	// MediaDir, when set, receives downloaded and decoded results as temporary
+	// files, so large media is streamed to disk instead of held in memory.
+	MediaDir string
+}
 type mediaResult struct {
 	URL               string `json:"url"`
 	B64               string `json:"b64_json"`
@@ -54,12 +82,20 @@ type upstreamResult struct {
 	B64       string        `json:"b64_json"`
 }
 
+var blockedNetworks = func() []*net.IPNet {
+	nets := []*net.IPNet{}
+	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "64:ff9b::/96"} {
+		_, network, _ := net.ParseCIDR(cidr)
+		nets = append(nets, network)
+	}
+	return nets
+}()
+
 func allowedIP(ip net.IP, allowLocal bool) bool {
 	if ip.IsLoopback() {
 		return allowLocal
 	}
-	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "64:ff9b::/96"} {
-		_, network, _ := net.ParseCIDR(cidr)
+	for _, network := range blockedNetworks {
 		if network.Contains(ip) {
 			return false
 		}
@@ -98,9 +134,13 @@ func secureClient(allowLocal bool) *http.Client {
 }
 func closeClient(c *http.Client) { c.CloseIdleConnections() }
 func request(ctx context.Context, client *http.Client, p Profile, key, method, path, contentType string, body io.Reader) (*http.Response, error) {
+	// Whether any part of the request was written decides between "certainly
+	// not sent" and "may have been accepted" when the call fails.
+	var wrote atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wrote.Store(true) }})
 	req, err := http.NewRequestWithContext(ctx, method, p.BaseURL+path, body)
 	if err != nil {
-		return nil, errors.New("无法建立上游请求")
+		return nil, &NotSentError{Reason: "无法建立上游请求"}
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Accept", "application/json")
@@ -110,7 +150,10 @@ func request(ctx context.Context, client *http.Client, p Profile, key, method, p
 	resp, err := client.Do(req)
 	if err != nil {
 		if method == "POST" {
-			return nil, &UncertainError{}
+			if wrote.Load() {
+				return nil, &UncertainError{}
+			}
+			return nil, &NotSentError{Reason: describeSendFailure(ctx, err)}
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -119,6 +162,33 @@ func request(ctx context.Context, client *http.Client, p Profile, key, method, p
 	}
 	return resp, nil
 }
+
+// describeSendFailure explains a failure that happened before any request
+// bytes were written. Messages contain no URL query or credential.
+func describeSendFailure(ctx context.Context, err error) string {
+	if ctx.Err() != nil {
+		return "请求未发出：已取消或超时"
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	var certErr *tls.CertificateVerificationError
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	switch {
+	case errors.As(err, &certErr), errors.As(err, &unknownAuthority), errors.As(err, &hostname):
+		return "请求未发出：上游 HTTPS 证书无效"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "请求未发出：连接上游超时"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "请求未发出：连接上游超时"
+	}
+	return "请求未发出：" + err.Error()
+}
+
 func readJSON(resp *http.Response, post bool) (upstreamResult, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -178,6 +248,11 @@ func (p *HTTPProvider) Models(ctx context.Context, profile Profile, key string) 
 func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Output, checkpoint Checkpoint) (Output, error) {
 	client := secureClient(j.Profile.AllowLocal)
 	defer closeClient(client)
+	if j.ResultURL != "" {
+		// The upstream already produced this result; only the download remains.
+		out, err := p.fetchMedia(ctx, client, j.Profile, j.ResultURL, 0)
+		return out, expiredLink(err)
+	}
 	remoteID := j.RemoteID
 	if remoteID != "" && !validRemoteID(remoteID) {
 		return Output{}, errors.New("已存任务 ID 无效，拒绝查询")
@@ -199,7 +274,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 			if len(result.Data) == 0 {
 				return Output{}, errors.New("上游未返回图片；没有自动重试")
 			}
-			return fetchResult(ctx, client, j.Profile, result.Data[0])
+			return p.imageResult(ctx, client, j.Profile, result.Data[0], checkpoint)
 		}
 		remoteID = result.ID
 		if j.Profile.Protocol == "xai" {
@@ -208,7 +283,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 		if !validRemoteID(remoteID) {
 			return Output{}, &UncertainError{}
 		}
-		if err = checkpoint(remoteID, max(0, min(result.Progress, 99))); err != nil {
+		if err = checkpoint(Progress{RemoteID: remoteID, Percent: result.Progress}); err != nil {
 			return Output{}, &UncertainError{}
 		}
 	}
@@ -240,7 +315,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 			return Output{}, err
 		}
 		delay = interval
-		if err = checkpoint(remoteID, result.Progress); err != nil {
+		if err = checkpoint(Progress{RemoteID: remoteID, Percent: result.Progress}); err != nil {
 			return Output{}, err
 		}
 		switch result.Status {
@@ -258,7 +333,7 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 				media.B64 = result.B64
 			}
 			if media.URL != "" || media.B64 != "" {
-				return fetchResult(ctx, client, j.Profile, media)
+				return p.fetchResult(ctx, client, j.Profile, media)
 			}
 			if j.Profile.Protocol == "xai" {
 				return Output{}, errors.New("上游标记完成，但没有提供视频文件")
@@ -275,14 +350,52 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 					return Output{}, errors.New("视频下载重定向无效")
 				}
 				// Bearer token is NEVER sent to a CDN, even for a subdomain of the API.
-				return fetchMedia(ctx, client, j.Profile, location.String(), 0)
+				return p.fetchMedia(ctx, client, j.Profile, location.String(), 0)
 			}
-			return readMedia(response)
+			return p.readMedia(response)
 		default:
 			return Output{}, errors.New("上游返回未知的视频任务状态，未猜测成功")
 		}
 	}
 }
+
+// imageResult turns a finished image response into output. A result link is
+// persisted before the download starts, so a failed download can be resumed
+// without generating (and paying for) the image again.
+func (p *HTTPProvider) imageResult(ctx context.Context, client *http.Client, profile Profile, media mediaResult, checkpoint Checkpoint) (Output, error) {
+	if media.RespectModeration != nil && !*media.RespectModeration {
+		return Output{}, errors.New("上游未通过内容审核，未保存输出")
+	}
+	if media.B64 != "" {
+		return p.decodeBase64(media.B64)
+	}
+	if media.URL == "" {
+		return Output{}, errors.New("上游未返回图片；没有自动重试")
+	}
+	if !validResultURL(media.URL) {
+		return Output{}, errors.New("上游返回的图片地址无效")
+	}
+	if err := checkpoint(Progress{ResultURL: media.URL}); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Output{}, err
+		}
+		return Output{}, &UncertainError{}
+	}
+	out, err := p.fetchMedia(ctx, client, profile, media.URL, 0)
+	return out, expiredLink(err)
+}
+
+// expiredLink turns a client error from a saved image link into a final
+// failure: retrying the same expired or missing link cannot succeed. Other
+// download failures stay resumable.
+func expiredLink(err error) error {
+	var status *mediaStatusError
+	if errors.As(err, &status) && status.status >= 400 && status.status < 500 && status.status != 408 && status.status != 429 {
+		return fmt.Errorf("结果链接已失效（HTTP %d），无法再下载；如需该图片请重新生成", status.status)
+	}
+	return err
+}
+
 func wait(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -365,28 +478,46 @@ func buildPayload(j Job, reference *Output) (string, string, io.Reader, error) {
 	b, err := json.Marshal(fields)
 	return endpoint, "application/json", bytes.NewReader(b), err
 }
-func fetchResult(ctx context.Context, c *http.Client, profile Profile, result mediaResult) (Output, error) {
+func (p *HTTPProvider) fetchResult(ctx context.Context, c *http.Client, profile Profile, result mediaResult) (Output, error) {
 	if result.RespectModeration != nil && !*result.RespectModeration {
 		return Output{}, errors.New("上游未通过内容审核，未保存输出")
 	}
 	if result.B64 != "" {
-		if len(result.B64) > 224*1024*1024 {
-			return Output{}, errors.New("base64 素材超过大小上限")
-		}
-		b, err := base64.StdEncoding.DecodeString(result.B64)
+		return p.decodeBase64(result.B64)
+	}
+	return p.fetchMedia(ctx, c, profile, result.URL, 0)
+}
+
+// decodeBase64 decodes an inline result, streaming it to a temporary file when
+// a media directory is configured.
+func (p *HTTPProvider) decodeBase64(b64 string) (Output, error) {
+	if len(b64) > 224*1024*1024 {
+		return Output{}, errors.New("base64 素材超过大小上限")
+	}
+	if p.MediaDir == "" {
+		b, err := base64.StdEncoding.DecodeString(b64)
 		if err != nil {
 			return Output{}, errors.New("上游 base64 素材无效")
 		}
 		return Output{Data: b}, nil
 	}
-	return fetchMedia(ctx, c, profile, result.URL, 0)
+	out, err := p.writeTemp(base64.NewDecoder(base64.StdEncoding, strings.NewReader(b64)))
+	if err != nil {
+		var tooLarge *mediaTooLargeError
+		if errors.As(err, &tooLarge) {
+			return Output{}, err
+		}
+		return Output{}, errors.New("上游 base64 素材无效")
+	}
+	return out, nil
 }
-func fetchMedia(ctx context.Context, c *http.Client, p Profile, rawURL string, redirects int) (Output, error) {
+
+func (p *HTTPProvider) fetchMedia(ctx context.Context, c *http.Client, profile Profile, rawURL string, redirects int) (Output, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return Output{}, errors.New("上游媒体地址无效")
 	}
-	if u.Scheme != "https" && !(p.AllowLocal && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+	if u.Scheme != "https" && !(profile.AllowLocal && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
 		return Output{}, errors.New("媒体下载仅允许 HTTPS，或已启用的本地回环服务")
 	}
 	if redirects > 3 {
@@ -399,6 +530,9 @@ func fetchMedia(ctx context.Context, c *http.Client, p Profile, rawURL string, r
 	// No Authorization, cookies, referrer, or API headers on external media.
 	response, err := c.Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return Output{}, ctx.Err()
+		}
 		return Output{}, &ResumeError{}
 	}
 	if response.StatusCode >= 300 && response.StatusCode < 400 {
@@ -407,24 +541,77 @@ func fetchMedia(ctx context.Context, c *http.Client, p Profile, rawURL string, r
 		if err != nil {
 			return Output{}, errors.New("媒体重定向无效")
 		}
-		return fetchMedia(ctx, c, p, location.String(), redirects+1)
+		return p.fetchMedia(ctx, c, profile, location.String(), redirects+1)
 	}
-	return readMedia(response)
+	return p.readMedia(response)
 }
-func readMedia(response *http.Response) (Output, error) {
+
+// mediaStatusError is a non-200 media response. It unwraps to ResumeError, so
+// a failed download is resumable unless a caller decides otherwise.
+type mediaStatusError struct{ status int }
+
+func (e *mediaStatusError) Error() string { return (&ResumeError{}).Error() }
+func (e *mediaStatusError) Unwrap() error { return &ResumeError{} }
+
+type mediaTooLargeError struct{}
+
+func (*mediaTooLargeError) Error() string { return "媒体文件超过 160 MB" }
+
+func (p *HTTPProvider) readMedia(response *http.Response) (Output, error) {
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return Output{}, &ResumeError{}
+		return Output{}, &mediaStatusError{status: response.StatusCode}
 	}
-	if response.ContentLength > 160*1024*1024 {
-		return Output{}, errors.New("媒体文件超过 160 MB")
+	if response.ContentLength > maxMediaBytes {
+		return Output{}, &mediaTooLargeError{}
 	}
-	b, err := io.ReadAll(io.LimitReader(response.Body, 160*1024*1024+1))
+	mime := response.Header.Get("Content-Type")
+	if p.MediaDir == "" {
+		b, err := io.ReadAll(io.LimitReader(response.Body, maxMediaBytes+1))
+		if err != nil {
+			return Output{}, &ResumeError{}
+		}
+		if len(b) > maxMediaBytes {
+			return Output{}, &mediaTooLargeError{}
+		}
+		return Output{Data: b, MIME: mime}, nil
+	}
+	out, err := p.writeTemp(response.Body)
 	if err != nil {
+		var tooLarge *mediaTooLargeError
+		if errors.As(err, &tooLarge) {
+			return Output{}, err
+		}
 		return Output{}, &ResumeError{}
 	}
-	if len(b) > 160*1024*1024 {
-		return Output{}, errors.New("媒体文件超过 160 MB")
+	out.MIME = mime
+	return out, nil
+}
+
+// writeTemp streams r into a synced temporary file in the media directory.
+// The engine renames it into place, so results never pass through memory.
+func (p *HTTPProvider) writeTemp(r io.Reader) (Output, error) {
+	f, err := os.CreateTemp(p.MediaDir, ".incoming-*")
+	if err != nil {
+		return Output{}, err
 	}
-	return Output{Data: b, MIME: response.Header.Get("Content-Type")}, nil
+	name := f.Name()
+	n, err := io.Copy(f, io.LimitReader(r, maxMediaBytes+1))
+	if err == nil && n > maxMediaBytes {
+		err = &mediaTooLargeError{}
+	}
+	if err == nil {
+		err = f.Chmod(0600)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(name)
+		return Output{}, err
+	}
+	return Output{Path: name}, nil
 }

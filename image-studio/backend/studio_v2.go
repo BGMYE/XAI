@@ -39,7 +39,15 @@ func (s *StudioV2) Startup(ctx context.Context) {
 		s.initErr = err
 		return
 	}
-	s.engine, s.initErr = studio.Open(filepath.Join(dir, "ImageStudio", "studio-v2"), studioSecrets{s.keys}, studio.Options{Workers: 2})
+	s.engine, s.initErr = studio.Open(filepath.Join(dir, "ImageStudio", "studio-v2"), studioSecrets{s.keys}, studio.Options{
+		Workers: 2,
+		// Events only announce that something changed; the window then asks for
+		// the delta with GetChanges, so a missed event costs nothing but latency.
+		OnChange: func(revision uint64) { runtime.EventsEmit(ctx, "studio:changed", revision) },
+		OnProgress: func(jobID string, percent int) {
+			runtime.EventsEmit(ctx, "studio:progress", map[string]any{"jobId": jobID, "percent": percent})
+		},
+	})
 }
 func (s *StudioV2) Shutdown(_ context.Context) {
 	s.mu.Lock()
@@ -66,6 +74,16 @@ func (s *StudioV2) GetSnapshot() (studio.Snapshot, error) {
 		return studio.Snapshot{}, err
 	}
 	return e.Snapshot()
+}
+
+// GetChanges returns what changed after the given revision. A client on
+// another epoch (after a restart) or too far behind receives a full snapshot.
+func (s *StudioV2) GetChanges(epoch string, since uint64) (studio.ChangeSet, error) {
+	e, err := s.core()
+	if err != nil {
+		return studio.ChangeSet{}, err
+	}
+	return e.Changes(epoch, since)
 }
 func (s *StudioV2) SaveProfile(p studio.Profile, key string) (studio.Profile, error) {
 	e, err := s.core()
@@ -168,18 +186,8 @@ func (s *StudioV2) SaveAsset(id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	snapshot, err := e.Snapshot()
-	if err != nil {
-		return false, err
-	}
-	var asset studio.Asset
-	for _, a := range snapshot.Assets {
-		if a.ID == id {
-			asset = a
-			break
-		}
-	}
-	if asset.ID == "" {
+	asset, ok := e.Asset(id)
+	if !ok {
 		return false, errors.New("素材不存在")
 	}
 	s.mu.Lock()
