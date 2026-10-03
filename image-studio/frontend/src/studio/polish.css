@@ -1,8 +1,9 @@
 /* Studio owns its appearance even when the preserved classic editor has set
    html.dark. Prefer a complete CJK family so Latin and Chinese use one UI stack. */
 :root {
-  --studio-font: "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC",
-    "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --studio-font:
+    "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI",
+    system-ui, sans-serif;
 }
 
 :is(.studio-app, .studio-dialog) {
@@ -42,10 +43,10 @@ html:root[data-platform].dark :is(.studio-app, .studio-dialog) :is(input, select
   color-scheme: light;
   color: var(--studio-control-text);
   caret-color: #397feb;
-  background-color: rgba(248, 252, 255, .78);
+  background-color: rgba(248, 252, 255, 0.78);
   border-color: var(--studio-control-border);
   border-radius: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   font-family: var(--studio-font);
   font-weight: 400;
   outline: none;
@@ -54,7 +55,7 @@ html:root[data-platform].dark :is(.studio-app, .studio-dialog) :is(input, select
 html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, select, textarea):focus,
 html:root[data-platform].dark :is(.studio-app, .studio-dialog) :is(input, select, textarea):focus {
   border-color: #79abe5;
-  box-shadow: 0 0 0 3px rgba(79, 143, 225, .12);
+  box-shadow: 0 0 0 3px rgba(79, 143, 225, 0.12);
   outline: none;
 }
 
@@ -67,7 +68,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) select {
 .studio-search:focus-within,
 .studio-app .pc-search:focus-within {
   border-color: #79abe5;
-  box-shadow: 0 0 0 3px rgba(79, 143, 225, .12);
+  box-shadow: 0 0 0 3px rgba(79, 143, 225, 0.12);
 }
 
 html:root .studio-app select option,
@@ -102,7 +103,9 @@ html:root .studio-dialog select option {
     margin-block: 5px;
     max-height: min(320px, 50vh);
     overflow-y: auto;
-    box-shadow: 0 10px 28px #396dab24, inset 0 1px 0 #fff;
+    box-shadow:
+      0 10px 28px #396dab24,
+      inset 0 1px 0 #fff;
     font-family: var(--studio-font);
     scrollbar-width: thin;
     scrollbar-color: #b6cfea var(--studio-control-bg);
@@ -163,7 +166,9 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 .studio-generation-form,
 .studio-generation-results {
   background: linear-gradient(145deg, #ffffffa6, #f1f8ffc2);
-  box-shadow: inset 0 1px 0 #fff, 0 8px 24px #6087b30a;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 8px 24px #6087b30a;
 }
 
 .studio-generation-form label,
