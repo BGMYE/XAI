@@ -107,8 +107,8 @@ func TestProfileValidationCoversSharedFields(t *testing.T) {
 		"unknown effort":     func(p *Profile) { p.ReasoningEffort = "max" },
 		"negative limit":     func(p *Profile) { p.ConcurrencyLimit = -1 },
 		"self fallback":      func(p *Profile) { p.FallbackProfileID = p.ID },
-		"too many models":    func(p *Profile) { p.ModelIDs = make([]string, maxModelIDs+1); fillModels(p.ModelIDs) },
 		"credential in path": func(p *Profile) { p.BaseURL = "https://user:pass@relay.example.com/v1" },
+		"local http unasked": func(p *Profile) { p.BaseURL = "http://api.localhost:8080/v1" },
 	} {
 		p := upstream("a")
 		alter(&p)
@@ -120,6 +120,26 @@ func TestProfileValidationCoversSharedFields(t *testing.T) {
 	p.BaseURL, p.AllowInsecure = "http://relay.example.com/v1", true
 	if err := p.Validate(); err != nil {
 		t.Fatalf("explicitly insecure upstream rejected: %v", err)
+	}
+	p = upstream("a")
+	p.BaseURL, p.AllowLocal = "http://api.localhost:8080/v1", true
+	if err := p.Validate(); err != nil {
+		t.Fatalf("localhost subdomain rejected: %v", err)
+	}
+}
+
+// The model catalog caches whatever an upstream lists. A large or odd catalog
+// is trimmed, never a reason to refuse saving the profile.
+func TestLargeModelCatalogsAreBoundedNotRejected(t *testing.T) {
+	p := upstream("a")
+	p.ModelIDs = make([]string, maxModelIDs+50)
+	fillModels(p.ModelIDs)
+	p.ModelIDs[1] = strings.Repeat("x", maxModelIDBytes+1)
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.ModelIDs) != maxModelIDs || p.ModelIDs[0] != "model-0" || p.ModelIDs[1] != "model-2" {
+		t.Fatalf("catalog = %d entries starting %v", len(p.ModelIDs), p.ModelIDs[:2])
 	}
 }
 
@@ -168,7 +188,7 @@ func TestClassicImportIsIdempotentAndNeverResurrects(t *testing.T) {
 	broken := upstream("classic-broken")
 	broken.BaseURL = "ftp://relay.example.com"
 	n, err := e.ImportProfiles([]Profile{a, b, c, broken}, legacyKey)
-	if err != nil || n != 3 {
+	if err != nil || n != 4 {
 		t.Fatalf("imported %d, %v", n, err)
 	}
 	list, _ := e.Profiles()
@@ -182,14 +202,17 @@ func TestClassicImportIsIdempotentAndNeverResurrects(t *testing.T) {
 	if byID["classic-c"].HasKey || byID["classic-c"].FallbackProfileID != "" || byID["classic-b"].FallbackProfileID != "classic-a" {
 		t.Fatalf("fallbacks not resolved: %+v", byID)
 	}
+	if d := byID["classic-broken"]; d.BaseURL != "" || d.Name != broken.Name || d.ImageModel != broken.ImageModel {
+		t.Fatalf("unusable address not kept as a draft: %+v", d)
+	}
 	reads = 0
-	if n, err = e.ImportProfiles([]Profile{a, b, c}, legacyKey); err != nil || n != 0 || reads != 0 {
+	if n, err = e.ImportProfiles([]Profile{a, b, c, broken}, legacyKey); err != nil || n != 0 || reads != 0 {
 		t.Fatalf("second import changed things: %d %v reads=%d", n, err, reads)
 	}
 	if err = e.DeleteProfile("classic-a"); err != nil {
 		t.Fatal(err)
 	}
-	if p, _ := e.Profiles(); len(p) != 2 {
+	if p, _ := e.Profiles(); len(p) != 3 {
 		t.Fatalf("profiles after delete: %d", len(p))
 	}
 	list, _ = e.Profiles()
@@ -200,6 +223,54 @@ func TestClassicImportIsIdempotentAndNeverResurrects(t *testing.T) {
 	}
 	if n, err = e.ImportProfiles([]Profile{a}, legacyKey); err != nil || n != 0 {
 		t.Fatalf("deleted profile resurrected: %d %v", n, err)
+	}
+}
+
+// The classic list is replaced by the registry's after the import, so nothing
+// the classic editor kept may be dropped for failing the registry's rules.
+func TestClassicImportKeepsWhatTheRegistryWouldRefuse(t *testing.T) {
+	e, _ := registry(t)
+	big := upstream("big-catalog")
+	big.ModelIDs = make([]string, maxModelIDs+1)
+	fillModels(big.ModelIDs)
+	local := upstream("local-subdomain")
+	local.BaseURL, local.AllowLocal = "http://api.localhost:3000/v1", true
+	odd := upstream("odd")
+	odd.FallbackProfileID, odd.ImageModel, odd.RequestPolicy = "odd", strings.Repeat("m", 300), "loose"
+	unnamed := upstream("unnamed")
+	unnamed.Name, unnamed.BaseURL = "  ", "http://192.168.1.5:8080/v1"
+	n, err := e.ImportProfiles([]Profile{big, local, odd, unnamed, {ID: "bad id!", Name: "x", Protocol: "openai"}}, nil)
+	if err != nil || n != 4 {
+		t.Fatalf("imported %d, %v", n, err)
+	}
+	list, _ := e.Profiles()
+	byID := map[string]Profile{}
+	for _, p := range list {
+		byID[p.ID] = p
+	}
+	if len(byID["big-catalog"].ModelIDs) != maxModelIDs || byID["big-catalog"].BaseURL == "" {
+		t.Fatalf("large catalog = %d models at %q", len(byID["big-catalog"].ModelIDs), byID["big-catalog"].BaseURL)
+	}
+	if byID["local-subdomain"].BaseURL != local.BaseURL {
+		t.Fatalf("localhost subdomain lost its address: %+v", byID["local-subdomain"])
+	}
+	if d := byID["odd"]; d.FallbackProfileID != "" || d.ImageModel != "" || d.RequestPolicy != "" || d.Name != odd.Name {
+		t.Fatalf("odd profile = %+v", d)
+	}
+	if d := byID["unnamed"]; d.Name != "未命名上游" || d.BaseURL != "" {
+		t.Fatalf("unnamed profile = %+v", d)
+	}
+}
+
+func TestStudioOnlyKeysAreNotHandedOut(t *testing.T) {
+	e, _ := registry(t)
+	p := upstream("video")
+	p.Protocol = "xai"
+	if _, err := e.SaveProfile(p, "XAI-KEY"); err != nil {
+		t.Fatal(err)
+	}
+	if key, err := e.ProfileKey("video"); err == nil || key != "" {
+		t.Fatalf("xAI key handed out: %q, %v", key, err)
 	}
 }
 

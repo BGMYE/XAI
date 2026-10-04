@@ -83,6 +83,11 @@ test("OpenAI endpoint helper keeps explicit API versions like the Go client", ()
     "https://relay.example.com/video": "https://relay.example.com/video/v1/models",
     "https://relay.example.com/v1x": "https://relay.example.com/v1x/v1/models",
     "https://generativelanguage.googleapis.com/v1beta/openai": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+    // Judged as entered: ".../openai/v1" keeps its version (Azure OpenAI v1, Groq).
+    "https://relay.example.com/V1/": "https://relay.example.com/V1/models",
+    "https://api.groq.com/openai/v1": "https://api.groq.com/openai/v1/models",
+    "https://res.openai.azure.com/openai/v1/": "https://res.openai.azure.com/openai/v1/models",
+    "https://gateway.ai.cloudflare.com/v1/acct/gw/openai": "https://gateway.ai.cloudflare.com/v1/acct/gw/openai/models",
   };
   for (const [base, want] of Object.entries(cases)) {
     assert.equal(openAIAPIEndpoint(base, "models"), want, base);

@@ -124,10 +124,12 @@ test("classic profiles convert to the shared shape and back without loss", async
   assert.deepEqual(back, { ...original, lastUsedAt: 42 });
 });
 
-test("loopback HTTP keeps working and long names fit the registry", async () => {
+test("local upstreams keep working and long names fit the registry", async () => {
   const mod = await freshModule();
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://127.0.0.1:3000/" })).allowLocal, true);
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://localhost:3000" })).allowLocal, true);
+  assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://api.localhost:3000" })).allowLocal, true);
+  assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "https://localhost:8443/v1" })).allowLocal, true);
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "https://img.example.com" })).allowLocal, false);
   const name = mod.toRegistryProfile(classic("a", { name: "图".repeat(100) })).name;
   assert.ok(new TextEncoder().encode(name).length <= 160 && name.length === 53);
@@ -163,6 +165,21 @@ test("without the desktop registry the classic editor keeps its own storage", as
   globalThis.window = { go: { backend: { Service: {} } } };
   const mod = await freshModule();
   assert.equal(await mod.syncClassicProfiles([classic("a")]), null);
+  assert.equal(mod.registryActive(), false);
+  assert.equal(await mod.readProfileKey("a", async () => "legacy"), "legacy");
+});
+
+test("a registry that cannot be used says why and leaves browser storage in charge", async () => {
+  installStorage();
+  const fake = installRegistry();
+  fake.profiles.set("a", { id: "a", protocol: "openai" });
+  window.go.backend.StudioV2.ImportClassicProfiles = async () => {
+    throw new Error("工作室数据无法打开");
+  };
+  const mod = await freshModule();
+  const reasons = [];
+  assert.equal(await mod.syncClassicProfiles([classic("a")], (reason) => reasons.push(reason)), null);
+  assert.deepEqual(reasons, ["工作室数据无法打开"]);
   assert.equal(mod.registryActive(), false);
   assert.equal(await mod.readProfileKey("a", async () => "legacy"), "legacy");
 });

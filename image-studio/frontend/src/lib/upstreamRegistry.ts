@@ -62,12 +62,12 @@ export function rememberProfileUse(id: string, at = Date.now()): void {
   }
 }
 
-function isLoopbackHTTP(raw: string): boolean {
+function isLoopbackURL(raw: string): boolean {
   try {
     const url = new URL(raw);
     const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
     return (
-      url.protocol === "http:" &&
+      (url.protocol === "http:" || url.protocol === "https:") &&
       (host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127\./.test(host))
     );
   } catch {
@@ -98,8 +98,8 @@ export function toRegistryProfile(p: UpstreamProfile, existing?: Profile): Profi
     protocol: existing?.protocol ?? "openai",
     imageModel: p.imageModelID.trim(),
     videoModel: (p.videoModelID ?? "").trim(),
-    // The classic editor always allowed loopback HTTP; the registry needs it said.
-    allowLocal: (existing?.allowLocal ?? false) || isLoopbackHTTP(baseUrl),
+    // The classic editor always allowed local upstreams; the registry needs it said.
+    allowLocal: (existing?.allowLocal ?? false) || isLoopbackURL(baseUrl),
     imageApi: p.apiMode === "responses" ? "responses" : "images",
     responsesTransport: p.responsesTransport === "websocket" ? "websocket" : "sse",
     requestPolicy: p.requestPolicy === "compat" ? "compat" : "openai",
@@ -177,16 +177,22 @@ export async function loadRegistryProfiles(): Promise<UpstreamProfile[]> {
 
 /**
  * Prepares the classic editor's profile list on the desktop: imports what it
- * kept locally, then reads the shared registry. Returns null when the registry
- * is unavailable, so the caller keeps using browser storage.
+ * kept locally, then reads the shared registry. Returns null when there is no
+ * registry (browser preview) or it cannot be used, so the caller keeps using
+ * browser storage. In the second case onUnavailable says why: changes made
+ * then stay in this window and the registry wins once it is back.
  */
-export async function syncClassicProfiles(local: UpstreamProfile[]): Promise<UpstreamProfile[] | null> {
+export async function syncClassicProfiles(
+  local: UpstreamProfile[],
+  onUnavailable?: (reason: string) => void,
+): Promise<UpstreamProfile[] | null> {
   if (!host()) return null;
   try {
     await importClassicProfiles(local);
     return await loadRegistryProfiles();
-  } catch {
+  } catch (error) {
     active = false;
+    onUnavailable?.(error instanceof Error ? error.message : String(error));
     return null;
   }
 }

@@ -1852,8 +1852,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
 
     // 桌面端：上游配置由后端统一保存，与新版工作室共用。先把本地旧配置导入，
-    // 再以后端列表为准；浏览器保存的列表只作为镜像保留。
-    const sharedProfiles = await syncClassicProfiles(profiles);
+    // 再以后端列表为准；浏览器保存的列表只作为镜像保留。后端不可用时退回本地
+    // 列表，并在启动后提示，避免用户以为修改已经共享。
+    let registryProblem = "";
+    const sharedProfiles = await syncClassicProfiles(profiles, (reason) => { registryProblem = reason; });
     if (sharedProfiles) {
       profiles = sharedProfiles;
       persistProfiles(profiles);
@@ -1991,6 +1993,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       appUpdate: shouldShowUpdate ? updateInfo : null,
       appUpdateModalOpen: shouldShowUpdate,
     });
+    if (registryProblem) {
+      get().pushToast(
+        `共享上游配置暂不可用（${registryProblem}）。本次对上游的修改只保存在经典编辑，不会同步到新版工作室；恢复后以共享配置为准。`,
+        "warn",
+        12000,
+      );
+    }
     void WriteAppUpdateProbe({
       appVersion,
       currentVersion: updateInfo?.currentVersion ?? appVersion,

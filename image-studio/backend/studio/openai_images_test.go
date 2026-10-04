@@ -1,8 +1,10 @@
 package studio
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -115,6 +117,37 @@ func TestResponsesAPIProfileUsesTheImageTool(t *testing.T) {
 	}
 }
 
+// A connection test, polling and image requests of one profile go to the same
+// API root, including for bases such as ".../openai/v1".
+func TestRequestsOfOneProfileShareTheEndpointRoot(t *testing.T) {
+	final := base64.StdEncoding.EncodeToString(pixel())
+	server, posts := openAIUpstream(t, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/openai/v1/models":
+			fmt.Fprint(w, `{"data":[{"id":"gpt-image-test"}]}`)
+		case "/openai/v1/images/generations":
+			fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, final)
+		default:
+			t.Errorf("request outside the API root: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	p := imageProfile(server.URL)
+	p.BaseURL = server.URL + "/openai/v1"
+	e, r := generationEngine(t, p)
+	if _, err := e.TestProfile(context.Background(), p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Submit(r); err != nil {
+		t.Fatal(err)
+	}
+	await(t, e, r.ID, "succeeded")
+	if posts.Load() != 1 {
+		t.Fatalf("posts = %d", posts.Load())
+	}
+}
+
 func TestResponsesAPIProfileNeedsAnExplicitTextModel(t *testing.T) {
 	p := imageProfile("https://example.com")
 	p.ImageAPI = "responses"
@@ -154,6 +187,25 @@ func TestGenerationOutcomesAreClassifiedOnce(t *testing.T) {
 				_ = conn.Close()
 			}
 		}, "uncertain", ""},
+		// A relay that loses its own upstream may end the response cleanly. The
+		// previews prove the request was accepted; the outcome is unknown.
+		{"stream ended after previews", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"AAAA\"}\n\n")
+		}, "uncertain", ""},
+		{"stream ended without events", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, ": keep-alive\n\n")
+		}, "uncertain", ""},
+		{"finished without an image", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"AAAA\"}\n\n")
+			fmt.Fprint(w, "data: {\"type\":\"image_generation.completed\"}\n\n")
+		}, "failed", "未自动重试"},
+		{"answered without an image", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"created":1,"data":[]}`)
+		}, "failed", "未自动重试"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server, posts := openAIUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) { tc.handle(w) })
@@ -309,17 +361,89 @@ func TestTailBufferKeepsTheEnd(t *testing.T) {
 	}
 }
 
-func TestFakeIPProxyRangeIsReachable(t *testing.T) {
-	// Proxy tools in fake-IP mode answer DNS with 198.18.0.0/15 addresses.
-	if !allowedIP(net.ParseIP("198.18.0.21"), false) {
-		t.Fatal("fake-IP address refused")
+// stubResolver answers name lookups from a table for the rest of the test;
+// names missing from it fail to resolve, as on a machine whose DNS cannot see
+// what the proxy can.
+func stubResolver(t *testing.T, answers map[string]string) {
+	t.Helper()
+	previous := lookupIPAddr
+	lookupIPAddr = func(_ context.Context, host string) ([]net.IPAddr, error) {
+		answer, ok := answers[host]
+		if !ok {
+			return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+		}
+		return []net.IPAddr{{IP: net.ParseIP(answer)}}, nil
 	}
-	for _, host := range []string{"10.0.0.1", "localhost", "api.localhost", "[::1]"} {
-		if allowedName(strings.Trim(host, "[]"), false) {
-			t.Fatalf("%s allowed through a proxy", host)
+	t.Cleanup(func() { lookupIPAddr = previous })
+}
+
+func TestProxiedHostsAreCheckedBeforeTheProxySeesThem(t *testing.T) {
+	stubResolver(t, map[string]string{
+		"public.example.com": "93.184.216.34",
+		"nas.example.com":    "192.168.1.20",
+		"fake.example.com":   "198.18.0.21", // proxy tools in fake-IP mode
+		"router.lan":         "198.18.0.22",
+		"meta.example.com":   "169.254.169.254",
+	})
+	upstream := Profile{BaseURL: "https://relay.corp/v1"}
+	for host, allowed := range map[string]bool{
+		"public.example.com": true,
+		"fake.example.com":   true,
+		"cdn.example.com":    true,  // unresolvable here, public name: the proxy decides
+		"relay.corp":         true,  // the upstream the user configured
+		"nas.example.com":    false, // resolves to a private address
+		"meta.example.com":   false,
+		"router.lan":         false, // a fake IP says nothing; the name is private
+		"printer.local":      false,
+		"intranet":           false,
+		"10.0.0.1":           false,
+		"::1":                false,
+		"localhost":          false,
+		"api.localhost":      false,
+	} {
+		err := checkProxiedHost(context.Background(), host, upstream)
+		if (err == nil) != allowed {
+			t.Errorf("%s: allowed=%v, err=%v", host, err == nil, err)
 		}
 	}
-	if !allowedName("relay.example.com", false) || !allowedName("127.0.0.1", true) {
-		t.Fatal("ordinary or explicitly allowed host refused")
+	local := Profile{AllowLocal: true}
+	for _, host := range []string{"127.0.0.1", "localhost", "api.localhost"} {
+		if err := checkProxiedHost(context.Background(), host, local); err != nil {
+			t.Errorf("%s refused for an upstream that allows loopback: %v", host, err)
+		}
+	}
+	if !allowedIP(net.ParseIP("198.18.0.21"), false) {
+		t.Fatal("fake-IP address refused for a direct connection")
+	}
+}
+
+// Links the upstream supplies (results, redirects) are fetched through the
+// proxy too, and must not reach private names there.
+func TestProxiedMediaLinksCannotReachPrivateNames(t *testing.T) {
+	stubResolver(t, map[string]string{"cdn.example.com": "93.184.216.34"})
+	var seen atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(proxy.Close)
+	c, err := newClient(Profile{BaseURL: "https://relay.example.com/v1"}, NetworkSettings{ProxyMode: "custom", ProxyURL: proxy.URL}, mediaRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeClient(c)
+	if _, err = c.Get("http://router.lan/admin.png"); err == nil || !errors.Is(err, errBlockedAddress) {
+		t.Fatalf("private name went to the proxy: %v", err)
+	}
+	if seen.Load() != 0 {
+		t.Fatal("the proxy received a request for a private name")
+	}
+	resp, err := c.Get("http://cdn.example.com/result.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if seen.Load() != 1 {
+		t.Fatalf("public link not proxied: %d", seen.Load())
 	}
 }

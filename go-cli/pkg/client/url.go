@@ -16,36 +16,62 @@ func ValidateBaseURL(raw string) (string, error) {
 }
 
 // ValidateBaseURLWithSecurity permits remote plain HTTP only when the caller
-// explicitly opted this single upstream into insecure connections.
+// explicitly opted this single upstream into insecure connections. A trailing
+// "/v1" (in any case) is removed: callers append "/v1/..." themselves.
 func ValidateBaseURLWithSecurity(raw string, allowInsecureConnection bool) (string, error) {
+	u, err := validateBaseURL(raw, allowInsecureConnection)
+	if err != nil {
+		return "", err
+	}
+	if n := len(u.Path); n >= 3 && strings.EqualFold(u.Path[n-3:], "/v1") {
+		u.Path = strings.TrimRight(u.Path[:n-3], "/")
+	}
+	return u.String(), nil
+}
+
+// ValidateAPIBaseURL validates a base URL like ValidateBaseURLWithSecurity but
+// keeps its path as entered, for endpoints built with OpenAIAPIEndpoint. Only
+// the full path tells ".../openai/v1", whose endpoints follow "/v1", from
+// ".../openai", whose endpoints follow directly.
+func ValidateAPIBaseURL(raw string, allowInsecureConnection bool) (string, error) {
+	u, err := validateBaseURL(raw, allowInsecureConnection)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func validateBaseURL(raw string, allowInsecureConnection bool) (*url.URL, error) {
 	cleaned := strings.TrimSpace(raw)
 	if cleaned == "" {
-		return "", fmt.Errorf("未配置上游 BASE_URL")
+		return nil, fmt.Errorf("未配置上游 BASE_URL")
 	}
 	u, err := url.Parse(cleaned)
 	if err != nil {
-		return "", fmt.Errorf("BASE_URL 无效: %w", err)
+		return nil, fmt.Errorf("BASE_URL 无效: %w", err)
 	}
 	if u.Scheme == "" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
-		return "", fmt.Errorf("BASE_URL 必须包含协议和主机,例如 https://example.com")
+		return nil, fmt.Errorf("BASE_URL 必须包含协议和主机,例如 https://example.com")
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
-	u.Path = strings.TrimRight(strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/v1"), "/")
+	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawPath = ""
-	cleaned = u.String()
-	switch strings.ToLower(u.Scheme) {
+	switch u.Scheme {
 	case "https":
-		return cleaned, nil
+		return u, nil
 	case "http":
 		if allowInsecureConnection || isLoopbackHost(u.Hostname()) {
-			return cleaned, nil
+			return u, nil
 		}
-		return "", fmt.Errorf("拒绝使用非 TLS 上游: %s。只有 localhost / 127.0.0.1 / ::1 允许 http://", cleaned)
+		return nil, fmt.Errorf("拒绝使用非 TLS 上游: %s。只有 localhost / 127.0.0.1 / ::1 允许 http://", u.String())
 	default:
-		return "", fmt.Errorf("BASE_URL 仅支持 http:// 或 https://")
+		return nil, fmt.Errorf("BASE_URL 仅支持 http:// 或 https://")
 	}
 }
 
+// OpenAIAPIEndpoint joins an endpoint path to a base URL as the user entered
+// it (see ValidateAPIBaseURL). A base that ends in an API version or in
+// "/openai" is the API root itself; any other base gets "/v1".
 func OpenAIAPIEndpoint(baseURL, endpointPath string) string {
 	cleaned := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	path := strings.Trim(strings.TrimSpace(endpointPath), "/")

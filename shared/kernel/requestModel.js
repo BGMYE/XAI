@@ -30,13 +30,19 @@ export function normalizeBaseURL(raw) {
 }
 
 // A base URL that already names a versioned API root (".../api/v3",
-// ".../v1beta/openai") takes endpoint paths as is instead of after "/v1".
+// ".../openai/v1", ".../v1beta/openai") takes endpoint paths as is instead of
+// after "/v1". It is judged as entered: stripping "/v1" first would turn
+// ".../openai/v1" into a ".../openai" root and drop the version.
 // Mirrors isVersionedOpenAICompatibilityBaseURL in go-cli/pkg/client/url.go.
 const API_VERSION_SEGMENT = /^v[0-9]+(?:(?:alpha|beta)[0-9]*)?$/;
 
+function trimBaseURL(raw) {
+  return String(raw || "").trim().replace(/\/+$/, "");
+}
+
 export function isVersionedOpenAICompatibilityBaseURL(raw) {
   try {
-    const path = new URL(normalizeBaseURL(raw)).pathname.replace(/\/+$/, "").toLowerCase();
+    const path = new URL(trimBaseURL(raw)).pathname.replace(/\/+$/, "").toLowerCase();
     if (path.endsWith("/openai")) return true;
     return API_VERSION_SEGMENT.test(path.slice(path.lastIndexOf("/") + 1));
   } catch {
@@ -44,14 +50,15 @@ export function isVersionedOpenAICompatibilityBaseURL(raw) {
   }
 }
 
+/** Joins an endpoint path to a base URL as entered, like OpenAIAPIEndpoint in go-cli. */
 export function openAIAPIEndpoint(baseURL, endpointPath) {
-  const normalized = normalizeBaseURL(baseURL);
+  const base = trimBaseURL(baseURL);
   const path = String(endpointPath || "").trim().replace(/^\/+|\/+$/g, "");
-  if (!path) return normalized;
-  if (isVersionedOpenAICompatibilityBaseURL(normalized)) {
-    return `${normalized}/${path}`;
+  if (!path) return base;
+  if (isVersionedOpenAICompatibilityBaseURL(base)) {
+    return `${base}/${path}`;
   }
-  return `${normalized}/v1/${path}`;
+  return `${base}/v1/${path}`;
 }
 
 export function isOfficialGoogleGeminiBaseURL(raw) {

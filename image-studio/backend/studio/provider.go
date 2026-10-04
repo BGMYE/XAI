@@ -108,11 +108,21 @@ type upstreamResult struct {
 	B64       string        `json:"b64_json"`
 }
 
+// connected marks a context so that a failed call reports whether a connection
+// to the upstream (or the proxy) was established. Before that, nothing can
+// have been written: the request was certainly not accepted. The hook runs on
+// the calling goroutine before any byte is written, so unlike WroteRequest it
+// cannot be outrun by a cancellation that returns first.
+func connected(ctx context.Context) (context.Context, func() bool) {
+	var got atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(httptrace.GotConnInfo) { got.Store(true) }})
+	return ctx, got.Load
+}
+
 func request(ctx context.Context, c *http.Client, p Profile, key, method, path, contentType string, body io.Reader) (*http.Response, error) {
-	// Whether any part of the request was written decides between "certainly
+	// Whether the request may have been written decides between "certainly
 	// not sent" and "may have been accepted" when the call fails.
-	var wrote atomic.Bool
-	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wrote.Store(true) }})
+	ctx, mayHaveSent := connected(ctx)
 	req, err := http.NewRequestWithContext(ctx, method, client.OpenAIAPIEndpoint(p.BaseURL, path), body)
 	if err != nil {
 		return nil, &NotSentError{Reason: "无法建立上游请求"}
@@ -125,7 +135,7 @@ func request(ctx context.Context, c *http.Client, p Profile, key, method, path, 
 	resp, err := c.Do(req)
 	if err != nil {
 		if method == "POST" {
-			if wrote.Load() {
+			if mayHaveSent() {
 				return nil, &UncertainError{}
 			}
 			return nil, &NotSentError{Reason: describeSendFailure(ctx, err)}

@@ -216,7 +216,8 @@ func (e *Engine) DuplicateProfile(id string) (Profile, error) {
 // It is idempotent: known and previously deleted IDs are skipped, so it can
 // run on every start. legacyKey reads a profile's key from where the classic
 // editor stored it; the key is copied into a new slot and the original is
-// left in place. Entries that fail validation are skipped, not fatal.
+// left in place. The classic list is replaced by the registry's afterwards, so
+// an entry is never dropped for failing validation: see importable.
 func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (string, error)) (int, error) {
 	if len(incoming) > 1000 {
 		return 0, errors.New("一次最多导入 1000 个上游")
@@ -238,7 +239,11 @@ func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (s
 	slots := []string{}
 	for _, p := range incoming {
 		p.CredentialID, p.HasKey, p.VerifiedAt = "", false, ""
-		if known[p.ID] || p.Validate() != nil {
+		if known[p.ID] {
+			continue
+		}
+		var ok bool
+		if p, ok = importable(p); !ok {
 			continue
 		}
 		known[p.ID] = true
@@ -278,6 +283,48 @@ func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (s
 	return len(fresh), nil
 }
 
+// importable returns a classic profile in a form the registry accepts. The
+// classic editor stores profiles it cannot use yet, such as an address it
+// would refuse to call, and some of its limits are looser. Rather than lose
+// such a profile, it is kept as a draft: first without its address, which the
+// user re-enters (and with it the key, as for any new address), and failing
+// that with only its name and model choices. Only an invalid ID is skipped.
+func importable(p Profile) (Profile, bool) {
+	if p.Name = truncateUTF8(strings.TrimSpace(p.Name), 160); p.Name == "" {
+		p.Name = "未命名上游"
+	}
+	if p.Validate() == nil {
+		return p, true
+	}
+	p.BaseURL, p.AllowInsecure = "", false
+	if p.Validate() == nil {
+		return p, true
+	}
+	model := func(id string) string {
+		if id = strings.TrimSpace(id); len(id) <= 200 {
+			return id
+		}
+		return ""
+	}
+	draft := Profile{
+		ID:         p.ID,
+		Name:       p.Name,
+		Protocol:   "openai",
+		ImageModel: model(p.ImageModel),
+		VideoModel: model(p.VideoModel),
+		TextModel:  model(p.TextModel),
+		ModelIDs:   p.ModelIDs,
+		CreatedAt:  p.CreatedAt,
+	}
+	if p.Protocol == "xai" {
+		draft.Protocol = "xai"
+	}
+	if draft.Validate() != nil {
+		return Profile{}, false
+	}
+	return draft, true
+}
+
 // Profiles lists upstreams in creation order without building a snapshot.
 func (e *Engine) Profiles() ([]Profile, error) {
 	if err := e.failure(); err != nil {
@@ -294,10 +341,15 @@ func (e *Engine) Profiles() ([]Profile, error) {
 
 // ProfileKey returns the saved key of an upstream, or "" when it has none.
 // The classic editor sends keys with its own requests and needs to read them.
+// It lists only OpenAI-compatible upstreams, so keys of the others, which
+// only the Studio uses, are never handed out.
 func (e *Engine) ProfileKey(id string) (string, error) {
 	p, ok := e.cur.Load().doc.Profiles[id]
 	if !ok {
 		return "", errors.New("上游不存在")
+	}
+	if p.Protocol != "openai" {
+		return "", errors.New("该上游仅用于新版工作室，经典编辑无法读取其密钥")
 	}
 	if !p.HasKey {
 		return "", nil

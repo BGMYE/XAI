@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -23,7 +24,7 @@ func imageServer(t *testing.T, failStatus int, healthy *atomic.Bool, posts, down
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1/images/generations":
+		case "/v1/images/generations", "/v1/images/edits":
 			posts.Add(1)
 			fmt.Fprintf(w, `{"data":[{"url":%q}]}`, server.URL+"/result.png")
 		case "/result.png":
@@ -79,6 +80,120 @@ func TestImageDownloadFailureResumesWithoutRegenerating(t *testing.T) {
 	done := await(t, e, r.ID, "succeeded")
 	if posts.Load() != 1 || downloads.Load() != 2 || done.ResultAssetID == "" {
 		t.Fatalf("resume must only download again: posts=%d downloads=%d", posts.Load(), downloads.Load())
+	}
+}
+
+// failingSecrets is a keychain a test can make unreadable.
+type failingSecrets struct {
+	memorySecrets
+	broken atomic.Bool
+}
+
+func (s *failingSecrets) Get(id string) (string, error) {
+	if s.broken.Load() {
+		return "", errors.New("keychain locked")
+	}
+	return s.memorySecrets.Get(id)
+}
+
+// Downloading a saved result link needs neither the key nor the reference
+// image, so neither being unavailable can cost an already paid result.
+func TestSavedResultLinksNeedNeitherKeyNorReference(t *testing.T) {
+	var healthy atomic.Bool
+	var posts, downloads atomic.Int32
+	server := imageServer(t, http.StatusBadGateway, &healthy, &posts, &downloads)
+	secrets := &failingSecrets{memorySecrets: memorySecrets{m: map[string]string{}}}
+	e, err := Open(t.TempDir(), secrets, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(e.Close)
+	if _, err = e.SaveProfile(Profile{ID: "upstream", Name: "Mock", BaseURL: server.URL + "/v1", Protocol: "openai", AllowLocal: true, ImageModel: "img"}, "LOCAL-TEST-ONLY"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.SaveProject(Project{ID: "project", Name: "画布", Viewport: Viewport{Zoom: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := e.Import(pixel(), "reference.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Request{ID: NewID(), ProfileID: "upstream", ProjectID: "project", Kind: "image", Prompt: "cat", ReferenceAssetID: ref.ID}
+	if _, err = e.Submit(r); err != nil {
+		t.Fatal(err)
+	}
+	await(t, e, r.ID, "paused")
+	secrets.broken.Store(true)
+	if err = os.Remove(filepath.Join(e.repo.mediaDir(), ref.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	healthy.Store(true)
+	if err = e.Resume(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	await(t, e, r.ID, "succeeded")
+	if posts.Load() != 1 || downloads.Load() != 2 {
+		t.Fatalf("posts=%d downloads=%d", posts.Load(), downloads.Load())
+	}
+}
+
+// A submitted job keeps its remote handle when a local step fails on resume:
+// it pauses again instead of failing, and resumes once the cause is gone.
+func TestSubmittedJobsSurviveLocalFailuresOnResume(t *testing.T) {
+	secrets := &failingSecrets{memorySecrets: memorySecrets{m: map[string]string{}}}
+	var runs atomic.Int32
+	runner := runFunc(func(_ context.Context, j Job, key string, _ *Output, checkpoint Checkpoint) (Output, error) {
+		if runs.Add(1) == 1 {
+			if err := checkpoint(Progress{RemoteID: "remote-1"}); err != nil {
+				return Output{}, err
+			}
+			return Output{}, &ResumeError{}
+		}
+		if j.RemoteID != "remote-1" || key != "KEY" {
+			t.Errorf("resumed with remote %q and key %q", j.RemoteID, key)
+		}
+		return Output{Data: mp4()}, nil
+	})
+	e, err := Open(t.TempDir(), secrets, Options{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(e.Close)
+	if _, err = e.SaveProfile(Profile{ID: "upstream", Name: "Video", BaseURL: "https://example.com/v1", Protocol: "xai", VideoModel: "video"}, "KEY"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.SaveProject(Project{ID: "project", Name: "画布", Viewport: Viewport{Zoom: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	r := Request{ID: NewID(), ProfileID: "upstream", ProjectID: "project", Kind: "video", Prompt: "waves"}
+	if _, err = e.Submit(r); err != nil {
+		t.Fatal(err)
+	}
+	await(t, e, r.ID, "paused")
+	secrets.broken.Store(true)
+	if err = e.Resume(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The runner is not reached; wait for the job to settle again.
+	deadline := time.Now().Add(4 * time.Second)
+	var j Job
+	for time.Now().Before(deadline) {
+		j = e.cur.Load().doc.Jobs[r.ID]
+		if j.State != "queued" && j.State != "running" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if j.State != "paused" || j.RemoteID != "remote-1" || !strings.Contains(j.Error, "不重新提交") {
+		t.Fatalf("local failure after submission: %s %q (%q)", j.State, j.RemoteID, j.Error)
+	}
+	secrets.broken.Store(false)
+	if err = e.Resume(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	await(t, e, r.ID, "succeeded")
+	if runs.Load() != 2 {
+		t.Fatalf("runner calls = %d", runs.Load())
 	}
 }
 

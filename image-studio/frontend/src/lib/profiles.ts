@@ -175,6 +175,14 @@ export function makeBlankProfile(apiMode: APIMode = "images", profiles: Upstream
   };
 }
 
+// 从列表移除一个 profile，并清掉其他 profile 指向它的备用上游引用 —— 与共享
+// 上游配置的删除行为一致；残留的引用会让这些 profile 下次保存失败。
+export function removeProfile(profiles: UpstreamProfile[], id: string): UpstreamProfile[] {
+  return profiles
+    .filter((profile) => profile.id !== id)
+    .map((profile) => (profile.fallbackProfileId === id ? { ...profile, fallbackProfileId: undefined } : profile));
+}
+
 // 复制一个 profile,name 末尾追加「副本」并生成新 id。
 // keyring 里的 apiKey 由调用方在 commit 后单独搬过来(get → set)。
 export function duplicateProfile(p: UpstreamProfile): UpstreamProfile {

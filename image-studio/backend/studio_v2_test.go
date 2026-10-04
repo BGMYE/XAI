@@ -47,6 +47,39 @@ func TestClassicProfilesMoveIntoTheSharedRegistry(t *testing.T) {
 	}
 }
 
+// The import leaves the classic keychain entry in place; the classic editor
+// falls back to it when the registry cannot be opened. Once the registry's
+// key changes or is cleared, that copy is stale and must go.
+func TestStaleClassicKeyCopiesAreRemoved(t *testing.T) {
+	const id = "2f1c9a4e-0d6b-4c55-9a1e-1d2b3c4d5e6f"
+	entry := "api-key:profile:" + id
+	keys := &memoryAPIKeyStore{values: map[string]string{entry: "sk-old"}}
+	s := openStudioV2(t, keys)
+	classic := studio.Profile{ID: id, Name: "Sunburst", BaseURL: "https://img.example.com", Protocol: "openai", ImageModel: "gpt-image-2"}
+	if _, err := s.ImportClassicProfiles([]studio.Profile{classic}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveProfile(classic, "sk-old"); err != nil || keys.values[entry] != "sk-old" {
+		t.Fatalf("saving the same key removed the current copy: %v", err)
+	}
+	if _, err := s.SaveProfile(classic, "sk-new"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := keys.values[entry]; ok {
+		t.Fatal("replaced key kept in the classic entry")
+	}
+	keys.values[entry] = "sk-new" // written again by the classic editor's fallback mode
+	if _, err := s.ClearProfileKey(id); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := keys.values[entry]; ok {
+		t.Fatal("cleared key kept in the classic entry")
+	}
+	if key, err := s.GetProfileKey(id); err != nil || key != "" {
+		t.Fatalf("cleared key = %q, %v", key, err)
+	}
+}
+
 func TestClassicKeyIDsAreRestricted(t *testing.T) {
 	for id, want := range map[string]bool{
 		"2f1c9a4e-0d6b-4c55-9a1e-1d2b3c4d5e6f": true,

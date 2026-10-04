@@ -39,7 +39,9 @@ func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpst
 	if apiKey == "" {
 		return ProbeUpstreamResult{}, fmt.Errorf("API Key 不能为空")
 	}
-	baseURL, err := client.ValidateBaseURLWithSecurity(opts.BaseURL, opts.AllowInsecureConnection)
+	// The same endpoint rule as image requests, so a passing probe means the
+	// generation endpoints share its root.
+	baseURL, err := client.ValidateAPIBaseURL(opts.BaseURL, opts.AllowInsecureConnection)
 	if err != nil {
 		return ProbeUpstreamResult{}, err
 	}

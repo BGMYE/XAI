@@ -57,6 +57,17 @@ func allowedIP(ip net.IP, allowLocal bool) bool {
 
 var errBlockedAddress = errors.New("拒绝访问本地、私有或链路本地地址")
 
+// lookupIPAddr resolves names for the address checks. Tests replace it.
+var lookupIPAddr = net.DefaultResolver.LookupIPAddr
+
+// fakeIPNetwork is where proxy tools in "fake-IP" mode put every name they
+// answer for; such an address says nothing about where the name leads.
+var fakeIPNetwork = &net.IPNet{IP: net.IPv4(198, 18, 0, 0).To4(), Mask: net.CIDRMask(15, 32)}
+
+// privateSuffixes are name spaces that exist only inside a site or are
+// reserved; no public upstream or CDN uses them.
+var privateSuffixes = []string{".local", ".localdomain", ".lan", ".home", ".internal", ".intranet", ".corp", ".private", ".arpa", ".test", ".invalid"}
+
 type requestKind int
 
 const (
@@ -68,9 +79,10 @@ const (
 // newClient builds the HTTP client for one upstream.
 //
 // A direct connection resolves the target and dials only checked addresses,
-// which also defeats DNS rebinding. Through a proxy the proxy resolves names,
-// so only literal addresses and localhost names can be checked here; the
-// proxy itself may be local. Redirects are never followed automatically.
+// which also defeats DNS rebinding. Through a proxy the proxy resolves names
+// again, so the target is checked as well as possible beforehand (see
+// checkProxiedHost); the proxy itself may be local. Redirects are never
+// followed automatically.
 func newClient(p Profile, n NetworkSettings, kind requestKind) (*http.Client, error) {
 	config, err := client.NormalizeProxyConfig(n.ProxyMode, n.ProxyURL)
 	if err != nil {
@@ -100,8 +112,8 @@ func newClient(p Profile, n NetworkSettings, kind requestKind) (*http.Client, er
 			if err != nil || proxyURL == nil {
 				return proxyURL, err
 			}
-			if !allowedName(r.URL.Hostname(), p.AllowLocal) {
-				return nil, errBlockedAddress
+			if err := checkProxiedHost(r.Context(), r.URL.Hostname(), p); err != nil {
+				return nil, err
 			}
 			proxies.Store(proxyAddress(proxyURL), true)
 			return proxyURL, nil
@@ -141,7 +153,7 @@ func dialChecked(ctx context.Context, dialer *net.Dialer, network, address strin
 	if err != nil {
 		return nil, errors.New("无效网络地址")
 	}
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ips, err := lookupIPAddr(ctx, host)
 	if err != nil || len(ips) == 0 {
 		return nil, errors.New("无法解析上游域名")
 	}
@@ -159,16 +171,71 @@ func dialChecked(ctx context.Context, dialer *net.Dialer, network, address strin
 	return nil, errors.New("无法连接上游")
 }
 
-// allowedName checks what can be checked without resolving a name.
-func allowedName(host string, allowLocal bool) bool {
+// checkProxiedHost decides whether a request to host may go through a proxy.
+// The proxy resolves the name itself and may see networks this machine does
+// not, so the check is best effort:
+//   - literal addresses and localhost names are checked as for a direct dial;
+//   - a name this machine resolves must resolve to public addresses only;
+//   - a name it cannot resolve, or resolves only to fake IPs, must look public
+//     (dotted, outside private name spaces) unless it is the upstream's own
+//     host, which the user chose.
+//
+// Upstream-supplied links (results, redirects) therefore cannot point the
+// proxy at a router or an intranet name.
+func checkProxiedHost(ctx context.Context, host string, p Profile) error {
 	if ip := net.ParseIP(host); ip != nil {
-		return allowedIP(ip, allowLocal)
+		if !allowedIP(ip, p.AllowLocal) {
+			return errBlockedAddress
+		}
+		return nil
 	}
-	lower := strings.ToLower(strings.TrimSuffix(host, "."))
-	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
-		return allowLocal
+	name := strings.ToLower(strings.TrimSuffix(host, "."))
+	if name == "localhost" || strings.HasSuffix(name, ".localhost") {
+		if !p.AllowLocal {
+			return errBlockedAddress
+		}
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	ips, err := lookupIPAddr(ctx, name)
+	resolved := false // to an address that says where the name leads
+	for _, a := range ips {
+		if !allowedIP(a.IP, p.AllowLocal) {
+			return errBlockedAddress
+		}
+		if !fakeIPNetwork.Contains(a.IP) {
+			resolved = true
+		}
+	}
+	if err == nil && resolved {
+		return nil
+	}
+	if publicName(name) || name == upstreamHost(p) {
+		return nil
+	}
+	return errBlockedAddress
+}
+
+// publicName reports whether a name can belong to the public DNS.
+func publicName(name string) bool {
+	if !strings.Contains(name, ".") {
+		return false
+	}
+	for _, suffix := range privateSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return false
+		}
 	}
 	return true
+}
+
+func upstreamHost(p Profile) string {
+	u, err := url.Parse(p.BaseURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
 }
 
 // proxyAddress is the host:port http.Transport dials for a proxy URL.

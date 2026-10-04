@@ -245,7 +245,8 @@ func RequestImagesAPIWithPartial(
 	if baseURL == "" {
 		return ImageResult{}, errors.New("未配置上游 BASE_URL,请在「设置 → 上游 BASE_URL」中填入兼容 OpenAI Images API 的中转站地址")
 	}
-	baseURL, err := ValidateBaseURLWithSecurity(baseURL, opts.AllowInsecureConnection)
+	// Endpoints are joined to the base as entered (see OpenAIAPIEndpoint).
+	baseURL, err := ValidateAPIBaseURL(baseURL, opts.AllowInsecureConnection)
 	if err != nil {
 		return ImageResult{}, err
 	}

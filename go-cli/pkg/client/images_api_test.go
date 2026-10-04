@@ -691,6 +691,27 @@ func TestRequestImagesAPIReportsStatusCode(t *testing.T) {
 	}
 }
 
+func TestRequestImagesAPIKeepsTheVersionOfAnOpenAIV1Base(t *testing.T) {
+	finalB64 := base64.StdEncoding.EncodeToString([]byte("final"))
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, finalB64)
+	}))
+	defer srv.Close()
+	for _, base := range []string{srv.URL + "/openai/v1", srv.URL + "/v1", srv.URL} {
+		if _, err := RequestImagesAPIWithPartial(context.Background(), Options{
+			APIKey: "sk-test", Prompt: "cat", BaseURL: base, APIMode: APIModeImages,
+		}, &bytes.Buffer{}, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if strings.Join(paths, " ") != "/openai/v1/images/generations /v1/images/generations /v1/images/generations" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

@@ -69,7 +69,11 @@ type Profile struct {
 }
 
 const (
-	maxModelIDs        = 500
+	// The model catalog caches every ID an upstream lists; the classic editor
+	// merges them without a cap. Absurd entries are dropped and the list is
+	// bounded rather than rejected, so a large catalog never blocks a save.
+	maxModelIDs        = 5000
+	maxModelIDBytes    = 256
 	maxConcurrency     = 1000
 	defaultImageAPI    = "images"
 	responsesImageAPI  = "responses"
@@ -159,30 +163,33 @@ func (p *Profile) Validate() error {
 	if p.FallbackProfileID != "" && (checkID(p.FallbackProfileID) != nil || p.FallbackProfileID == p.ID) {
 		return errors.New("备用上游无效")
 	}
-	models := make([]string, 0, len(p.ModelIDs))
-	seen := map[string]bool{}
-	for _, m := range p.ModelIDs {
-		m = strings.TrimSpace(m)
-		if m == "" || seen[m] {
-			continue
-		}
-		if len(m) > 200 {
-			return errors.New("模型 ID 过长")
-		}
-		seen[m] = true
-		models = append(models, m)
-	}
-	if len(models) > maxModelIDs {
-		return fmt.Errorf("模型列表最多 %d 项", maxModelIDs)
-	}
-	if len(models) == 0 {
-		models = nil
-	}
-	p.ModelIDs = models
+	p.ModelIDs = normalizeModelIDs(p.ModelIDs)
 	if len(p.BaseURL) > 2048 || len(p.ImageModel) > 200 || len(p.VideoModel) > 200 || len(p.TextModel) > 200 {
 		return errors.New("上游配置过长")
 	}
 	return nil
+}
+
+// normalizeModelIDs trims and deduplicates a model catalog in order, drops
+// entries no upstream would use, and keeps at most maxModelIDs.
+func normalizeModelIDs(ids []string) []string {
+	models := make([]string, 0, min(len(ids), maxModelIDs))
+	seen := make(map[string]bool, len(models))
+	for _, m := range ids {
+		m = strings.TrimSpace(m)
+		if m == "" || len(m) > maxModelIDBytes || seen[m] {
+			continue
+		}
+		seen[m] = true
+		models = append(models, m)
+		if len(models) == maxModelIDs {
+			break
+		}
+	}
+	if len(models) == 0 {
+		return nil
+	}
+	return models
 }
 
 // usableFor explains why a profile cannot run a request of the given kind.
@@ -205,8 +212,11 @@ func (p Profile) usableFor(kind string) error {
 	return nil
 }
 
+// isLoopbackHost reports a loopback address or a localhost name, including
+// subdomains such as api.localhost, which resolve to loopback (RFC 6761).
 func isLoopbackHost(host string) bool {
-	if strings.EqualFold(host, "localhost") {
+	lower := strings.ToLower(strings.TrimSuffix(host, "."))
+	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

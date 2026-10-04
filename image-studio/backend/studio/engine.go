@@ -590,16 +590,22 @@ func (e *Engine) run(ctx context.Context, j Job, release func()) (out Output, ru
 			runErr = &UncertainError{}
 		}
 	}()
-	slot := j.Profile.secretSlot()
-	if slot == "" {
-		slot = j.Request.ProfileID
-	}
-	key, err := e.secrets.Get(slot)
-	if err != nil || key == "" {
-		return Output{}, &NotSentError{Reason: "无法从系统凭据存储读取 API Key，请重新保存"}
+	// A saved result link needs neither the key nor the reference: only the
+	// download remains, and it carries no credentials. A submitted video needs
+	// the key to poll, but not the reference.
+	key := ""
+	if j.ResultURL == "" {
+		slot := j.Profile.secretSlot()
+		if slot == "" {
+			slot = j.Request.ProfileID
+		}
+		var err error
+		if key, err = e.secrets.Get(slot); err != nil || key == "" {
+			return Output{}, &NotSentError{Reason: "无法从系统凭据存储读取 API Key"}
+		}
 	}
 	var ref *Output
-	if j.Request.ReferenceAssetID != "" {
+	if j.Request.ReferenceAssetID != "" && j.RemoteID == "" && j.ResultURL == "" {
 		a, ok := e.Asset(j.Request.ReferenceAssetID)
 		if !ok || a.Kind != "image" {
 			return Output{}, &NotSentError{Reason: "参考图片不存在"}
@@ -631,9 +637,16 @@ func redactError(err error, key string) error {
 		errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return err
 	case errors.As(err, &notSent):
-		return &NotSentError{Reason: strings.ReplaceAll(notSent.Reason, key, "[REDACTED]")}
+		return &NotSentError{Reason: redact(notSent.Reason, key)}
 	}
-	return errors.New(strings.ReplaceAll(err.Error(), key, "[REDACTED]"))
+	return errors.New(redact(err.Error(), key))
+}
+
+func redact(message, key string) string {
+	if key == "" {
+		return message
+	}
+	return strings.ReplaceAll(message, key, "[REDACTED]")
 }
 
 // checkpoint persists recovery handles before the runner continues and records
@@ -752,6 +765,12 @@ func (e *Engine) classify(current Job, err error) (string, string) {
 	}
 	if recoverable && errors.As(err, &resumable) {
 		state = "paused"
+	}
+	if recoverable && !sent {
+		// A local step failed before polling or downloading (the keychain, the
+		// proxy settings). The upstream already has the job, so it stays
+		// resumable instead of losing its saved handle.
+		state, message = "paused", notSent.Reason+"；上游已受理，恢复后继续查询，不重新提交"
 	}
 	if recoverable && (errors.Is(err, context.DeadlineExceeded) || closed) {
 		state, message = "paused", "等待中断，可恢复查询，不重新提交"

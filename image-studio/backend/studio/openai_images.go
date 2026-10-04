@@ -3,12 +3,11 @@ package studio
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptrace"
 	"os"
 	"strings"
-	"sync/atomic"
 
 	"github.com/yuanhua/image-gptcodex/pkg/client"
 )
@@ -65,8 +64,7 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 		}
 	}
 
-	var wrote atomic.Bool
-	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wrote.Store(true) }})
+	ctx, mayHaveSent := connected(ctx)
 	raw := &tailBuffer{limit: 256 << 10}
 	onPartial := func(client.PartialImage) { _ = checkpoint(Progress{Percent: 60}) }
 	var result client.ImageResult
@@ -76,7 +74,7 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 		result, err = client.RequestImagesAPIWithPartial(ctx, opts, raw, nil, onPartial)
 	}
 	if err != nil {
-		return Output{}, generationError(ctx, err, wrote.Load(), raw.String())
+		return Output{}, generationError(ctx, err, mayHaveSent(), raw.String())
 	}
 	if result.ImageB64 != "" {
 		return p.decodeBase64(result.ImageB64)
@@ -88,12 +86,13 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 }
 
 // generationError classifies a failed generation by what is known to have
-// happened. Nothing written: certainly not accepted, safe to send again. An
-// answer from the upstream (a 4xx rejection, or a completed response without
-// an image): a plain failure that explains why. Anything else after the
-// request was written may have been accepted and billed, so it is uncertain.
-func generationError(ctx context.Context, err error, wrote bool, raw string) error {
-	if !wrote {
+// happened. No connection: certainly not accepted, safe to send again. A
+// final answer from the upstream (a 4xx rejection, an error event, or a
+// response that completed without an image): a plain failure that explains
+// why. Anything else may have been accepted and billed, so it is uncertain;
+// that includes a stream that simply stopped, even after preview frames.
+func generationError(ctx context.Context, err error, mayHaveSent bool, raw string) error {
+	if !mayHaveSent {
 		return &NotSentError{Reason: describeSendFailure(ctx, err)}
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -109,10 +108,41 @@ func generationError(ctx context.Context, err error, wrote bool, raw string) err
 			return &UncertainError{}
 		}
 		return errors.New("上游拒绝了请求：" + status.Error())
-	case errors.Is(err, client.ErrNoImageInResponse):
+	case finalAnswer(raw):
 		return errors.New(client.DescribeProblem(raw) + "（未自动重试）")
 	}
 	return &UncertainError{}
+}
+
+// finalAnswer reports whether a response body is the upstream's last word on
+// a generation: a complete JSON document, or an event stream that reported an
+// error or finished. A stream that stops without either, as when a relay loses
+// its own upstream and ends the response, says nothing about the outcome.
+func finalAnswer(raw string) bool {
+	events := false
+	for ev := range client.IterEvents(raw) {
+		events = true
+		if _, ok := ev["error"].(map[string]any); ok {
+			return true
+		}
+		kind, _ := ev["type"].(string)
+		switch {
+		case kind == "error",
+			strings.HasSuffix(kind, ".failed"),
+			strings.HasSuffix(kind, ".incomplete"),
+			strings.HasSuffix(kind, ".cancelled"),
+			kind == "response.completed",
+			kind == "response.done",
+			kind == "image_generation.completed",
+			kind == "image_edit.completed":
+			return true
+		}
+	}
+	if events {
+		return false
+	}
+	var document any
+	return json.Unmarshal([]byte(strings.TrimSpace(raw)), &document) == nil && document != nil
 }
 
 // referenceFile writes a reference image where the multipart encoder can

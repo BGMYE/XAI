@@ -90,7 +90,16 @@ func (s *StudioV2) SaveProfile(p studio.Profile, key string) (studio.Profile, er
 	if err != nil {
 		return studio.Profile{}, err
 	}
-	return e.SaveProfile(p, key)
+	saved, err := e.SaveProfile(p, key)
+	if err != nil {
+		return studio.Profile{}, err
+	}
+	if key = strings.TrimSpace(key); key != "" && classicKeyID(saved.ID) {
+		if old, err := s.keys.Get(classicKeyEntry(saved.ID)); err == nil && old != "" && old != key {
+			s.forgetClassicKey(saved.ID)
+		}
+	}
+	return saved, nil
 }
 func (s *StudioV2) DeleteProfile(id string) error {
 	e, err := s.core()
@@ -100,12 +109,21 @@ func (s *StudioV2) DeleteProfile(id string) error {
 	if err = e.DeleteProfile(id); err != nil {
 		return err
 	}
-	// An imported classic profile may still have its original key entry.
-	if classicKeyID(id) {
-		_ = s.keys.Delete("api-key:profile:" + id)
-	}
+	s.forgetClassicKey(id)
 	return nil
 }
+
+// forgetClassicKey deletes the keychain entry an imported profile had in the
+// classic editor. The import leaves it in place, and the classic editor falls
+// back to it when the registry cannot be opened, so it is removed once it no
+// longer holds the profile's key: a replaced or cleared key must not be sent.
+func (s *StudioV2) forgetClassicKey(id string) {
+	if classicKeyID(id) {
+		_ = s.keys.Delete(classicKeyEntry(id))
+	}
+}
+
+func classicKeyEntry(id string) string { return "api-key:profile:" + id }
 
 // ListProfiles returns the shared upstreams in creation order. The classic
 // editor reads its upstream list from here on the desktop.
@@ -126,8 +144,9 @@ func (s *StudioV2) DuplicateProfile(id string) (studio.Profile, error) {
 	return e.DuplicateProfile(id)
 }
 
-// GetProfileKey returns an upstream's key for the classic editor, which sends
-// it with its own requests. The Studio never needs it in the window.
+// GetProfileKey returns the key of an OpenAI-compatible upstream for the
+// classic editor, which sends it with its own requests. The Studio never needs
+// keys in the window, and those of Studio-only upstreams are not handed out.
 func (s *StudioV2) GetProfileKey(id string) (string, error) {
 	e, err := s.core()
 	if err != nil {
@@ -136,13 +155,19 @@ func (s *StudioV2) GetProfileKey(id string) (string, error) {
 	return e.ProfileKey(id)
 }
 
-// ClearProfileKey removes an upstream's saved key.
+// ClearProfileKey removes an upstream's saved key, including the copy an
+// imported profile may still have in the classic editor's keychain entry.
 func (s *StudioV2) ClearProfileKey(id string) (studio.Profile, error) {
 	e, err := s.core()
 	if err != nil {
 		return studio.Profile{}, err
 	}
-	return e.ClearProfileKey(id)
+	p, err := e.ClearProfileKey(id)
+	if err != nil {
+		return studio.Profile{}, err
+	}
+	s.forgetClassicKey(id)
+	return p, nil
 }
 
 // ImportClassicProfiles copies upstreams the classic editor kept in browser
@@ -156,7 +181,7 @@ func (s *StudioV2) ImportClassicProfiles(profiles []studio.Profile) (int, error)
 		if !classicKeyID(id) {
 			return "", nil
 		}
-		return s.keys.Get("api-key:profile:" + id)
+		return s.keys.Get(classicKeyEntry(id))
 	})
 }
 

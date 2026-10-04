@@ -15,6 +15,7 @@ import {
   pickActiveProfile,
   pickAIProfile,
   persistAIProfileId,
+  removeProfile,
 } from "../lib/profiles";
 import { cleanBaseURL } from "../lib/security";
 import {
@@ -190,9 +191,8 @@ export function createProfileActions(store: StateAdapter) {
 
     async deleteProfile(id: string) {
       const list = store.getState().profiles;
-      const index = list.findIndex((profile) => profile.id === id);
-      if (index < 0) return;
-      const nextList = list.filter((_, i) => i !== index);
+      if (!list.some((profile) => profile.id === id)) return;
+      const nextList = removeProfile(list, id);
       if (registryActive()) {
         try { await deleteRegistryProfile(id); }
         catch (error) {
