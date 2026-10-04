@@ -52,15 +52,37 @@ jobs:
           staticcheck="$(go env GOPATH)/bin/staticcheck"
           (cd go-cli && "$staticcheck" ./...)
           (cd image-studio && "$staticcheck" ./backend/studio/...)
+      # Failing Go tests are also reported as annotations, which stay readable
+      # through the checks API when the raw log is not at hand.
       - name: Test go-cli client
         working-directory: go-cli
-        run: go test -race -count=1 ./...
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! go test -race -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/go-cli.log"; then
+            grep -E -- '--- FAIL|^panic:|_test\.go:[0-9]+:' "$RUNNER_TEMP/go-cli.log" | head -10 | sed 's/^[[:space:]]*/::error title=go-cli test::/'
+            exit 1
+          fi
       - name: Test studio domain with race detector
+        if: ${{ !cancelled() }}
         working-directory: image-studio
-        run: go test -race -count=3 -v ./backend/studio/...
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! go test -race -count=3 -v ./backend/studio/... 2>&1 | tee "$RUNNER_TEMP/studio.log"; then
+            grep -E -- '--- FAIL|^panic:|_test\.go:[0-9]+:' "$RUNNER_TEMP/studio.log" | head -10 | sed 's/^[[:space:]]*/::error title=Studio test::/'
+            exit 1
+          fi
       - name: Test desktop bindings
+        if: ${{ !cancelled() }}
         working-directory: image-studio
-        run: go test -race -count=1 ./backend/
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! go test -race -count=1 ./backend/ 2>&1 | tee "$RUNNER_TEMP/backend.log"; then
+            grep -E -- '--- FAIL|^panic:|_test\.go:[0-9]+:' "$RUNNER_TEMP/backend.log" | head -10 | sed 's/^[[:space:]]*/::error title=Desktop binding test::/'
+            exit 1
+          fi
       - name: Install frontend
         if: always()
         working-directory: image-studio/frontend
@@ -89,10 +111,13 @@ jobs:
           cp src/studio/Canvas.tsx studio-evidence/Canvas.tsx.txt
           set -o pipefail
           npx tsc --noEmit --pretty false 2>&1 | tee studio-evidence/typecheck.log
+      # A failing Go test must not hide the frontend and browser results.
       - name: Build frontend
+        if: ${{ !cancelled() }}
         working-directory: image-studio/frontend
         run: npm run build
       - name: Check Windows desktop integration
+        if: ${{ !cancelled() }}
         working-directory: image-studio
         env:
           GOOS: windows
@@ -100,6 +125,7 @@ jobs:
           CGO_ENABLED: '0'
         run: go build -o /tmp/image-studio-check.exe .
       - name: Verify maintained desktop dependencies
+        if: ${{ !cancelled() }}
         working-directory: image-studio
         shell: bash
         env:
@@ -114,12 +140,14 @@ jobs:
             exit 1
           fi
       - name: Install browser verification tools
+        if: ${{ !cancelled() }}
         working-directory: image-studio/frontend
         run: |
           npm install --no-save --package-lock=false playwright@1.55.1
           npx playwright install --with-deps chromium
           sudo apt-get install -y fonts-noto-cjk
       - name: Browser interactions and screenshots
+        if: ${{ !cancelled() }}
         working-directory: image-studio/frontend
         run: node scripts/studio-browser-smoke.mjs
       - uses: actions/upload-artifact@v4
