@@ -1,6 +1,9 @@
 package client
 
-import "errors"
+import (
+	"errors"
+	"net/http"
+)
 
 const (
 	BaseURL                  = "" // 不再内置默认上游;调用方必须显式提供 Options.BaseURL
@@ -243,6 +246,16 @@ type Options struct {
 	// AutoRetryCount controls how many extra retry attempts should be issued
 	// after the initial request. Values <= 0 fall back to DefaultAutoRetryCount.
 	AutoRetryCount int
+
+	// HTTPClient, when set, sends Images API and Google Interactions requests
+	// (and URL downloads) instead of a client built from Proxy and
+	// AllowInsecureConnection. Callers use it to apply their own network policy.
+	HTTPClient *http.Client
+
+	// DeferURLDownload returns an image delivered as a URL in ImageResult.URL
+	// instead of downloading it, so the caller can persist the link first and
+	// download it with its own policy.
+	DeferURLDownload bool
 }
 
 // EffectiveImageDataURLs returns the merged list, deduplicating empty entries.
@@ -264,6 +277,9 @@ type ImageResult struct {
 	ImageB64      string
 	RevisedPrompt string
 	SourceEvent   string // "final" | "partial" | "json" | "images_api"
+	// URL is set instead of ImageB64 when Options.DeferURLDownload is set and
+	// the upstream delivered the image as a link.
+	URL string
 }
 
 type PartialImage struct {

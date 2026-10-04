@@ -1,20 +1,22 @@
-import {lazy, Suspense, useCallback, useRef, useState} from 'react';
-import {usePlatform} from '../platform/context';
-import {StudioApp} from './StudioApp';
-import {DraftSaveContext, type DraftSaver} from './DraftSaveContext';
-import './studio.css';
-import './polish.css';
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { usePlatform } from "../platform/context";
+import { StudioApp } from "./StudioApp";
+import { DraftSaveContext, type DraftSaver } from "./DraftSaveContext";
+import "./studio.css";
+import "./polish.css";
 
-const ClassicApp = lazy(() => import('../app/App'));
+const ClassicApp = lazy(() => import("../app/App"));
 
 export default function StudioRoot() {
-  const {isAndroid, isMac} = usePlatform();
+  const { isAndroid, isMac } = usePlatform();
   const [classic, setClassic] = useState(false);
   const saver = useRef<DraftSaver>();
   const switching = useRef(false);
   const registerSaver = useCallback((save: DraftSaver) => {
     saver.current = save;
-    return () => {if (saver.current === save) saver.current = undefined;};
+    return () => {
+      if (saver.current === save) saver.current = undefined;
+    };
   }, []);
   const enterClassic = async () => {
     if (switching.current) return;
@@ -32,14 +34,22 @@ export default function StudioRoot() {
     }
   };
   if (isAndroid || classic) {
-    return <>
-      <Suspense fallback={<div className="studio-loading">正在打开经典编辑器…</div>}>
-        <ClassicApp/>
-      </Suspense>
-      {!isAndroid && <button className="studio-return" onClick={() => setClassic(false)}>返回新版工作室</button>}
-    </>;
+    return (
+      <>
+        <Suspense fallback={<div className="studio-loading">正在打开经典编辑器…</div>}>
+          <ClassicApp />
+        </Suspense>
+        {!isAndroid && (
+          <button className="studio-return" onClick={() => setClassic(false)}>
+            返回新版工作室
+          </button>
+        )}
+      </>
+    );
   }
-  return <DraftSaveContext.Provider value={registerSaver}>
-    <StudioApp isMac={isMac} onClassic={enterClassic}/>
-  </DraftSaveContext.Provider>;
+  return (
+    <DraftSaveContext.Provider value={registerSaver}>
+      <StudioApp isMac={isMac} onClassic={enterClassic} />
+    </DraftSaveContext.Provider>
+  );
 }

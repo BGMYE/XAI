@@ -10,7 +10,9 @@ const explicitOutDir = (process.env.VITE_OUT_DIR ?? "").trim();
 
 function manualChunks(id: string) {
   if (id.includes("/wailsjs/")) return "wails-runtime";
-  if (id.includes("/src/platform/android/") || id.includes("/src/platform/desktop/")) return "platform-ui";
+  // Android modules are left to default chunking: the Android shell and its
+  // styles then load only on Android targets.
+  if (id.includes("/src/platform/desktop/")) return "platform-ui";
   if (id.includes("/node_modules/")) {
     if (id.includes("/react-konva/") || id.includes("/konva/")) return "canvas-vendor";
     if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) return "react-vendor";

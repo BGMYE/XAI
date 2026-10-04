@@ -102,14 +102,14 @@ func main() {
 				DarkModeTitleBarInactive:   wailswindows.RGB(38, 38, 38),
 				DarkModeTitleText:          wailswindows.RGB(245, 245, 245),
 				DarkModeTitleTextInactive:  wailswindows.RGB(200, 200, 200),
-				DarkModeBorder:            wailswindows.RGB(54, 54, 54),
-				DarkModeBorderInactive:    wailswindows.RGB(45, 45, 45),
+				DarkModeBorder:             wailswindows.RGB(54, 54, 54),
+				DarkModeBorderInactive:     wailswindows.RGB(45, 45, 45),
 				LightModeTitleBar:          wailswindows.RGB(243, 243, 243),
 				LightModeTitleBarInactive:  wailswindows.RGB(237, 237, 237),
 				LightModeTitleText:         wailswindows.RGB(31, 31, 31),
 				LightModeTitleTextInactive: wailswindows.RGB(96, 96, 96),
-				LightModeBorder:           wailswindows.RGB(219, 219, 219),
-				LightModeBorderInactive:   wailswindows.RGB(226, 226, 226),
+				LightModeBorder:            wailswindows.RGB(219, 219, 219),
+				LightModeBorderInactive:    wailswindows.RGB(226, 226, 226),
 			},
 		}
 	}

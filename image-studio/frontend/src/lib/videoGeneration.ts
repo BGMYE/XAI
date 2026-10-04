@@ -32,6 +32,7 @@ export function videoResultError(result: { error?: string; status?: string }): s
 
 export function videoResultSource(result: { url?: string; b64_json?: string }): string {
   const directURL = result.url?.trim();
+  if (directURL && /^\/studio-media\/[a-zA-Z0-9_-]+$/.test(directURL)) return directURL;
   if (directURL) {
     try {
       const parsed = new URL(directURL);

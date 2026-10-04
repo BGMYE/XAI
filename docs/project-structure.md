@@ -29,7 +29,7 @@ image-studio/
 └── go.mod
 ```
 
-`backend/studio/` 负责新版工作室的项目仓储、系统凭据引用、图片/视频任务、异步轮询、DAG 调度及素材回填；`backend/studio_v2.go` 提供薄 Wails 绑定。`frontend/src/studio/` 负责新版界面和无限画布。
+`backend/studio/` 负责新版工作室的项目仓储、系统凭据引用、图片/视频任务、异步轮询、DAG 调度及素材回填，并保存新版工作室与经典编辑共用的上游配置；OpenAI 兼容图像请求复用 `go-cli/pkg/client`。`backend/studio_v2.go` 提供薄 Wails 绑定。`frontend/src/studio/` 负责新版界面和无限画布，`frontend/src/lib/upstreamRegistry.ts` 让经典编辑在桌面端读写同一份上游配置。
 
 `backend/` 中保留的经典编辑器服务也暴露 Wails bindings:
 

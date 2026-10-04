@@ -194,7 +194,7 @@ func optimizePromptWithLLM(
 		return "", fmt.Errorf("marshal prompt optimization payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/v1/responses", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.OpenAIAPIEndpoint(baseURL, "responses"), bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +207,9 @@ func optimizePromptWithLLM(
 	if err != nil {
 		return "", err
 	}
-	httpClient := &http.Client{Timeout: 3 * time.Minute, Transport: transport}
+	httpClient := &http.Client{Timeout: 3 * time.Minute, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err

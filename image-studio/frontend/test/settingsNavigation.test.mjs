@@ -20,16 +20,16 @@ globalThis[bridgeKey] = {
 };
 const bridge = `globalThis.${bridgeKey}`;
 const mocks = new Map(Object.entries({
-  "../../state/studioStore": `export const useStudioStore = ${bridge}.useStudioStore;`,
+  "../../state/studioStore": `export const useStudioStore = ${bridge}.useStudioStore;
+    export const useStudioState = () => ${bridge}.useStudioStore();`,
+  "../../state/studioStore.profiles": 'export const readAPIKey = async () => "configured-key";',
   "../../platform/context": "export const usePlatform = () => ({ isMac: false, usesFluentUI: true, isAndroid: false, isAndroidPad: false });",
   "../../platform/runtime/host": `export const GetOutputDir = async () => "C:/test-output";
     export const OpenOutputDir = ${bridge}.unexpectedAction, OpenExternalURL = OpenOutputDir,
     ChooseOutputDir = OpenOutputDir, SetOutputDir = OpenOutputDir,
-    GetStoredAPIKey = async () => "configured-key",
     probeCurrentUpstream = async () => ({ models: [], modelCount: 0 });`,
   "../common/Modal": 'import { createElement } from "react"; export const Modal = ({ open, children, bodyRef }) => open ? createElement("div", { role: "dialog", ref: bodyRef }, children) : null;',
   "../../lib/storage": `export const rememberTrustedOutputRoot = ${bridge}.unexpectedAction;`,
-  "../../lib/profiles": "export const keyringUserFor = (id) => `profile:${id}`;",
   "../../lib/compatState": `export const scheduleCompatibilityExport = ${bridge}.unexpectedAction;`,
   "../../platform": 'export const platformOutputRootLabel = () => "C:/test-output";',
   "../../platform/android/bridge": `export const androidTarget = { isAndroid: false };

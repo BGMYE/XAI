@@ -316,17 +316,8 @@ func TestRequestImagesAPIWithRetriesRetriesWhenOnlyPartialPreviewArrives(t *test
 			partials = append(partials, partial)
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if hits != 2 {
-		t.Fatalf("hits = %d, want 2", hits)
-	}
-	if res.ImageB64 != finalB64 || res.SourceEvent != "images_api" {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-	if len(partials) != 1 || partials[0].ImageB64 != partialB64 {
-		t.Fatalf("unexpected partials: %+v", partials)
+	if err == nil || hits != 1 {
+		t.Fatalf("partial generation replayed: hits=%d result=%+v err=%v", hits, res, err)
 	}
 }
 
@@ -599,3 +590,119 @@ func TestRequestImagesAPISendsDalle3Style(t *testing.T) {
 		t.Fatalf("request body missing style=natural: %s", requestBody)
 	}
 }
+
+func TestRequestImagesAPICanDeferURLDownload(t *testing.T) {
+	var downloads int
+	var imageURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"data":[{"url":%q,"revised_prompt":"cat revised"}]}`, imageURL)
+		default:
+			downloads++
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	imageURL = srv.URL + "/image.png"
+
+	res, err := RequestImagesAPIWithPartial(context.Background(), Options{
+		APIKey:           "sk-test",
+		Prompt:           "cat",
+		BaseURL:          srv.URL,
+		APIMode:          APIModeImages,
+		ImageModelID:     "relay-image-model",
+		DeferURLDownload: true,
+	}, &bytes.Buffer{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.URL != imageURL || res.ImageB64 != "" || res.RevisedPrompt != "cat revised" || downloads != 0 {
+		t.Fatalf("result = %+v, downloads = %d", res, downloads)
+	}
+}
+
+func TestRequestImagesAPIUsesInjectedHTTPClient(t *testing.T) {
+	finalB64 := base64.StdEncoding.EncodeToString([]byte("final"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Injected") != "yes" {
+			http.Error(w, "missing marker", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, finalB64)
+	}))
+	defer srv.Close()
+
+	injected := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		r = r.Clone(r.Context())
+		r.Header.Set("X-Injected", "yes")
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	res, err := RequestImagesAPIWithPartial(context.Background(), Options{
+		APIKey:     "sk-test",
+		Prompt:     "cat",
+		BaseURL:    srv.URL,
+		APIMode:    APIModeImages,
+		HTTPClient: injected,
+	}, &bytes.Buffer{}, nil, nil)
+	if err != nil || res.ImageB64 != finalB64 {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+}
+
+func TestRequestImagesAPIReportsStatusCode(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		body        string
+		status      int
+		message     string
+	}{
+		{"json error", "application/json", `{"error":{"message":"bad size"}}`, http.StatusBadRequest, "上游返回 400:bad size"},
+		{"html gateway", "text/html", "<html>524</html>", 524, "上游返回 HTTP 524: <html>524</html>"},
+		{"event stream", "text/event-stream", "data: {\"type\":\"error\"}\n", http.StatusBadGateway, "上游返回 HTTP 502"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tc.contentType)
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer srv.Close()
+			_, err := RequestImagesAPIWithPartial(context.Background(), Options{
+				APIKey: "sk-test", Prompt: "cat", BaseURL: srv.URL, APIMode: APIModeImages,
+			}, &bytes.Buffer{}, nil, nil)
+			var statusErr *HTTPStatusError
+			if !errors.As(err, &statusErr) || statusErr.StatusCode != tc.status || err.Error() != tc.message {
+				t.Fatalf("err = %#v", err)
+			}
+		})
+	}
+}
+
+func TestRequestImagesAPIKeepsTheVersionOfAnOpenAIV1Base(t *testing.T) {
+	finalB64 := base64.StdEncoding.EncodeToString([]byte("final"))
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, finalB64)
+	}))
+	defer srv.Close()
+	for _, base := range []string{srv.URL + "/openai/v1", srv.URL + "/v1", srv.URL} {
+		if _, err := RequestImagesAPIWithPartial(context.Background(), Options{
+			APIKey: "sk-test", Prompt: "cat", BaseURL: base, APIMode: APIModeImages,
+		}, &bytes.Buffer{}, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if strings.Join(paths, " ") != "/openai/v1/images/generations /v1/images/generations /v1/images/generations" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

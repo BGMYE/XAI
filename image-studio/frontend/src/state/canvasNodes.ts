@@ -6,6 +6,7 @@ export interface CanvasNode {
   id: string;
   type: CanvasNodeType;
   mediaId?: string;
+  assetId?: string;
   src?: string;
   label?: string;
   x: number;
@@ -65,6 +66,7 @@ export function createCanvasNode(input: Partial<CanvasNode> & Pick<CanvasNode, "
     id: input.id,
     type: input.type,
     mediaId: input.mediaId,
+    ...(input.assetId ? { assetId: input.assetId } : {}),
     src: input.src,
     label: input.label,
     x: input.x ?? 0,

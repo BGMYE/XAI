@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yuanhua/image-gptcodex/pkg/client"
@@ -32,8 +31,10 @@ import (
 // Service is the Wails-bound struct. Methods on it are exposed to the frontend
 // via runtime/window/bindings.
 type Service struct {
-	ctx context.Context
+	studio *StudioV2
+	ctx    context.Context
 
+	thumbMu                   sync.Mutex
 	mu                        sync.Mutex
 	jobs                      map[string]*job
 	runningByAPIMode          map[string]int
@@ -224,6 +225,19 @@ func (s *Service) OptimizePrompt(opts PromptOptimizeOptions) (string, error) {
 	if s.ctx == nil {
 		return "", errors.New("服务未启动")
 	}
+	if opts.ProfileID != "" {
+		e, err := s.sharedEngine()
+		if err != nil {
+			return "", err
+		}
+		p, key, err := e.ProfileCredentials(opts.ProfileID)
+		if err != nil {
+			return "", err
+		}
+		opts.APIKey, opts.BaseURL, opts.TextModelID, opts.AllowInsecureConnection = key, p.BaseURL, p.TextModel, p.AllowInsecure
+		n := e.Network()
+		opts.ProxyMode, opts.ProxyURL = n.ProxyMode, n.ProxyURL
+	}
 	if strings.TrimSpace(opts.APIKey) == "" {
 		return "", errors.New("API Key 不能为空")
 	}
@@ -234,7 +248,7 @@ func (s *Service) OptimizePrompt(opts PromptOptimizeOptions) (string, error) {
 	if operation == "describe" && len(opts.collectPaths()) == 0 {
 		return "", errors.New("图片反推必须提供画布图片")
 	}
-	baseURL, err := client.ValidateBaseURLWithSecurity(opts.BaseURL, opts.AllowInsecureConnection)
+	baseURL, err := client.ValidateAPIBaseURL(opts.BaseURL, opts.AllowInsecureConnection)
 	if err != nil {
 		return "", err
 	}
@@ -257,12 +271,17 @@ func (s *Service) OptimizePrompt(opts PromptOptimizeOptions) (string, error) {
 // Cancel terminates a running job. Safe to call with unknown IDs.
 func (s *Service) Cancel(jobID string) error {
 	s.mu.Lock()
-	j, ok := s.jobs[jobID]
-	s.mu.Unlock()
-	if !ok {
-		return nil
+	defer s.mu.Unlock()
+	if j := s.jobs[jobID]; j != nil {
+		j.cancel()
 	}
-	j.cancel()
+	if e, err := s.sharedEngine(); err == nil {
+		if _, exists := e.Job(jobID); exists {
+			if err = e.Cancel(jobID); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -283,8 +302,12 @@ func (o GenerateOptions) collectPaths() []string {
 // --- Internal job lifecycle ------------------------------------------------
 
 func (s *Service) startJob(opts GenerateOptions) (JobStarted, error) {
-	if strings.TrimSpace(opts.APIKey) == "" {
-		return JobStarted{}, errors.New("API Key 不能为空")
+	e, err := s.sharedEngine()
+	if err != nil {
+		return JobStarted{}, err
+	}
+	if strings.TrimSpace(opts.ProfileID) == "" {
+		return JobStarted{}, errors.New("请选择共享上游配置")
 	}
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return JobStarted{}, errors.New("提示词/修改要求不能为空")
@@ -319,6 +342,26 @@ func (s *Service) startJob(opts GenerateOptions) (JobStarted, error) {
 	s.runningByAPIMode[apiMode]++
 	s.mu.Unlock()
 
+	r, err := s.classicRequest(e, opts, jobID)
+	if err == nil {
+		// Cancel uses the same lock, so it cannot miss a submission between
+		// the context check and publication into the durable queue.
+		s.mu.Lock()
+		err = ctx.Err()
+		if err == nil {
+			_, err = e.Submit(r)
+		}
+		s.mu.Unlock()
+	}
+	if err != nil {
+		cancel()
+		s.mu.Lock()
+		delete(s.jobs, jobID)
+		s.runningByAPIMode[apiMode]--
+		s.mu.Unlock()
+		close(done)
+		return JobStarted{}, err
+	}
 	go s.runJob(ctx, jobID, opts, done)
 
 	return JobStarted{JobID: jobID}, nil
@@ -326,286 +369,6 @@ func (s *Service) startJob(opts GenerateOptions) (JobStarted, error) {
 
 func (s *Service) canStartJobLocked(apiMode string, limit int) bool {
 	return limit <= 0 || s.runningByAPIMode[apiMode] < limit
-}
-
-func (s *Service) runJob(ctx context.Context, jobID string, opts GenerateOptions, done chan struct{}) {
-	defer close(done)
-	defer func() {
-		s.mu.Lock()
-		if j, ok := s.jobs[jobID]; ok {
-			if s.runningByAPIMode[j.apiMode] > 0 {
-				s.runningByAPIMode[j.apiMode]--
-			}
-			delete(s.jobs, jobID)
-		}
-		s.mu.Unlock()
-	}()
-
-	mode := client.ModeGenerate
-	if opts.Mode == "edit" {
-		mode = client.ModeEdit
-	}
-
-	apiMode := client.APIMode(opts.APIMode)
-	if apiMode == "" {
-		apiMode = client.APIModeResponses
-	}
-	fallbackAPIMode := client.APIModeResponses
-	if opts.FallbackProfile != nil && strings.TrimSpace(opts.FallbackProfile.APIMode) != "" {
-		fallbackAPIMode = client.APIMode(strings.TrimSpace(opts.FallbackProfile.APIMode))
-		if fallbackAPIMode == "" {
-			fallbackAPIMode = client.APIModeResponses
-		}
-	}
-
-	clientOpts := client.Options{
-		APIKey:                  opts.APIKey,
-		Prompt:                  opts.Prompt,
-		Mode:                    mode,
-		Size:                    opts.Size,
-		Quality:                 opts.Quality,
-		OutputFormat:            opts.OutputFormat,
-		MaskB64:                 opts.MaskB64,
-		Seed:                    opts.Seed,
-		NegativePrompt:          opts.NegativePrompt,
-		Background:              opts.Background,
-		OutputCompression:       opts.OutputCompression,
-		InputFidelity:           opts.InputFidelity,
-		ImageStyle:              opts.ImageStyle,
-		Moderation:              opts.Moderation,
-		UserIdentifier:          opts.UserIdentifier,
-		BaseURL:                 opts.BaseURL,
-		TextModelID:             opts.TextModelID,
-		ImageModelID:            opts.ImageModelID,
-		ReasoningEffort:         opts.ReasoningEffort,
-		Proxy:                   client.ProxyConfig{Mode: opts.ProxyMode, URL: opts.ProxyURL},
-		APIMode:                 apiMode,
-		ResponsesTransport:      client.ResponsesTransport(strings.TrimSpace(opts.ResponsesTransport)),
-		RequestPolicy:           client.RequestPolicy(strings.TrimSpace(opts.RequestPolicy)),
-		ImagesNewAPICompat:      opts.ImagesNewAPICompat,
-		AllowInsecureConnection: opts.AllowInsecureConnection,
-		NoPromptRevision:        opts.NoPromptRevision,
-		DisablePreview:          opts.DisablePreview,
-		AutoRetryEnabled:        &opts.AutoRetryEnabled,
-		AutoRetryCount:          opts.AutoRetryCount,
-		PartialImages:           client.DefaultPartialImages,
-	}
-	if opts.PartialImages > 0 {
-		clientOpts.PartialImages = opts.PartialImages
-	}
-	var fallbackClientOpts *client.Options
-	if opts.AutoRetryEnabled &&
-		opts.FallbackProfile != nil &&
-		strings.TrimSpace(opts.FallbackProfile.APIKey) != "" &&
-		strings.TrimSpace(opts.FallbackProfile.BaseURL) != "" {
-		fallbackClientOpts = &client.Options{
-			APIKey:                  strings.TrimSpace(opts.FallbackProfile.APIKey),
-			Prompt:                  opts.Prompt,
-			Mode:                    mode,
-			Size:                    opts.Size,
-			Quality:                 opts.Quality,
-			OutputFormat:            opts.OutputFormat,
-			MaskB64:                 opts.MaskB64,
-			Seed:                    opts.Seed,
-			NegativePrompt:          opts.NegativePrompt,
-			Background:              opts.Background,
-			OutputCompression:       opts.OutputCompression,
-			InputFidelity:           opts.InputFidelity,
-			ImageStyle:              opts.ImageStyle,
-			Moderation:              opts.Moderation,
-			UserIdentifier:          opts.UserIdentifier,
-			BaseURL:                 strings.TrimSpace(opts.FallbackProfile.BaseURL),
-			TextModelID:             strings.TrimSpace(opts.FallbackProfile.TextModelID),
-			ImageModelID:            strings.TrimSpace(opts.FallbackProfile.ImageModelID),
-			ReasoningEffort:         strings.TrimSpace(opts.FallbackProfile.ReasoningEffort),
-			Proxy:                   client.ProxyConfig{Mode: opts.ProxyMode, URL: opts.ProxyURL},
-			APIMode:                 fallbackAPIMode,
-			ResponsesTransport:      client.ResponsesTransport(strings.TrimSpace(opts.FallbackProfile.ResponsesTransport)),
-			RequestPolicy:           client.RequestPolicy(strings.TrimSpace(opts.FallbackProfile.RequestPolicy)),
-			ImagesNewAPICompat:      opts.FallbackProfile.ImagesNewAPICompat,
-			AllowInsecureConnection: opts.FallbackProfile.AllowInsecureConnection,
-			NoPromptRevision:        opts.NoPromptRevision,
-			DisablePreview:          opts.DisablePreview,
-			AutoRetryEnabled:        &opts.AutoRetryEnabled,
-			AutoRetryCount:          opts.AutoRetryCount,
-			PartialImages:           clientOpts.PartialImages,
-		}
-	}
-	if mode == client.ModeEdit {
-		paths, cleanup, prepErr := prepareUploadSourcePaths(opts.collectPaths())
-		if prepErr != nil {
-			s.emitError(jobID, prepErr)
-			return
-		}
-		defer cleanup()
-		clientOpts.ImagePaths = paths
-		if fallbackClientOpts != nil {
-			fallbackClientOpts.ImagePaths = paths
-		}
-		// Responses API 仍需 data URL(走 input_image 形态);
-		// Images API 直接 multipart 上传文件,跳过 base64 编码节省往返开销。
-		if apiMode == client.APIModeResponses || (fallbackClientOpts != nil && fallbackClientOpts.APIMode == client.APIModeResponses) {
-			urls := make([]string, 0, len(paths))
-			for _, p := range paths {
-				dataURL, err := client.ImageFileToDataURL(p)
-				if err != nil {
-					s.emitError(jobID, fmt.Errorf("加载源图片 %s 失败:%w", filepath.Base(p), err))
-					return
-				}
-				urls = append(urls, dataURL)
-			}
-			clientOpts.ImageDataURLs = urls
-			if fallbackClientOpts != nil && fallbackClientOpts.APIMode == client.APIModeResponses {
-				fallbackClientOpts.ImageDataURLs = urls
-			}
-		}
-	}
-
-	transport, err := client.PickTransportWithProxyAndSecurity(clientOpts.Proxy, clientOpts.AllowInsecureConnection)
-	if err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-
-	rootDir, err := s.resolvedOutputDir()
-	if err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-	// 拆 PNG 和 raw response 到两个子目录,避免单目录文件混杂。
-	imagesDir := imagesSubdir(rootDir)
-	thumbsDir := thumbsSubdir(rootDir)
-	previewsDir := previewsSubdir(rootDir)
-	logDir := logSubdir(rootDir)
-	if err := os.MkdirAll(imagesDir, secureDirMode); err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-	if err := os.MkdirAll(thumbsDir, secureDirMode); err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-	if err := os.MkdirAll(previewsDir, secureDirMode); err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-	if err := os.MkdirAll(logDir, secureDirMode); err != nil {
-		s.emitError(jobID, err)
-		return
-	}
-
-	// ★ 文件名时间戳精度只到秒,9 并发 batch 同一秒触发 → 9 个 savedPath 完全
-	// 一样,os.WriteFile 互相覆盖,前 8 张图被最后一个 job 写的覆盖掉,前端拿
-	// HistoryItem.savedPath 去磁盘读永远是同一张图。塞 6 字符 jobID 后缀让 PNG
-	// 和 sse-response/images-response 日志文件都唯一。
-	timestamp := time.Now().Format("20060102-150405")
-	if len(jobID) >= 6 {
-		timestamp = timestamp + "-" + jobID[:6]
-	}
-	logFn := func(msg string) {
-		runtime.EventsEmit(s.ctx, "log:"+jobID, msg)
-	}
-	progressFn := func(stage string, elapsed int, bytes int64) {
-		runtime.EventsEmit(s.ctx, "progress:"+jobID, ProgressPayload{
-			Stage: stage, Elapsed: elapsed, Bytes: bytes,
-		})
-	}
-	previewFn := func(partial client.PartialImage) {
-		payload := PreviewPayload{
-			RevisedPrompt:     partial.RevisedPrompt,
-			PartialImageIndex: partial.PartialImageIndex,
-			Mode:              string(mode),
-			Prompt:            opts.Prompt,
-		}
-		if strings.TrimSpace(partial.ImageB64) == "" {
-			return
-		}
-		previewName := fmt.Sprintf("preview-%s-%03d-%d.avif", timestamp, partial.PartialImageIndex, time.Now().UnixNano())
-		previewPath := filepath.Join(previewsDir, previewName)
-		previewW, previewH, previewErr := createAVIFThumbnailFromBase64(partial.ImageB64, previewPath, mediaPreviewMaxEdge)
-		if previewErr != nil {
-			logFn(fmt.Sprintf("生成中间预览 AVIF 失败:%v", previewErr))
-			return
-		}
-		asset, mediaErr := s.registerPreviewMedia(previewPath, previewW, previewH)
-		if mediaErr != nil {
-			logFn(fmt.Sprintf("登记中间预览失败:%v", mediaErr))
-			return
-		}
-		payload.ImageID = asset.ID
-		payload.PreviewURL = asset.PreviewURL
-		payload.PreviewWidth = asset.PreviewWidth
-		payload.PreviewHeight = asset.PreviewHeight
-		runtime.EventsEmit(s.ctx, "preview:"+jobID, PreviewPayload{
-			ImageID:           payload.ImageID,
-			PreviewURL:        payload.PreviewURL,
-			PreviewWidth:      payload.PreviewWidth,
-			PreviewHeight:     payload.PreviewHeight,
-			RevisedPrompt:     payload.RevisedPrompt,
-			PartialImageIndex: payload.PartialImageIndex,
-			Mode:              payload.Mode,
-			Prompt:            payload.Prompt,
-		})
-	}
-
-	// raw response(SSE 文本 / Images API JSON)落到 log 子目录;PNG 落到 images 子目录。
-	result, rawPath, err := client.RequestAndExtractWithRetriesAndPartial(
-		ctx, transport, clientOpts, logDir, timestamp, logFn, progressFn, previewFn,
-	)
-	if err != nil && fallbackClientOpts != nil && shouldRouteFallbackAttempt(err, rawPath) {
-		logFn("主上游自动重试失败，切换到备用上游再试一次...")
-		fallbackTimestamp := timestamp + "-fallback"
-		fallbackTransport, transportErr := client.PickTransportWithProxyAndSecurity(fallbackClientOpts.Proxy, fallbackClientOpts.AllowInsecureConnection)
-		if transportErr != nil {
-			s.emitError(jobID, transportErr)
-			return
-		}
-		result, rawPath, err = client.RequestAndExtractWithRetriesAndPartial(
-			ctx, fallbackTransport, *fallbackClientOpts, logDir, fallbackTimestamp, logFn, progressFn, previewFn,
-		)
-	}
-	if err != nil {
-		// 即使失败也把 rawPath 透给前端,「查看日志」按钮直接打开它。
-		s.emitErrorWithRaw(jobID, err, rawPath)
-		return
-	}
-
-	imageName := buildImageName(mode, opts.Prompt, timestamp, opts.OutputFormat)
-	savedPath := filepath.Join(imagesDir, imageName)
-	absSaved, werr := writeBase64PNG(result.ImageB64, savedPath)
-	if werr != nil {
-		s.emitErrorWithRaw(jobID, fmt.Errorf("保存结果图片失败:%w", werr), rawPath)
-		return
-	}
-	savedPath = absSaved
-	thumbName := strings.TrimSuffix(filepath.Base(imageName), filepath.Ext(imageName)) + ".avif"
-	thumbPath := filepath.Join(thumbsDir, thumbName)
-	thumbW, thumbH, thumbErr := createAVIFThumbnail(savedPath, thumbPath, mediaThumbMaxEdge)
-	if thumbErr != nil {
-		s.emitErrorWithRaw(jobID, fmt.Errorf("生成 AVIF 缩略图失败:%w", thumbErr), rawPath)
-		return
-	}
-	asset, mediaErr := s.registerGeneratedMedia(savedPath, thumbPath, thumbW, thumbH)
-	if mediaErr != nil {
-		s.emitErrorWithRaw(jobID, fmt.Errorf("登记本地图片失败:%w", mediaErr), rawPath)
-		return
-	}
-	absRaw, _ := filepath.Abs(rawPath)
-
-	runtime.EventsEmit(s.ctx, "result:"+jobID, ResultPayload{
-		RevisedPrompt: result.RevisedPrompt,
-		SourceEvent:   result.SourceEvent,
-		ImageID:       asset.ID,
-		SavedPath:     savedPath,
-		ThumbPath:     asset.ThumbPath,
-		PreviewURL:    asset.PreviewURL,
-		FullURL:       asset.FullURL,
-		PreviewWidth:  asset.PreviewWidth,
-		PreviewHeight: asset.PreviewHeight,
-		RawPath:       absRaw,
-		Mode:          string(mode),
-		Prompt:        opts.Prompt,
-	})
 }
 
 func (s *Service) emitError(jobID string, err error) {
@@ -648,34 +411,6 @@ func apiModeLabel(mode string) string {
 		return "Images API"
 	}
 	return "Responses API"
-}
-
-func shouldRouteFallbackAttempt(err error, rawPath string) bool {
-	if err == nil {
-		return false
-	}
-	if rawPath != "" {
-		if rawBytes, readErr := os.ReadFile(rawPath); readErr == nil && client.IsRetryable(string(rawBytes)) {
-			return true
-		}
-	}
-	lower := strings.ToLower(err.Error())
-	for _, marker := range []string{
-		"connection reset",
-		"eof",
-		"timeout",
-		"deadline exceeded",
-		"i/o timeout",
-		"tls handshake",
-		"no such host",
-		"upstream connect error",
-		"gateway",
-	} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 func newJobID() (string, error) {

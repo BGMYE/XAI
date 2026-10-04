@@ -1,7 +1,7 @@
-import type {Project, StudioNode, Viewport} from './types';
+import type { Project, StudioNode, Viewport } from "./types";
 export function uid(): string;
 export function clamp(n: number, min: number, max: number): number;
-export function zoomAt(view: Viewport, point: {x: number; y: number}, zoom: number): Viewport;
+export function zoomAt(view: Viewport, point: { x: number; y: number }, zoom: number): Viewport;
 export function fitNodes(nodes: StudioNode[], width: number, height: number): Viewport;
 export function orderGraph(project: Project): string[];
 export function connect(project: Project, from: string, to: string): Project;

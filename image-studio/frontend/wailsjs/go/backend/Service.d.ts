@@ -27,6 +27,8 @@ export function CreateVideo(arg1:backend.VideoOptions):Promise<backend.VideoResu
 
 export function CropImage(arg1:string,arg2:number,arg3:number,arg4:number,arg5:number):Promise<backend.ImageTransformResult>;
 
+export function DeleteGenerationHistory(arg1:Array<string>):Promise<void>;
+
 export function DeleteStoredAPIKey(arg1:string):Promise<void>;
 
 export function Edit(arg1:backend.GenerateOptions):Promise<backend.JobStarted>;
@@ -39,6 +41,8 @@ export function FlipImage(arg1:string,arg2:boolean):Promise<backend.ImageTransfo
 
 export function Generate(arg1:backend.GenerateOptions):Promise<backend.JobStarted>;
 
+export function GetGenerationHistory():Promise<Array<backend.ResultPayload>>;
+
 export function GetImagePromptsBaseURL():Promise<string>;
 
 export function GetOutputDir():Promise<string>;
@@ -48,6 +52,8 @@ export function GetStoredAPIKey(arg1:string):Promise<string>;
 export function HandlePromptImportArgs(arg1:Array<string>):Promise<void>;
 
 export function HandlePromptImportURL(arg1:string):Promise<void>;
+
+export function ImportClassicHistory(arg1:Array<backend.ClassicHistoryInput>):Promise<Array<backend.ClassicHistoryImport>>;
 
 export function ImportHistoryFromFile():Promise<string>;
 
@@ -104,6 +110,8 @@ export function SaveImagePathAs(arg1:string,arg2:string):Promise<string>;
 export function SaveImagePathToDir(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SaveImageToDir(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SetClassicAssetReferences(arg1:Array<string>):Promise<void>;
 
 export function SetCleanupPreviewCacheOnExitEnabled(arg1:boolean):Promise<void>;
 

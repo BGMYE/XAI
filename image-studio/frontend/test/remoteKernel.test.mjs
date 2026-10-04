@@ -29,7 +29,7 @@ test("remote kernel keeps remote HTTP behind the insecure-channel opt-in", async
   );
   assert.equal(
     common.validateRemoteBaseURL("http://relay.example.com/v1", true),
-    "http://relay.example.com",
+    "http://relay.example.com/v1",
   );
   assert.equal(
     common.validateRemoteBaseURL("http://127.0.0.1:8787", false),

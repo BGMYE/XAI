@@ -24,7 +24,7 @@ import {
   shouldUseGoogleNativeInteractions,
   supportsImagesResponseFormat,
 } from "../../../../../../shared/kernel/requestModel.js";
-import { normalizeBaseURL, normalizeImageModel } from "./common.ts";
+import { normalizeImageModel } from "./common.ts";
 import { RemoteKernelError, type RemoteGeneratePayload, type RemoteJobRequest } from "./types.ts";
 
 export type ImagesRequestProtocol = "openai-images" | "google-interactions";
@@ -87,7 +87,9 @@ export async function buildImagesRequestBody(
   request: RemoteJobRequest,
   sourceDataURLs: string[],
 ): Promise<{ url: string; headers?: Record<string, string>; body: BodyInit; protocol: ImagesRequestProtocol }> {
-  const baseURL = normalizeBaseURL(request.payload.baseURL);
+  // Image endpoints are joined to the base as entered (see openAIAPIEndpoint),
+  // so ".../openai/v1" keeps its version; only the trailing slash goes.
+  const baseURL = String(request.payload.baseURL ?? "").trim().replace(/\/+$/, "");
   const mode = request.payload.mode === "edit" ? "edit" : "generate";
   const imageModel = normalizeImageModel(request.payload.imageModelID);
   const size = request.payload.size || "1024x1024";

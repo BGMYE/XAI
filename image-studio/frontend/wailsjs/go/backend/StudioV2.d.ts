@@ -4,21 +4,41 @@ import {studio} from '../models';
 import {http} from '../models';
 import {context} from '../models';
 
+export function ArchiveJobs(arg1:number):Promise<string>;
+
 export function CancelJob(arg1:string):Promise<void>;
+
+export function ClearProfileKey(arg1:string):Promise<studio.Profile>;
+
+export function DeleteJob(arg1:string):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeletePromptCard(arg1:string,arg2:number):Promise<void>;
 
+export function DuplicateProfile(arg1:string):Promise<studio.Profile>;
+
+export function GetChanges(arg1:string,arg2:number):Promise<studio.ChangeSet>;
+
+export function GetProfileKey(arg1:string):Promise<string>;
+
 export function GetPublicPromptCatalog(arg1:string):Promise<string>;
 
 export function GetSnapshot():Promise<studio.Snapshot>;
+
+export function ImportClassicProfiles(arg1:Array<studio.Profile>):Promise<number>;
 
 export function ImportImage(arg1:string,arg2:string):Promise<studio.Asset>;
 
 export function ImportPromptCards(arg1:Array<studio.PromptCard>):Promise<Array<studio.PromptCard>>;
 
+export function ListProfiles():Promise<Array<studio.Profile>>;
+
 export function MediaHandler(arg1:http.Handler):Promise<http.Handler>;
+
+export function RestoreAsset(arg1:string):Promise<void>;
+
+export function RestoreProject(arg1:string):Promise<void>;
 
 export function ResumeJob(arg1:string):Promise<void>;
 
@@ -32,6 +52,8 @@ export function SaveProject(arg1:studio.Project):Promise<studio.Project>;
 
 export function SavePromptCard(arg1:studio.PromptCard):Promise<studio.PromptCard>;
 
+export function SetNetworkProxy(arg1:string,arg2:string):Promise<studio.NetworkSettings>;
+
 export function Shutdown(arg1:context.Context):Promise<void>;
 
 export function Startup(arg1:context.Context):Promise<void>;
@@ -39,3 +61,7 @@ export function Startup(arg1:context.Context):Promise<void>;
 export function SubmitGeneration(arg1:studio.Request):Promise<studio.Job>;
 
 export function TestProfile(arg1:string):Promise<Array<string>>;
+
+export function TrashAsset(arg1:string):Promise<void>;
+
+export function TrashProject(arg1:string):Promise<void>;

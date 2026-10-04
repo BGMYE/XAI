@@ -1,3 +1,5 @@
+import { useStudioStore } from "../../state/studioStore";
+import { profileHasKey } from "../../lib/upstreamRegistry";
 import {
   ChevronDown, ChevronRight, Clock3, CopyPlus, Filter, Image as ImageIcon, Loader2,
   Search, Settings2, Split, Trash2,
@@ -147,7 +149,7 @@ export function WindowsHistoryRail({
             <button
               type="button"
               onClick={() => void testAPIKey()}
-              disabled={!apiKey.trim() || !baseURL.trim() || isTestingKey}
+              disabled={!profileHasKey(useStudioStore.getState().activeProfileId, apiKey) || !baseURL.trim() || isTestingKey}
               className="platform-action-btn"
             >
               {isTestingKey ? "检查中..." : "测试"}

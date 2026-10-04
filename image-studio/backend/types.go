@@ -7,8 +7,9 @@ import "strings"
 // GenerateOptions is the request shape sent by the frontend.
 // Fields mirror client.Options but with friendlier names for TS.
 type GenerateOptions struct {
-	APIKey string `json:"apiKey"`
-	Mode   string `json:"mode"` // "generate" | "edit"
+	ProfileID string `json:"profileId"`
+	APIKey    string `json:"apiKey"`
+	Mode      string `json:"mode"` // "generate" | "edit"
 	// RequestedJobID allows the frontend to pre-bind event listeners before
 	// dispatching the request, avoiding a race where a very fast result event
 	// arrives before the UI has attached `result:<jobId>` handlers.
@@ -86,6 +87,7 @@ type FallbackProfileOptions struct {
 
 // PromptOptimizeOptions is the request shape for one-click prompt revision.
 type PromptOptimizeOptions struct {
+	ProfileID               string   `json:"profileId"`
 	APIKey                  string   `json:"apiKey"`
 	Prompt                  string   `json:"prompt"`
 	Mode                    string   `json:"mode"`
@@ -102,6 +104,7 @@ type PromptOptimizeOptions struct {
 // and the actual /v1/models request are intentionally host-side so browser and
 // WebView quirks do not decide whether a channel is alive.
 type ProbeUpstreamOptions struct {
+	ProfileID               string `json:"profileId"`
 	APIKey                  string `json:"apiKey"`
 	BaseURL                 string `json:"baseURL"`
 	ProxyMode               string `json:"proxyMode"`
@@ -122,6 +125,7 @@ type ProbeUpstreamResult struct {
 // VideoOptions is the explicit external-video request contract. The backend
 // never infers or substitutes a video model.
 type VideoOptions struct {
+	ProfileID    string `json:"profileId"`
 	BaseURL      string `json:"baseURL"`
 	APIKey       string `json:"apiKey"`
 	VideoModelID string `json:"videoModelID"`
@@ -133,6 +137,7 @@ type VideoOptions struct {
 }
 
 type VideoPollOptions struct {
+	ProfileID    string `json:"profileId"`
 	BaseURL      string `json:"baseURL"`
 	APIKey       string `json:"apiKey"`
 	VideoID      string `json:"videoID"`
@@ -207,6 +212,12 @@ type ProgressPayload struct {
 
 // ResultPayload is emitted as `result:<jobId>`.
 type ResultPayload struct {
+	CreatedAt     string `json:"createdAt,omitempty"`
+	Size          string `json:"size,omitempty"`
+	Quality       string `json:"quality,omitempty"`
+	OutputFormat  string `json:"outputFormat,omitempty"`
+	AssetID       string `json:"assetId,omitempty"`
+	JobID         string `json:"jobId,omitempty"`
 	ImageB64      string `json:"imageB64,omitempty"`
 	RevisedPrompt string `json:"revisedPrompt"`
 	SourceEvent   string `json:"sourceEvent"`

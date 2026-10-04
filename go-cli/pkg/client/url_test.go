@@ -41,6 +41,48 @@ func TestValidateBaseURL(t *testing.T) {
 	}
 }
 
+func TestValidateBaseURLTrimsV1InAnyCase(t *testing.T) {
+	t.Parallel()
+
+	for raw, want := range map[string]string{
+		"https://relay.example.com/V1":   "https://relay.example.com",
+		"https://relay.example.com/v1/":  "https://relay.example.com",
+		"https://relay.example.com/v1x":  "https://relay.example.com/v1x",
+		"https://relay.example.com/v11":  "https://relay.example.com/v11",
+		"HTTPS://relay.example.com/x/V1": "https://relay.example.com/x",
+	} {
+		if got, err := ValidateBaseURL(raw); err != nil || got != want {
+			t.Errorf("ValidateBaseURL(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+}
+
+// Image endpoints are built from the base as entered: stripping "/v1" first
+// would turn ".../openai/v1" (Azure OpenAI v1, Groq) into a Gemini-style
+// ".../openai" root and drop the version from every endpoint.
+func TestImageEndpointsUseTheBaseAsEntered(t *testing.T) {
+	t.Parallel()
+
+	for raw, want := range map[string]string{
+		"https://relay.example.com":                           "https://relay.example.com/v1/images/generations",
+		"https://relay.example.com/V1/":                       "https://relay.example.com/V1/images/generations",
+		"https://api.groq.com/openai/v1":                      "https://api.groq.com/openai/v1/images/generations",
+		"https://res.openai.azure.com/openai/v1/":             "https://res.openai.azure.com/openai/v1/images/generations",
+		"https://gateway.ai.cloudflare.com/v1/acct/gw/openai": "https://gateway.ai.cloudflare.com/v1/acct/gw/openai/images/generations",
+	} {
+		base, err := ValidateAPIBaseURL(raw, false)
+		if err != nil {
+			t.Fatalf("ValidateAPIBaseURL(%q): %v", raw, err)
+		}
+		if got := OpenAIAPIEndpoint(base, "images/generations"); got != want {
+			t.Errorf("%q → %q, want %q", raw, got, want)
+		}
+	}
+	if _, err := ValidateAPIBaseURL("http://relay.example.com/v1", false); err == nil {
+		t.Fatal("remote http accepted without the insecure opt-in")
+	}
+}
+
 func TestValidateBaseURLWithSecurityAllowsRemoteHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +111,26 @@ func TestOpenAIAPIEndpointKeepsVersionedOpenAICompatibilityBase(t *testing.T) {
 	}
 	if got := openAIAPIEndpoint("https://relay.example.com/api", "/images/edits"); got != "https://relay.example.com/api/v1/images/edits" {
 		t.Fatalf("relay endpoint = %q", got)
+	}
+}
+
+func TestOpenAIAPIEndpointKeepsExplicitAPIVersions(t *testing.T) {
+	t.Parallel()
+
+	for base, want := range map[string]string{
+		"https://relay.example.com":                               "https://relay.example.com/v1/models",
+		"https://relay.example.com/v1":                            "https://relay.example.com/v1/models",
+		"https://relay.example.com/api/v1/":                       "https://relay.example.com/api/v1/models",
+		"https://ark.example.com/api/v3":                          "https://ark.example.com/api/v3/models",
+		"https://relay.example.com/v1beta":                        "https://relay.example.com/v1beta/models",
+		"https://relay.example.com/v2alpha1":                      "https://relay.example.com/v2alpha1/models",
+		"https://relay.example.com/video":                         "https://relay.example.com/video/v1/models",
+		"https://relay.example.com/v1x":                           "https://relay.example.com/v1x/v1/models",
+		"https://generativelanguage.googleapis.com/v1beta/openai": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+	} {
+		if got := OpenAIAPIEndpoint(base, "models"); got != want {
+			t.Errorf("OpenAIAPIEndpoint(%q) = %q, want %q", base, got, want)
+		}
 	}
 }
 

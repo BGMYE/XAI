@@ -125,13 +125,17 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	var imageDataURLs []string
+	if imageDataURL != "" {
+		imageDataURLs = []string{imageDataURL}
+	}
 	opts := client.Options{
-		APIKey:       *apiKey,
-		Prompt:       *prompt,
-		Mode:         resolvedMode,
-		Size:         *size,
-		Quality:      *quality,
-		ImageDataURL: imageDataURL,
+		APIKey:        *apiKey,
+		Prompt:        *prompt,
+		Mode:          resolvedMode,
+		Size:          *size,
+		Quality:       *quality,
+		ImageDataURLs: imageDataURLs,
 	}
 
 	logger := func(msg string) {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -184,7 +185,7 @@ func TestRequestAndExtractReportsProgressStageImmediately(t *testing.T) {
 	}
 }
 
-func TestRequestAndExtractWithRetriesRetriesWhenOnlyPartialPreviewArrives(t *testing.T) {
+func TestRequestAndExtractWithRetriesDoesNotRetryPartialPreview(t *testing.T) {
 	finalB64 := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nfinal"))
 	hits := 0
 	ev := func(m map[string]any) string {
@@ -241,18 +242,12 @@ func TestRequestAndExtractWithRetriesRetriesWhenOnlyPartialPreviewArrives(t *tes
 		nil,
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("err = %v", err)
-	}
-	if hits != 2 {
-		t.Fatalf("hits = %d, want 2", hits)
-	}
-	if res.ImageB64 != finalB64 || res.SourceEvent != "final" {
-		t.Fatalf("unexpected result: %+v", res)
+	if err == nil || hits != 1 || res.ImageB64 != "" {
+		t.Fatalf("ambiguous request replayed: hits=%d result=%+v error=%v", hits, res, err)
 	}
 }
 
-func TestRequestAndExtractWithRetries_RetryOn524(t *testing.T) {
+func TestRequestAndExtractWithRetries_DoesNotRetry524(t *testing.T) {
 	// First attempt returns Cloudflare 524 HTML (retryable); second attempt succeeds.
 	pngB64 := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nfake"))
 	hits := 0
@@ -299,14 +294,8 @@ func TestRequestAndExtractWithRetries_RetryOn524(t *testing.T) {
 		dir, "20260518-200001",
 		nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("err = %v", err)
-	}
-	if res.ImageB64 != pngB64 {
-		t.Errorf("image b64 mismatch on retry path")
-	}
-	if hits != 2 {
-		t.Errorf("hits = %d, want 2", hits)
+	if err == nil || hits != 1 || res.ImageB64 != "" {
+		t.Fatalf("ambiguous request replayed: hits=%d result=%+v error=%v", hits, res, err)
 	}
 }
 
@@ -350,7 +339,7 @@ func TestRequestAndExtractWithRetriesCanDisableAutoRetry(t *testing.T) {
 	}
 }
 
-func TestRequestAndExtractWithRetriesUsesConfiguredRetryCount(t *testing.T) {
+func TestRequestAndExtractWithRetriesDoesNotRetryServerError(t *testing.T) {
 	pngB64 := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nfake"))
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -394,14 +383,8 @@ func TestRequestAndExtractWithRetriesUsesConfiguredRetryCount(t *testing.T) {
 		dir, "20260609-100001",
 		nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("err = %v", err)
-	}
-	if res.ImageB64 != pngB64 {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-	if hits != 4 {
-		t.Fatalf("hits = %d, want 4", hits)
+	if err == nil || hits != 1 || res.ImageB64 != "" {
+		t.Fatalf("ambiguous request replayed: hits=%d result=%+v error=%v", hits, res, err)
 	}
 }
 
@@ -473,8 +456,8 @@ func TestRequestAndExtractWithRetriesRepairsInvalidSizeAndRetriesOnce(t *testing
 		body, _ := io.ReadAll(r.Body)
 		requestBodies = append(requestBodies, string(body))
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
 		if hits == 1 {
+			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, `{"error":{"message":"Invalid size '872x2048'. Width and height must both be divisible by 16.","type":"image_generation_user_error","param":"tools","code":"invalid_value"}}`)
 			return
 		}
@@ -772,5 +755,19 @@ func TestRequestResponsesWithWebSocketReplayFallsBackToSSEOnHandshakeFailure(t *
 	}
 	if !strings.Contains(raw.String(), "websocket-error-1") {
 		t.Fatalf("expected raw log to record websocket handshake failure, got %q", raw.String())
+	}
+}
+
+func TestNativeTransportReportsStatusCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, `{"error":{"message":"slow down"}}`)
+	}))
+	defer srv.Close()
+	err := (&NativeTransport{}).Stream(context.Background(), Request{URL: srv.URL, APIKey: "sk-test", Payload: []byte(`{}`)}, io.Discard, nil)
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusTooManyRequests || err.Error() != "upstream HTTP 429" {
+		t.Fatalf("err = %#v", err)
 	}
 }

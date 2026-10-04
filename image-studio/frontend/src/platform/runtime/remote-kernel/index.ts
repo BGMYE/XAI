@@ -8,7 +8,7 @@ import {
   isRetryableRaw,
   normalizeAPIMode,
   normalizeAutoRetryCount,
-  normalizeBaseURL,
+  openAIAPIEndpoint,
   repairSizeForOpenAI,
 } from "../../../../../../shared/kernel/requestModel.js";
 import {
@@ -158,7 +158,7 @@ export async function optimizePromptRemote(
     const dataURL = await sourceToDataURL(source);
     if (dataURL) sourceDataURLs.push(dataURL);
   }
-  const url = `${normalizeBaseURL(input.baseURL)}/v1/responses`;
+  const url = openAIAPIEndpoint(input.baseURL, "responses");
   const headers = {
     Authorization: `Bearer ${input.apiKey}`,
     "Content-Type": "application/json",

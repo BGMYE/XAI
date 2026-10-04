@@ -245,7 +245,8 @@ func RequestImagesAPIWithPartial(
 	if baseURL == "" {
 		return ImageResult{}, errors.New("未配置上游 BASE_URL,请在「设置 → 上游 BASE_URL」中填入兼容 OpenAI Images API 的中转站地址")
 	}
-	baseURL, err := ValidateBaseURLWithSecurity(baseURL, opts.AllowInsecureConnection)
+	// Endpoints are joined to the base as entered (see OpenAIAPIEndpoint).
+	baseURL, err := ValidateAPIBaseURL(baseURL, opts.AllowInsecureConnection)
 	if err != nil {
 		return ImageResult{}, err
 	}
@@ -376,13 +377,16 @@ func RequestImagesAPIWithPartial(
 	}
 	req.Header.Set("User-Agent", UserAgent())
 
-	transport, err := NewHTTPTransportWithSecurity(opts.Proxy, opts.AllowInsecureConnection)
-	if err != nil {
-		return ImageResult{}, err
-	}
-	httpClient := &http.Client{
-		Timeout:   8 * time.Minute,
-		Transport: transport,
+	httpClient := opts.HTTPClient
+	if httpClient == nil {
+		transport, err := NewHTTPTransportWithSecurity(opts.Proxy, opts.AllowInsecureConnection)
+		if err != nil {
+			return ImageResult{}, err
+		}
+		httpClient = &http.Client{
+			Timeout:   8 * time.Minute,
+			Transport: transport,
+		}
 	}
 
 	startedAt := time.Now()
@@ -408,13 +412,13 @@ func RequestImagesAPIWithPartial(
 	}
 	defer close(stopProgress)
 
-	resp, err := httpClient.Do(req)
+	resp, err := doGeneration(httpClient, req)
 	if err != nil {
 		return ImageResult{}, err
 	}
 	defer resp.Body.Close()
 	if useGoogleInteractions {
-		return readGoogleInteractionResponse(ctx, resp, httpClient, rawSink, onProgress, startedAt)
+		return readGoogleInteractionResponse(ctx, resp, httpClient, rawSink, onProgress, startedAt, opts.DeferURLDownload)
 	}
 
 	contentTypeHeader := strings.ToLower(resp.Header.Get("Content-Type"))
@@ -442,7 +446,7 @@ func RequestImagesAPIWithPartial(
 			return ImageResult{}, fmt.Errorf("read Images API stream: %w", err)
 		}
 		if resp.StatusCode/100 != 2 {
-			return ImageResult{}, fmt.Errorf("上游返回 HTTP %d", resp.StatusCode)
+			return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d", resp.StatusCode)
 		}
 		if result, ok := extractor.result(); ok {
 			return result, nil
@@ -463,7 +467,7 @@ func RequestImagesAPIWithPartial(
 					if len(bodyPreview) > 400 {
 						bodyPreview = bodyPreview[:400] + "..."
 					}
-					return ImageResult{}, fmt.Errorf("上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
+					return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
 				}
 				return ImageResult{}, ErrNoImageInResponse
 			}
@@ -477,7 +481,7 @@ func RequestImagesAPIWithPartial(
 				bodyPreview = bodyPreview[:400] + "..."
 			}
 			if resp.StatusCode/100 != 2 {
-				return ImageResult{}, fmt.Errorf("上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
+				return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
 			}
 			return ImageResult{}, fmt.Errorf("解析 Images API 响应失败:%w", err)
 		}
@@ -485,13 +489,13 @@ func RequestImagesAPIWithPartial(
 		// Non-2xx with JSON body — decode has already captured the structured error.
 		if resp.StatusCode/100 != 2 {
 			if parsed.Error != nil {
-				return ImageResult{}, fmt.Errorf("上游返回 %d:%s", resp.StatusCode, parsed.Error.Message)
+				return ImageResult{}, statusError(resp.StatusCode, "上游返回 %d:%s", resp.StatusCode, parsed.Error.Message)
 			}
 			bodyPreview := preview.String()
 			if len(bodyPreview) > 400 {
 				bodyPreview = bodyPreview[:400] + "..."
 			}
-			return ImageResult{}, fmt.Errorf("上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
+			return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
 		}
 		if parsed.Error != nil {
 			return ImageResult{}, fmt.Errorf("上游返回错误:%s", parsed.Error.Message)
@@ -502,6 +506,9 @@ func RequestImagesAPIWithPartial(
 				return imageResultFromImagesDatum(d), nil
 			}
 			if d.URL != "" {
+				if opts.DeferURLDownload {
+					return ImageResult{URL: d.URL, RevisedPrompt: d.RevisedPrompt, SourceEvent: "images_api_url"}, nil
+				}
 				return downloadImagesAPIURL(ctx, httpClient, d.URL, d.RevisedPrompt, onProgress, startedAt)
 			}
 		}
@@ -518,6 +525,7 @@ func readGoogleInteractionResponse(
 	rawSink io.Writer,
 	onProgress func(stage string, elapsedSeconds int, bytesReceived int64),
 	startedAt time.Time,
+	deferURLDownload bool,
 ) (ImageResult, error) {
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxGoogleInteractionResponseBytes+1))
 	if err != nil {
@@ -544,6 +552,9 @@ func readGoogleInteractionResponse(
 		return result, nil
 	}
 	if strings.TrimSpace(image.URI) != "" {
+		if deferURLDownload {
+			return ImageResult{URL: strings.TrimSpace(image.URI), SourceEvent: "google_interactions_url"}, nil
+		}
 		result, err := downloadImagesAPIURL(ctx, httpClient, image.URI, "", onProgress, startedAt)
 		if err != nil {
 			return ImageResult{}, fmt.Errorf("下载 Google Interactions URI 图片失败:%w", err)
@@ -623,9 +634,9 @@ func parseImagesAPIResponseBytes(raw []byte, statusCode int) (ImageResult, error
 	}
 	if statusCode/100 != 2 {
 		if parsed.Error != nil {
-			return ImageResult{}, fmt.Errorf("上游返回 %d:%s", statusCode, parsed.Error.Message)
+			return ImageResult{}, statusError(statusCode, "上游返回 %d:%s", statusCode, parsed.Error.Message)
 		}
-		return ImageResult{}, fmt.Errorf("上游返回 HTTP %d", statusCode)
+		return ImageResult{}, statusError(statusCode, "上游返回 HTTP %d", statusCode)
 	}
 	if parsed.Error != nil {
 		return ImageResult{}, fmt.Errorf("上游返回错误:%s", parsed.Error.Message)

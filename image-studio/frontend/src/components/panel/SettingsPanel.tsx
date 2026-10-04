@@ -1,13 +1,14 @@
+import { desktopRegistry, profileHasKey, registryReadOnly } from "../../lib/upstreamRegistry.ts";
 import { useEffect, useRef, useState } from "react";
 import {
   Bell, Download, Folder, FolderEdit, Github, Info, KeyRound,
   MessageSquare, Monitor, Moon, Network, Plug, RotateCw, Save, Sun, Trash2, Upload,
 } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import {
   GetOutputDir, OpenOutputDir, OpenExternalURL, ChooseOutputDir, SetOutputDir,
-  GetStoredAPIKey,
 } from "../../platform/runtime/host";
+import { readAPIKey } from "../../state/studioStore.profiles";
 import * as HostRuntime from "../../platform/runtime/host";
 import type { KernelRuntimeMode, ProxyMode, SystemNotificationPermissionState } from "../../types/domain";
 import { MAX_AUTO_RETRY_COUNT } from "../../../../../shared/kernel/requestModel.js";
@@ -26,7 +27,6 @@ import {
   SettingsSegButton,
 } from "./settingsPrimitives";
 import { importCompletionSoundFile } from "../../lib/completionSound";
-import { keyringUserFor } from "../../lib/profiles";
 import type { UpstreamProfile } from "../../types/domain";
 import { buildUpstreamModelCatalog, type UpstreamModelCatalog } from "../../lib/upstreamModels.ts";
 import "../../styles/_xai-typography.css";
@@ -106,7 +106,18 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     previewCompletionSound,
     setCompletionNotificationEnabled,
     requestCompletionNotificationPermission,
-  } = useStudioStore();
+  } = useStudioState(
+    "kernelRuntimeMode", "proxyMode", "proxyURL", "autoRetryEnabled", "autoRetryCount",
+    "protectStreamPreview", "theme", "fontScale", "setField", "setAPIKey", "setProxyConfig", "history",
+    "clearHistory", "exportHistory", "importHistory", "pruneHistoryOlderThanDays", "setTheme", "setFontScale",
+    "pushToast", "apiKey", "baseURL", "apiMode", "profiles", "activeProfileId", "setActiveProfile",
+    "createProfile", "updateProfile", "openUpstreamConfig", "testAPIKey", "isTestingKey",
+    "savePromptSuppressed", "setSavePromptSuppressed", "keepLogs", "setKeepLogs", "cleanupPreviewCacheOnExit",
+    "setCleanupPreviewCacheOnExit", "completionSound", "completionNotification",
+    "completionNotificationPermission", "setCompletionSoundEnabled", "setCompletionSoundMode",
+    "setCompletionSoundCustom", "resetCompletionSoundCustom", "previewCompletionSound",
+    "setCompletionNotificationEnabled", "requestCompletionNotificationPermission",
+  );
 
   const [outputDir, setOutputDir] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -121,7 +132,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   const { isMac, usesFluentUI, isAndroid, isAndroidPad } = usePlatform();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setUpstreamDraftKey(""); return; }
     GetOutputDir().then(setOutputDir).catch(() => undefined);
   }, [open]);
 
@@ -132,18 +143,21 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   }, [isAndroid, open]);
 
   useEffect(() => {
+    if (!open) { setUpstreamDraftKey(""); return; }
+    let active = true;
     const profile = profiles.find((item) => item.id === activeProfileId) ?? null;
     setUpstreamDraft(profile);
     setUpstreamDraftKey("");
     setInlineModelCatalog(profile?.modelIDs?.length ? buildUpstreamModelCatalog(profile.modelIDs.map((id) => ({ id }))) : null);
     setCustomModelID("");
     if (profile) {
-      GetStoredAPIKey(keyringUserFor(profile.id)).then((key) => setUpstreamDraftKey(key ?? "")).catch(() => undefined);
+      readAPIKey(profile.id).then((key) => { if (active) setUpstreamDraftKey(key ?? ""); }).catch(() => undefined);
     }
-  }, [activeProfileId, profiles]);
+    return () => { active = false; };
+  }, [open, activeProfileId, profiles]);
 
   async function loadInlineModels() {
-    if (!upstreamDraft || !upstreamDraft.baseURL.trim() || !upstreamDraftKey.trim()) {
+    if (!upstreamDraft || !upstreamDraft.baseURL.trim() || (!upstreamDraftKey.trim() && !profileHasKey(upstreamDraft.id))) {
       pushToast("请先填写 Base URL 与 API Key，再获取上游模型", "warn");
       return;
     }
@@ -158,6 +172,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         upstreamDraft.apiMode,
         upstreamDraft.responsesTransport ?? "sse",
         upstreamDraft.allowInsecureConnection === true,
+        undefined, desktopRegistry() ? upstreamDraft.id : undefined,
       );
       const catalog = buildUpstreamModelCatalog(result.models ?? []);
       const modelIDs = Array.from(new Set([...(upstreamDraft.modelIDs ?? []), ...catalog.all.map((model) => model.id)]));
@@ -195,7 +210,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         imageModelID: upstreamDraft.imageModelID,
         textModelID: upstreamDraft.textModelID,
         modelIDs: upstreamDraft.modelIDs,
-        apiKey: upstreamDraftKey,
+        apiKey: desktopRegistry() ? upstreamDraftKey.trim() || undefined : upstreamDraftKey,
       });
       if (ok) pushToast("上游连接与凭据已保存", "success");
     } finally {
@@ -339,7 +354,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
 
   const outputLabel = androidTarget.isAndroid ? platformOutputRootLabel() : (outputDir || "...");
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId);
-  const upstreamReady = !!apiKey.trim() && !!baseURL.trim();
+  const upstreamReady = profileHasKey(activeProfileId, apiKey) && !!baseURL.trim();
   const segmentedControlClassName = `platform-seg flex flex-wrap gap-1 bg-black/[0.04] p-0.5 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06] ${usesFluentUI ? "rounded-[10px]" : "rounded-[18px]"}`;
   const actionButtonBaseClassName = `inline-flex min-h-[34px] items-center justify-center gap-1.5 border border-black/[0.08] px-3 ${isMac ? "py-2.5 text-[13px]" : "py-2 text-[12px]"} font-medium transition-colors dark:border-white/[0.08] ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`;
   const actionButtonPrimaryClassName = `${actionButtonBaseClassName} text-zinc-700 hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:text-zinc-300`;
@@ -432,7 +447,8 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         >
           <SettingsRow label="内核 · 创作在哪里运行">
             <select
-              value={kernelRuntimeMode}
+              value={desktopRegistry() ? "local" : kernelRuntimeMode}
+              disabled={desktopRegistry()}
               onChange={(e) => setField("kernelRuntimeMode", e.target.value as KernelRuntimeMode)}
               className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 ${isMac ? "min-h-[44px] py-3 text-[14px]" : "py-2.5 text-[12px]"} text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`}
             >
@@ -441,13 +457,14 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
               <option value="remote">交给远端（remote · 共享内核）</option>
             </select>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-300">
-              remote 与 Android / Worker 共用远程内核。
+              {desktopRegistry() ? "桌面端使用本机共享任务队列；密钥保存在系统凭据库。" : "浏览器预览可使用远程内核。"}
             </p>
           </SettingsRow>
 
           <SettingsRow label="上游 · 连接与凭据">
+            {registryReadOnly() && <p role="status">共享配置不可用，上游设置暂为只读。请修复数据库后重启。</p>}
             {upstreamDraft ? (
-              <div className="space-y-2 rounded-[12px] border border-black/[0.08] bg-[var(--surface)] p-3 dark:border-white/[0.08]">
+              <fieldset disabled={registryReadOnly()} className="space-y-2 rounded-[12px] border border-black/[0.08] bg-[var(--surface)] p-3 dark:border-white/[0.08]">
                 <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">上游名称
                   <input
                     aria-label="上游名称"
@@ -508,13 +525,13 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                   <p className="text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">获取目录后会自动保存在当前上游；也可手动添加多个模型并点击模型标签切换。</p>
                 </div>
                 <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">API Key
-                  <input aria-label="API Key" type="password" value={upstreamDraftKey} onChange={(event) => setUpstreamDraftKey(event.target.value)} placeholder="仅保存至系统凭据存储" className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] font-mono-token text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
+                  <input aria-label="API Key" type="password" value={upstreamDraftKey} onChange={(event) => setUpstreamDraftKey(event.target.value)} placeholder={profileHasKey(upstreamDraft.id) ? "已保存密钥；留空保留，输入新密钥替换" : "仅保存至系统凭据存储"} className={`focus-ring mt-1 w-full border border-black/[0.08] bg-transparent px-3 py-2.5 text-[12px] font-mono-token text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 ${usesFluentUI ? "rounded-[8px]" : "rounded-[12px]"}`} />
                 </label>
-                <button type="button" onClick={() => void saveInlineUpstream()} disabled={upstreamSaving || !upstreamDraft.baseURL.trim() || !upstreamDraftKey.trim()} className={`w-full ${actionButtonPrimaryClassName} disabled:cursor-not-allowed disabled:opacity-50`}>
+                <button type="button" onClick={() => void saveInlineUpstream()} disabled={registryReadOnly() || upstreamSaving || !upstreamDraft.baseURL.trim() || (!upstreamDraftKey.trim() && !profileHasKey(upstreamDraft.id))} className={`w-full ${actionButtonPrimaryClassName} disabled:cursor-not-allowed disabled:opacity-50`}>
                   {upstreamSaving ? "正在保存…" : "保存连接与凭据"}
                 </button>
-              </div>
-            ) : <button type="button" onClick={() => void createInlineUpstream()} className={`w-full ${actionButtonPrimaryClassName}`}>添入 Images 上游配置</button>}
+              </fieldset>
+            ) : <button disabled={registryReadOnly()} type="button" onClick={() => void createInlineUpstream()} className={`w-full ${actionButtonPrimaryClassName}`}>添入 Images 上游配置</button>}
             <div className="flex items-center gap-2 rounded-[12px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 dark:border-white/[0.08]">
               <Plug className="h-4 w-4 shrink-0 text-[var(--accent)]" />
               <div className="min-w-0 flex-1">

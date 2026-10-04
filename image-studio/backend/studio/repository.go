@@ -17,22 +17,34 @@ type document struct {
 	Projects    map[string]Project    `json:"projects"`
 	Assets      map[string]Asset      `json:"assets"`
 	Jobs        map[string]Job        `json:"jobs"`
+	// Network is the proxy setting shared with the classic editor.
+	Network NetworkSettings `json:"network,omitzero"`
+	// RetiredProfileIDs lists recently deleted upstreams, so an import from
+	// the classic editor's own copy never brings one back.
+	RetiredProfileIDs []string `json:"retiredProfileIds,omitempty"`
 }
 
 func emptyDocument() document {
 	return document{Version: SchemaVersion, Profiles: map[string]Profile{}, Projects: map[string]Project{}, Assets: map[string]Asset{}, Jobs: map[string]Job{}, PromptCards: map[string]PromptCard{}}
 }
-func cloneDocument(d document) document {
-	b, _ := json.Marshal(d)
-	var out document
-	_ = json.Unmarshal(b, &out)
-	return out
-}
 
 type repository struct{ root string }
 
+func (r repository) mediaDir() string { return filepath.Join(r.root, "media") }
+
+// removeStaleTemporaries deletes partial files left by an interrupted write or
+// download. They are never referenced by the database.
+func (r repository) removeStaleTemporaries() {
+	for _, pattern := range []string{filepath.Join(r.root, ".studio-tmp-*"), filepath.Join(r.mediaDir(), ".studio-tmp-*"), filepath.Join(r.mediaDir(), ".incoming-*")} {
+		matches, _ := filepath.Glob(pattern)
+		for _, m := range matches {
+			_ = os.Remove(m)
+		}
+	}
+}
+
 func (r repository) read() (document, error) {
-	if err := os.MkdirAll(filepath.Join(r.root, "media"), 0700); err != nil {
+	if err := os.MkdirAll(r.mediaDir(), 0700); err != nil {
 		return document{}, err
 	}
 	f, err := os.Open(filepath.Join(r.root, "studio.json"))
@@ -54,7 +66,7 @@ func (r repository) read() (document, error) {
 	if err = json.Unmarshal(b, &d); err != nil {
 		return document{}, fmt.Errorf("数据库损坏，已保留原文件，拒绝覆盖：%w", err)
 	}
-	if d.Version != SchemaVersion {
+	if d.Version != 1 && d.Version != SchemaVersion {
 		return document{}, fmt.Errorf("不支持的数据库版本 %d；原文件未修改", d.Version)
 	}
 	if d.Profiles == nil || d.Projects == nil || d.Assets == nil || d.Jobs == nil {
@@ -80,6 +92,10 @@ func (r repository) read() (document, error) {
 		if err := p.Validate(); err != nil {
 			return document{}, err
 		}
+		d.Profiles[id] = p
+	}
+	if err := d.Network.Validate(); err != nil {
+		return document{}, err
 	}
 	for id, a := range d.Assets {
 		if checkID(id) != nil || a.ID != id || filepath.Base(a.FileName) != a.FileName || !strings.HasPrefix(a.FileName, id+".") {
@@ -90,6 +106,21 @@ func (r repository) read() (document, error) {
 		if _, err := p.Order(); err != nil {
 			return document{}, err
 		}
+	}
+	if d.Version == 1 {
+		backup := filepath.Join(r.root, "studio.v1.json.bak")
+		info, err := os.Stat(backup)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			if err = atomicWrite(backup, b); err != nil {
+				return document{}, fmt.Errorf("备份旧数据库失败；原文件未修改：%w", err)
+			}
+		case err != nil:
+			return document{}, err
+		case !info.Mode().IsRegular():
+			return document{}, errors.New("旧数据库备份路径不是文件；原文件未修改")
+		}
+		d.Version = SchemaVersion
 	}
 	return d, nil
 }

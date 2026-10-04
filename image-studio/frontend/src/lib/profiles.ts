@@ -86,6 +86,7 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
   return {
     id,
     name,
+    hasKey: o.hasKey === true,
     apiMode,
     responsesTransport,
     requestPolicy,
@@ -173,6 +174,14 @@ export function makeBlankProfile(apiMode: APIMode = "images", profiles: Upstream
     fallbackProfileId: undefined,
     createdAt: Date.now(),
   };
+}
+
+// 从列表移除一个 profile，并清掉其他 profile 指向它的备用上游引用 —— 与共享
+// 上游配置的删除行为一致；残留的引用会让这些 profile 下次保存失败。
+export function removeProfile(profiles: UpstreamProfile[], id: string): UpstreamProfile[] {
+  return profiles
+    .filter((profile) => profile.id !== id)
+    .map((profile) => (profile.fallbackProfileId === id ? { ...profile, fallbackProfileId: undefined } : profile));
 }
 
 // 复制一个 profile,name 末尾追加「副本」并生成新 id。

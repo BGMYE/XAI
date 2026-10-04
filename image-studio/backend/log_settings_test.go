@@ -108,7 +108,7 @@ func TestManagedRuntimeCleanupDirsPreservePrimaryImageData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalizedOutputRoots := normalizeRoots([]string{defaultRoot, outputRoot, trustedRoot})
+	normalizedOutputRoots := normalizeRoots(append([]string{defaultRoot, outputRoot, trustedRoot}, platformLegacyOutputRoots()...))
 	for _, root := range normalizedOutputRoots {
 		for _, dir := range []string{thumbsSubdir(root), previewsSubdir(root), logSubdir(root)} {
 			if err := os.MkdirAll(dir, secureDirMode); err != nil {
