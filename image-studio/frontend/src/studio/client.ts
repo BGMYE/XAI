@@ -5,7 +5,9 @@ import { catalogURL } from "./publicCatalog.mjs";
 import { orderGraph, uid } from "./graph.mjs";
 import { savePromptToSnapshot, removePromptFromSnapshot, importPromptsToSnapshot } from "./promptLibrary.mjs";
 import { prepareSharedUpstreams } from "../lib/upstreamRegistry";
-interface Host {
+type LibraryAction = "TrashProject" | "RestoreProject" | "TrashAsset" | "RestoreAsset" | "DeleteJob";
+interface Host extends Record<LibraryAction, (id: string) => Promise<void>> {
+  ArchiveJobs(days: number): Promise<string>;
   GetPublicPromptCatalog?(sourceID: string): Promise<string>;
   GetSnapshot(): Promise<Snapshot>;
   GetChanges?(epoch: string, since: number): Promise<ChangeSet>;
@@ -49,6 +51,16 @@ function unavailable(): never {
   throw Error("浏览器仅提供本地画布预览。请在桌面应用中配置 API Key 并生成作品。");
 }
 export const client = {
+  async libraryAction(action: LibraryAction, id: string) {
+    const desktop = host();
+    if (!desktop) return unavailable();
+    await desktop[action](id);
+  },
+  async archiveJobs(days: number) {
+    const desktop = host();
+    if (!desktop) return unavailable();
+    return desktop.ArchiveJobs(days);
+  },
   async publicCatalog(sourceID: string): Promise<string> {
     const url = catalogURL(sourceID),
       desktop = host();

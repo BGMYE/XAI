@@ -9,6 +9,7 @@ import "fmt"
 type HTTPStatusError struct {
 	StatusCode int
 	Message    string
+	RetryAfter string
 }
 
 func (e *HTTPStatusError) Error() string { return e.Message }

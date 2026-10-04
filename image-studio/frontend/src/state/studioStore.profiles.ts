@@ -24,6 +24,9 @@ import {
   duplicateRegistryProfile,
   readProfileKey,
   registryActive,
+  desktopRegistry,
+  requireRegistryWritable,
+  registryReadOnly,
   rememberProfileUse,
   saveRegistryProfile,
 } from "../lib/upstreamRegistry";
@@ -37,6 +40,7 @@ export function readAPIKey(id: string): Promise<string> {
 
 /** Saves the key of a profile; an empty key clears it. */
 export async function storeAPIKey(profile: UpstreamProfile, key: string): Promise<void> {
+  requireRegistryWritable();
   const trimmed = key.trim();
   if (!registryActive()) {
     await SetStoredAPIKey(keyringUserFor(profile.id), trimmed);
@@ -74,6 +78,7 @@ export function createProfileActions(store: StateAdapter) {
       apiKey?: string;
       setActive?: boolean;
     }) {
+      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return ""; }
       const list = store.getState().profiles;
       const id = genProfileId();
       let profile: UpstreamProfile = {
@@ -121,6 +126,7 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async updateProfile(id: string, patch: Partial<Omit<UpstreamProfile, "id" | "createdAt">> & { apiKey?: string }) {
+      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return false; }
       const list = store.getState().profiles;
       const index = list.findIndex((profile) => profile.id === id);
       if (index < 0) return false;
@@ -173,7 +179,7 @@ export function createProfileActions(store: StateAdapter) {
       }
       store.setState({ profiles: nextList, aiProfileId: aiProfile?.id ?? "" });
       if (id === store.getState().activeProfileId) {
-        const apiKey = patch.apiKey !== undefined ? patch.apiKey.trim() : store.getState().apiKey;
+        const apiKey = desktopRegistry() ? "" : (patch.apiKey !== undefined ? patch.apiKey.trim() : store.getState().apiKey);
         store.setState({
           apiMode: next.apiMode,
           responsesTransport: next.responsesTransport ?? "sse",
@@ -190,6 +196,7 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async deleteProfile(id: string) {
+      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return; }
       const list = store.getState().profiles;
       if (!list.some((profile) => profile.id === id)) return;
       const nextList = removeProfile(list, id);
@@ -237,6 +244,7 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async duplicateProfile(id: string) {
+      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return null; }
       const current = store.getState().profiles.find((profile) => profile.id === id);
       if (!current) return null;
       if (registryActive()) {

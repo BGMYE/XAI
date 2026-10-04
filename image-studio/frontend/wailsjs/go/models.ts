@@ -117,6 +117,52 @@ export namespace backend {
 		}
 	}
 	
+	export class ClassicHistoryImport {
+	    id: string;
+	    jobId: string;
+	    assetId: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ClassicHistoryImport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.jobId = source["jobId"];
+	        this.assetId = source["assetId"];
+	        this.error = source["error"];
+	    }
+	}
+	export class ClassicHistoryInput {
+	    mode: string;
+	    revisedPrompt: string;
+	    id: string;
+	    savedPath: string;
+	    prompt: string;
+	    createdAt: string;
+	    size: string;
+	    quality: string;
+	    outputFormat: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ClassicHistoryInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.revisedPrompt = source["revisedPrompt"];
+	        this.id = source["id"];
+	        this.savedPath = source["savedPath"];
+	        this.prompt = source["prompt"];
+	        this.createdAt = source["createdAt"];
+	        this.size = source["size"];
+	        this.quality = source["quality"];
+	        this.outputFormat = source["outputFormat"];
+	    }
+	}
 	export class CodexAPIConfig {
 	    provider: string;
 	    baseURL: string;
@@ -166,6 +212,7 @@ export namespace backend {
 	    }
 	}
 	export class GenerateOptions {
+	    profileId: string;
 	    apiKey: string;
 	    mode: string;
 	    requestedJobId: string;
@@ -209,6 +256,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
 	        this.apiKey = source["apiKey"];
 	        this.mode = source["mode"];
 	        this.requestedJobId = source["requestedJobId"];
@@ -338,6 +386,7 @@ export namespace backend {
 	    }
 	}
 	export class ProbeUpstreamOptions {
+	    profileId: string;
 	    apiKey: string;
 	    baseURL: string;
 	    proxyMode: string;
@@ -352,6 +401,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
 	        this.apiKey = source["apiKey"];
 	        this.baseURL = source["baseURL"];
 	        this.proxyMode = source["proxyMode"];
@@ -482,6 +532,7 @@ export namespace backend {
 		}
 	}
 	export class PromptOptimizeOptions {
+	    profileId: string;
 	    apiKey: string;
 	    prompt: string;
 	    mode: string;
@@ -499,6 +550,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
 	        this.apiKey = source["apiKey"];
 	        this.prompt = source["prompt"];
 	        this.mode = source["mode"];
@@ -509,6 +561,54 @@ export namespace backend {
 	        this.allowInsecureConnection = source["allowInsecureConnection"];
 	        this.imagePaths = source["imagePaths"];
 	        this.imagePath = source["imagePath"];
+	    }
+	}
+	export class ResultPayload {
+	    createdAt?: string;
+	    size?: string;
+	    quality?: string;
+	    outputFormat?: string;
+	    assetId?: string;
+	    jobId?: string;
+	    imageB64?: string;
+	    revisedPrompt: string;
+	    sourceEvent: string;
+	    imageId?: string;
+	    savedPath: string;
+	    thumbPath?: string;
+	    previewUrl?: string;
+	    fullUrl?: string;
+	    previewWidth?: number;
+	    previewHeight?: number;
+	    rawPath: string;
+	    mode: string;
+	    prompt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ResultPayload(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createdAt = source["createdAt"];
+	        this.size = source["size"];
+	        this.quality = source["quality"];
+	        this.outputFormat = source["outputFormat"];
+	        this.assetId = source["assetId"];
+	        this.jobId = source["jobId"];
+	        this.imageB64 = source["imageB64"];
+	        this.revisedPrompt = source["revisedPrompt"];
+	        this.sourceEvent = source["sourceEvent"];
+	        this.imageId = source["imageId"];
+	        this.savedPath = source["savedPath"];
+	        this.thumbPath = source["thumbPath"];
+	        this.previewUrl = source["previewUrl"];
+	        this.fullUrl = source["fullUrl"];
+	        this.previewWidth = source["previewWidth"];
+	        this.previewHeight = source["previewHeight"];
+	        this.rawPath = source["rawPath"];
+	        this.mode = source["mode"];
+	        this.prompt = source["prompt"];
 	    }
 	}
 	export class SelectFileResponse {
@@ -605,6 +705,7 @@ export namespace backend {
 	}
 	
 	export class VideoOptions {
+	    profileId: string;
 	    baseURL: string;
 	    apiKey: string;
 	    videoModelID: string;
@@ -620,6 +721,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
 	        this.baseURL = source["baseURL"];
 	        this.apiKey = source["apiKey"];
 	        this.videoModelID = source["videoModelID"];
@@ -631,6 +733,7 @@ export namespace backend {
 	    }
 	}
 	export class VideoPollOptions {
+	    profileId: string;
 	    baseURL: string;
 	    apiKey: string;
 	    videoID: string;
@@ -642,6 +745,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
 	        this.baseURL = source["baseURL"];
 	        this.apiKey = source["apiKey"];
 	        this.videoID = source["videoID"];
@@ -1065,6 +1169,8 @@ export namespace compat {
 export namespace studio {
 	
 	export class Asset {
+	    classicPinned?: boolean;
+	    deletedAt?: string;
 	    id: string;
 	    kind: string;
 	    name: string;
@@ -1079,6 +1185,8 @@ export namespace studio {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.classicPinned = source["classicPinned"];
+	        this.deletedAt = source["deletedAt"];
 	        this.id = source["id"];
 	        this.kind = source["kind"];
 	        this.name = source["name"];
@@ -1088,309 +1196,25 @@ export namespace studio {
 	        this.fileName = source["fileName"];
 	    }
 	}
-	export class Edge {
-	    id: string;
-	    from: string;
-	    to: string;
+	export class RemovedIDs {
+	    projects: string[];
+	    assets: string[];
+	    jobs: string[];
+	    profiles: string[];
+	    promptCards: string[];
 	
 	    static createFrom(source: any = {}) {
-	        return new Edge(source);
+	        return new RemovedIDs(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.from = source["from"];
-	        this.to = source["to"];
+	        this.projects = source["projects"];
+	        this.assets = source["assets"];
+	        this.jobs = source["jobs"];
+	        this.profiles = source["profiles"];
+	        this.promptCards = source["promptCards"];
 	    }
-	}
-	export class Profile {
-	    id: string;
-	    name: string;
-	    baseUrl: string;
-	    imageModel: string;
-	    videoModel: string;
-	    protocol: string;
-	    allowLocal: boolean;
-	    imageApi?: string;
-	    responsesTransport?: string;
-	    requestPolicy?: string;
-	    imagesNewApiCompat?: boolean;
-	    allowInsecure?: boolean;
-	    textModel?: string;
-	    reasoningEffort?: string;
-	    modelIds?: string[];
-	    concurrencyLimit?: number;
-	    fallbackProfileId?: string;
-	    hasKey: boolean;
-	    credentialId?: string;
-	    verifiedAt?: string;
-	    createdAt?: string;
-	    updatedAt: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Profile(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.baseUrl = source["baseUrl"];
-	        this.imageModel = source["imageModel"];
-	        this.videoModel = source["videoModel"];
-	        this.protocol = source["protocol"];
-	        this.allowLocal = source["allowLocal"];
-	        this.imageApi = source["imageApi"];
-	        this.responsesTransport = source["responsesTransport"];
-	        this.requestPolicy = source["requestPolicy"];
-	        this.imagesNewApiCompat = source["imagesNewApiCompat"];
-	        this.allowInsecure = source["allowInsecure"];
-	        this.textModel = source["textModel"];
-	        this.reasoningEffort = source["reasoningEffort"];
-	        this.modelIds = source["modelIds"];
-	        this.concurrencyLimit = source["concurrencyLimit"];
-	        this.fallbackProfileId = source["fallbackProfileId"];
-	        this.hasKey = source["hasKey"];
-	        this.credentialId = source["credentialId"];
-	        this.verifiedAt = source["verifiedAt"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	    }
-	}
-	export class NetworkSettings {
-	    proxyMode?: string;
-	    proxyUrl?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new NetworkSettings(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.proxyMode = source["proxyMode"];
-	        this.proxyUrl = source["proxyUrl"];
-	    }
-	}
-	export class Parameters {
-	    size?: string;
-	    seconds?: number;
-	    aspectRatio?: string;
-	    resolution?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Parameters(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.size = source["size"];
-	        this.seconds = source["seconds"];
-	        this.aspectRatio = source["aspectRatio"];
-	        this.resolution = source["resolution"];
-	    }
-	}
-	export class Request {
-	    id: string;
-	    profileId: string;
-	    projectId: string;
-	    nodeId?: string;
-	    kind: string;
-	    prompt: string;
-	    referenceAssetId?: string;
-	    parameters: Parameters;
-	
-	    static createFrom(source: any = {}) {
-	        return new Request(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.profileId = source["profileId"];
-	        this.projectId = source["projectId"];
-	        this.nodeId = source["nodeId"];
-	        this.kind = source["kind"];
-	        this.prompt = source["prompt"];
-	        this.referenceAssetId = source["referenceAssetId"];
-	        this.parameters = this.convertValues(source["parameters"], Parameters);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class Job {
-	    id: string;
-	    request: Request;
-	    profile: Profile;
-	    fingerprint: string;
-	    state: string;
-	    remoteId?: string;
-	    progress: number;
-	    error?: string;
-	    resultAssetId?: string;
-	    resultUrl?: string;
-	    dependsOn: string[];
-	    createdAt: string;
-	    updatedAt: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Job(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.request = this.convertValues(source["request"], Request);
-	        this.profile = this.convertValues(source["profile"], Profile);
-	        this.fingerprint = source["fingerprint"];
-	        this.state = source["state"];
-	        this.remoteId = source["remoteId"];
-	        this.progress = source["progress"];
-	        this.error = source["error"];
-	        this.resultAssetId = source["resultAssetId"];
-	        this.resultUrl = source["resultUrl"];
-	        this.dependsOn = source["dependsOn"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class Node {
-	    id: string;
-	    kind: string;
-	    x: number;
-	    y: number;
-	    title: string;
-	    text?: string;
-	    assetId?: string;
-	    parameters: Parameters;
-	
-	    static createFrom(source: any = {}) {
-	        return new Node(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.kind = source["kind"];
-	        this.x = source["x"];
-	        this.y = source["y"];
-	        this.title = source["title"];
-	        this.text = source["text"];
-	        this.assetId = source["assetId"];
-	        this.parameters = this.convertValues(source["parameters"], Parameters);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
-	
-	export class Viewport {
-	    x: number;
-	    y: number;
-	    zoom: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new Viewport(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.x = source["x"];
-	        this.y = source["y"];
-	        this.zoom = source["zoom"];
-	    }
-	}
-	export class Project {
-	    id: string;
-	    name: string;
-	    revision: number;
-	    updatedAt: string;
-	    viewport: Viewport;
-	    nodes: Node[];
-	    edges: Edge[];
-	
-	    static createFrom(source: any = {}) {
-	        return new Project(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.revision = source["revision"];
-	        this.updatedAt = source["updatedAt"];
-	        this.viewport = this.convertValues(source["viewport"], Viewport);
-	        this.nodes = this.convertValues(source["nodes"], Node);
-	        this.edges = this.convertValues(source["edges"], Edge);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class PromptCard {
 	    catalogKey?: string;
@@ -1456,19 +1280,350 @@ export namespace studio {
 		    return a;
 		}
 	}
-	
-	export class RemovedIDs {
-	    profiles: string[];
-	    promptCards: string[];
+	export class ImageParameters {
+	    quality?: string;
+	    outputFormat?: string;
+	    seed?: number;
+	    negativePrompt?: string;
+	    background?: string;
+	    outputCompression?: number;
+	    inputFidelity?: string;
+	    imageStyle?: string;
+	    moderation?: string;
+	    userIdentifier?: string;
+	    disablePreview?: boolean;
+	    partialImages?: number;
 	
 	    static createFrom(source: any = {}) {
-	        return new RemovedIDs(source);
+	        return new ImageParameters(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.profiles = source["profiles"];
-	        this.promptCards = source["promptCards"];
+	        this.quality = source["quality"];
+	        this.outputFormat = source["outputFormat"];
+	        this.seed = source["seed"];
+	        this.negativePrompt = source["negativePrompt"];
+	        this.background = source["background"];
+	        this.outputCompression = source["outputCompression"];
+	        this.inputFidelity = source["inputFidelity"];
+	        this.imageStyle = source["imageStyle"];
+	        this.moderation = source["moderation"];
+	        this.userIdentifier = source["userIdentifier"];
+	        this.disablePreview = source["disablePreview"];
+	        this.partialImages = source["partialImages"];
+	    }
+	}
+	export class Request {
+	    autoFallback?: boolean;
+	    unsentRetries?: number;
+	    source?: string;
+	    image: ImageParameters;
+	    referenceAssetIds?: string[];
+	    maskAssetId?: string;
+	    id: string;
+	    profileId: string;
+	    projectId: string;
+	    nodeId?: string;
+	    kind: string;
+	    prompt: string;
+	    referenceAssetId?: string;
+	    parameters: Parameters;
+	
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.autoFallback = source["autoFallback"];
+	        this.unsentRetries = source["unsentRetries"];
+	        this.source = source["source"];
+	        this.image = this.convertValues(source["image"], ImageParameters);
+	        this.referenceAssetIds = source["referenceAssetIds"];
+	        this.maskAssetId = source["maskAssetId"];
+	        this.id = source["id"];
+	        this.profileId = source["profileId"];
+	        this.projectId = source["projectId"];
+	        this.nodeId = source["nodeId"];
+	        this.kind = source["kind"];
+	        this.prompt = source["prompt"];
+	        this.referenceAssetId = source["referenceAssetId"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Job {
+	    historyMode?: string;
+	    fallbackProfile?: Profile;
+	    revisedPrompt?: string;
+	    id: string;
+	    request: Request;
+	    profile: Profile;
+	    fingerprint: string;
+	    state: string;
+	    remoteId?: string;
+	    progress: number;
+	    error?: string;
+	    resultAssetId?: string;
+	    resultUrl?: string;
+	    dependsOn: string[];
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Job(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.historyMode = source["historyMode"];
+	        this.fallbackProfile = this.convertValues(source["fallbackProfile"], Profile);
+	        this.revisedPrompt = source["revisedPrompt"];
+	        this.id = source["id"];
+	        this.request = this.convertValues(source["request"], Request);
+	        this.profile = this.convertValues(source["profile"], Profile);
+	        this.fingerprint = source["fingerprint"];
+	        this.state = source["state"];
+	        this.remoteId = source["remoteId"];
+	        this.progress = source["progress"];
+	        this.error = source["error"];
+	        this.resultAssetId = source["resultAssetId"];
+	        this.resultUrl = source["resultUrl"];
+	        this.dependsOn = source["dependsOn"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Edge {
+	    id: string;
+	    from: string;
+	    to: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Edge(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
+	export class Parameters {
+	    quality?: string;
+	    endpointPath?: string;
+	    size?: string;
+	    seconds?: number;
+	    aspectRatio?: string;
+	    resolution?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Parameters(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.quality = source["quality"];
+	        this.endpointPath = source["endpointPath"];
+	        this.size = source["size"];
+	        this.seconds = source["seconds"];
+	        this.aspectRatio = source["aspectRatio"];
+	        this.resolution = source["resolution"];
+	    }
+	}
+	export class Node {
+	    id: string;
+	    kind: string;
+	    x: number;
+	    y: number;
+	    title: string;
+	    text?: string;
+	    assetId?: string;
+	    parameters: Parameters;
+	
+	    static createFrom(source: any = {}) {
+	        return new Node(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.title = source["title"];
+	        this.text = source["text"];
+	        this.assetId = source["assetId"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Viewport {
+	    x: number;
+	    y: number;
+	    zoom: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Viewport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.zoom = source["zoom"];
+	    }
+	}
+	export class Project {
+	    deletedAt?: string;
+	    id: string;
+	    name: string;
+	    revision: number;
+	    updatedAt: string;
+	    viewport: Viewport;
+	    nodes: Node[];
+	    edges: Edge[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Project(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deletedAt = source["deletedAt"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.revision = source["revision"];
+	        this.updatedAt = source["updatedAt"];
+	        this.viewport = this.convertValues(source["viewport"], Viewport);
+	        this.nodes = this.convertValues(source["nodes"], Node);
+	        this.edges = this.convertValues(source["edges"], Edge);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Profile {
+	    id: string;
+	    name: string;
+	    baseUrl: string;
+	    imageModel: string;
+	    videoModel: string;
+	    protocol: string;
+	    allowLocal: boolean;
+	    imageApi?: string;
+	    responsesTransport?: string;
+	    requestPolicy?: string;
+	    imagesNewApiCompat?: boolean;
+	    allowInsecure?: boolean;
+	    textModel?: string;
+	    reasoningEffort?: string;
+	    modelIds?: string[];
+	    concurrencyLimit?: number;
+	    fallbackProfileId?: string;
+	    hasKey: boolean;
+	    credentialId?: string;
+	    verifiedAt?: string;
+	    createdAt?: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Profile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.baseUrl = source["baseUrl"];
+	        this.imageModel = source["imageModel"];
+	        this.videoModel = source["videoModel"];
+	        this.protocol = source["protocol"];
+	        this.allowLocal = source["allowLocal"];
+	        this.imageApi = source["imageApi"];
+	        this.responsesTransport = source["responsesTransport"];
+	        this.requestPolicy = source["requestPolicy"];
+	        this.imagesNewApiCompat = source["imagesNewApiCompat"];
+	        this.allowInsecure = source["allowInsecure"];
+	        this.textModel = source["textModel"];
+	        this.reasoningEffort = source["reasoningEffort"];
+	        this.modelIds = source["modelIds"];
+	        this.concurrencyLimit = source["concurrencyLimit"];
+	        this.fallbackProfileId = source["fallbackProfileId"];
+	        this.hasKey = source["hasKey"];
+	        this.credentialId = source["credentialId"];
+	        this.verifiedAt = source["verifiedAt"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class ChangeSet {
@@ -1519,6 +1674,30 @@ export namespace studio {
 		    return a;
 		}
 	}
+
+
+
+	export class NetworkSettings {
+	    proxyMode?: string;
+	    proxyUrl?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new NetworkSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.proxyMode = source["proxyMode"];
+	        this.proxyUrl = source["proxyUrl"];
+	    }
+	}
+
+
+
+
+
+
+
 	export class Snapshot {
 	    epoch: string;
 	    revision: number;

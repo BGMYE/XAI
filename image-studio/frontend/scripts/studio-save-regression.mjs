@@ -143,11 +143,19 @@ export async function testChangeFeed(context) {
       () => window.__studio.snapshot.epoch === 'second-run' && window.__studio.snapshot.jobs.some(j => j.id === 'job-2'),
       null, {timeout: 3000},
     );
+    await page.evaluate(() => {
+      window.__sync.deleteJob('job-1');
+      window.__sync.trashProject('feed');
+      window.__sync.emit('studio:changed');
+    });
+    await page.waitForFunction(() => !window.__studio.project && !window.__studio.snapshot.jobs.some(j => j.id === 'job-1'), null, {timeout:3000});
+    assert.equal(await page.evaluate(() => window.__studio.getProject('feed')), undefined);
     assert.deepEqual(errors, []);
     return [
       'Change events refresh by delta without polling',
       'Progress events update running jobs without requests',
       'A restarted backend is reloaded in full',
+      'Deleted jobs and trashed canvases disappear through events',
     ];
   } finally {
     await page.close();

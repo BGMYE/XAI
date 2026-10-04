@@ -118,6 +118,9 @@ func (e *Engine) ClearProfileKey(id string) (Profile, error) {
 // pins it, including paused jobs.
 func (e *Engine) releaseSlot(st *state, slot string) {
 	for _, j := range st.doc.Jobs {
+		if j.FallbackProfile != nil && j.FallbackProfile.secretSlot() == slot && !terminal(j.State) {
+			return
+		}
 		if j.Profile.secretSlot() == slot && !terminal(j.State) {
 			return
 		}
@@ -144,12 +147,15 @@ func (e *Engine) DeleteProfile(id string) error {
 		slots[p.secretSlot()] = true
 	}
 	for _, j := range doc.Jobs {
-		if j.Request.ProfileID == id {
+		if j.Request.ProfileID == id || j.Profile.ID == id || (j.FallbackProfile != nil && j.FallbackProfile.ID == id) {
 			if !terminal(j.State) {
 				return errors.New("上游仍有未结束任务，请先取消任务")
 			}
-			if j.Profile.HasKey {
+			if j.Profile.ID == id && j.Profile.HasKey {
 				slots[j.Profile.secretSlot()] = true
+			}
+			if j.FallbackProfile != nil && j.FallbackProfile.ID == id && j.FallbackProfile.HasKey {
+				slots[j.FallbackProfile.secretSlot()] = true
 			}
 		}
 	}
@@ -359,6 +365,20 @@ func (e *Engine) ProfileKey(id string) (string, error) {
 		return "", errors.New("无法读取系统中的 API Key")
 	}
 	return key, nil
+}
+
+// ProfileCredentials is used inside Go to resolve a saved profile. Callers
+// never combine its key with an address supplied separately by the WebView.
+func (e *Engine) ProfileCredentials(id string) (Profile, string, error) {
+	p, ok := e.cur.Load().doc.Profiles[id]
+	if !ok {
+		return Profile{}, "", errors.New("上游不存在")
+	}
+	key, err := e.secrets.Get(p.secretSlot())
+	if err != nil || key == "" {
+		return Profile{}, "", errors.New("无法从系统凭据存储读取 API Key")
+	}
+	return cloneProfile(p), key, nil
 }
 
 func (e *Engine) TestProfile(ctx context.Context, id string) ([]string, error) {

@@ -66,7 +66,7 @@ func (r repository) read() (document, error) {
 	if err = json.Unmarshal(b, &d); err != nil {
 		return document{}, fmt.Errorf("数据库损坏，已保留原文件，拒绝覆盖：%w", err)
 	}
-	if d.Version != SchemaVersion {
+	if d.Version != 1 && d.Version != SchemaVersion {
 		return document{}, fmt.Errorf("不支持的数据库版本 %d；原文件未修改", d.Version)
 	}
 	if d.Profiles == nil || d.Projects == nil || d.Assets == nil || d.Jobs == nil {
@@ -106,6 +106,21 @@ func (r repository) read() (document, error) {
 		if _, err := p.Order(); err != nil {
 			return document{}, err
 		}
+	}
+	if d.Version == 1 {
+		backup := filepath.Join(r.root, "studio.v1.json.bak")
+		info, err := os.Stat(backup)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			if err = atomicWrite(backup, b); err != nil {
+				return document{}, fmt.Errorf("备份旧数据库失败；原文件未修改：%w", err)
+			}
+		case err != nil:
+			return document{}, err
+		case !info.Mode().IsRegular():
+			return document{}, errors.New("旧数据库备份路径不是文件；原文件未修改")
+		}
+		d.Version = SchemaVersion
 	}
 	return d, nil
 }

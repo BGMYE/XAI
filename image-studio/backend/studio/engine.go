@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yuanhua/image-gptcodex/pkg/client"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,9 +28,10 @@ type SecretStore interface {
 // place; otherwise the bytes are held in Data. MIME is only a hint: the stored
 // type is always sniffed from the content.
 type Output struct {
-	Data []byte
-	MIME string
-	Path string
+	RevisedPrompt string
+	Data          []byte
+	MIME          string
+	Path          string
 }
 
 // Progress is reported by a Runner while a job runs. RemoteID and ResultURL are
@@ -49,6 +51,7 @@ type Runner interface {
 }
 
 type Options struct {
+	OnDiagnostic func(jobID, text string)
 	// Workers bounds concurrent submissions. A job holds its slot until the
 	// upstream has accepted it (a remote ID or result URL is recorded) or it
 	// finishes; polling and downloads do not hold a slot.
@@ -60,6 +63,7 @@ type Options struct {
 	OnChange func(revision uint64)
 	// OnProgress is called when a running job reports new volatile progress.
 	OnProgress func(jobID string, percent int)
+	OnPreview  func(jobID string, preview client.PartialImage)
 }
 
 // jobTimeout bounds one execution of a job. A job that already has a recovery
@@ -75,6 +79,7 @@ type Engine struct {
 	// writeMu serializes state transitions and their disk writes. Readers never
 	// take it: they load the published state from cur.
 	writeMu sync.Mutex
+	mediaMu sync.Mutex // store/publish and collection share this lock, before writeMu
 	cur     atomic.Pointer[state]
 	repo    repository
 	secrets SecretStore
@@ -92,6 +97,7 @@ type Engine struct {
 	wake   chan struct{}
 	closed atomic.Bool
 	fatal  atomic.Pointer[errFatal]
+	failed chan struct{}
 	runs   map[string]*jobRun // guarded by writeMu
 
 	progress   progressTracker
@@ -99,6 +105,7 @@ type Engine struct {
 	onProgress func(string, int)
 	notify     chan struct{}
 	pendingRev atomic.Uint64
+	updates    chan struct{} // closed on durable changes, guarded by writeMu
 }
 
 func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
@@ -154,13 +161,19 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 		repo: repo, secrets: secrets, runner: opts.Runner, epoch: NewID(),
 		ctx: ctx, stop: cancel, slots: make(chan struct{}, n), wake: make(chan struct{}, 1),
 		runs: map[string]*jobRun{}, onChange: opts.OnChange, onProgress: opts.OnProgress,
-		notify: make(chan struct{}, 1),
+		notify: make(chan struct{}, 1), updates: make(chan struct{}), failed: make(chan struct{}),
 	}
-	e.provider = &HTTPProvider{PollInterval: opts.PollInterval, MediaDir: repo.mediaDir(), Network: e.Network}
+	e.provider = &HTTPProvider{PollInterval: opts.PollInterval, MediaDir: repo.mediaDir(), Network: e.Network, ReadReference: e.ReadReference, OnPreview: opts.OnPreview, OnDiagnostic: opts.OnDiagnostic}
 	if e.runner == nil {
 		e.runner = e.provider
 	}
 	e.cur.Store(&state{doc: d, rev: 1, logStart: 1})
+	if err := e.CollectTrash(time.Now()); err != nil {
+		cancel()
+		return nil, err
+	}
+	e.wg.Add(1)
+	go e.collectDaily()
 	e.wg.Add(1)
 	go e.dispatch()
 	if e.onChange != nil {
@@ -219,17 +232,26 @@ func (e *Engine) SaveProject(p Project) (Project, error) {
 	}
 	err := e.update(func(t *tx) error {
 		old, exists := t.doc.Projects[p.ID]
+		if exists && old.DeletedAt != "" {
+			return errors.New("请先从回收站恢复画布")
+		}
 		if (exists && old.Revision != p.Revision) || (!exists && p.Revision != 0) {
 			return ErrConflict
 		}
 		for _, n := range p.Nodes {
 			if n.AssetID != "" {
-				if _, ok := t.doc.Assets[n.AssetID]; !ok {
+				if a, ok := t.doc.Assets[n.AssetID]; !ok || a.DeletedAt != "" {
 					return errors.New("引用的素材不存在，请先导入素材")
 				}
 			}
 		}
-		if !exists && len(t.doc.Projects) >= 1000 {
+		activeProjects := 0
+		for _, project := range t.doc.Projects {
+			if project.DeletedAt == "" {
+				activeProjects++
+			}
+		}
+		if !exists && activeProjects >= 1000 {
 			return errors.New("画布数量达到 1000，请先归档")
 		}
 		p.Revision++
@@ -272,9 +294,17 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 	if err := r.Validate(p); err != nil {
 		return Job{}, err
 	}
+	if r.Source == "classic" && r.ProjectID == "classic" {
+		if _, ok := t.doc.Projects["classic"]; !ok {
+			t.putProject(Project{ID: "classic", Name: "经典编辑", Viewport: Viewport{Zoom: 1}, UpdatedAt: now(), Revision: 1})
+		}
+	}
 	project, ok := t.doc.Projects[r.ProjectID]
 	if !ok {
 		return Job{}, errors.New("请先保存目标画布")
+	}
+	if project.DeletedAt != "" {
+		return Job{}, errors.New("画布已移入回收站")
 	}
 	if len(project.Nodes) >= 2000 {
 		return Job{}, errors.New("画布接近容量上限，请新建画布")
@@ -293,9 +323,16 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 			return Job{}, errors.New("目标节点不存在")
 		}
 	}
+	refs := append([]string{}, r.ReferenceAssetIDs...)
 	if r.ReferenceAssetID != "" {
-		a, ok := t.doc.Assets[r.ReferenceAssetID]
-		if !ok || a.Kind != "image" {
+		refs = append(refs, r.ReferenceAssetID)
+	}
+	if r.MaskAssetID != "" {
+		refs = append(refs, r.MaskAssetID)
+	}
+	for _, id := range refs {
+		a, ok := t.doc.Assets[id]
+		if !ok || a.Kind != "image" || a.DeletedAt != "" {
 			return Job{}, errors.New("参考素材必须是已导入的图片")
 		}
 		if a.Bytes > maxReferenceBytes {
@@ -328,11 +365,18 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 	}
 	j := Job{ID: r.ID, Request: r, Profile: p.forJob(), Fingerprint: fingerprint(r, deps), State: "queued",
 		DependsOn: append([]string{}, deps...), CreatedAt: now(), UpdatedAt: now()}
+	if r.AutoFallback && p.FallbackProfileID != "" {
+		if backup, ok := t.doc.Profiles[p.FallbackProfileID]; ok && r.Validate(backup) == nil {
+			copy := backup.forJob()
+			j.FallbackProfile = &copy
+		}
+	}
 	t.putJob(j)
 	return j, nil
 }
 
 func (e *Engine) Submit(r Request) (Job, error) {
+	r.ReferenceAssetIDs = append([]string(nil), r.ReferenceAssetIDs...)
 	var j Job
 	err := e.update(func(t *tx) error {
 		var err error
@@ -543,7 +587,7 @@ func (e *Engine) claim() (Job, *jobRun, bool) {
 				t.putJob(j)
 				continue
 			}
-			if !ready || found {
+			if !ready || found || (j.RemoteID == "" && j.ResultURL == "" && !profileAvailable(t.doc, j.Profile, j.ID)) {
 				continue
 			}
 			for _, dep := range j.DependsOn {
@@ -619,7 +663,7 @@ func (e *Engine) run(ctx context.Context, j Job, release func()) (out Output, ru
 		}
 		ref = &Output{Data: b, MIME: a.MIME}
 	}
-	result, err := e.runner.Run(ctx, j, key, ref, func(p Progress) error { return e.checkpoint(j.ID, p, release) })
+	result, err := e.runWithPolicy(ctx, j, key, ref, func(p Progress) error { return e.checkpoint(j.ID, p, release) })
 	if err != nil {
 		return Output{}, redactError(err, key)
 	}
@@ -698,6 +742,8 @@ func (e *Engine) checkpoint(id string, p Progress, release func()) error {
 // complete stores a result file outside the write lock, then records the final
 // state. A job cancelled while running never gets its late output attached.
 func (e *Engine) complete(job Job, output Output, runErr error) {
+	e.mediaMu.Lock()
+	defer e.mediaMu.Unlock()
 	defer discardOutput(output)
 	var asset Asset
 	var assetErr error
@@ -733,6 +779,7 @@ func (e *Engine) complete(job Job, output Output, runErr error) {
 		})
 	default:
 		_, err = e.updateLocked(func(t *tx) error {
+			current.RevisedPrompt = output.RevisedPrompt
 			attachResult(t, current, asset)
 			return nil
 		})

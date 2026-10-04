@@ -234,6 +234,7 @@ export function CanvasStage() {
       id: currentImage.id,
       type: "image",
       mediaId: currentImage.imageId,
+      assetId: currentImage.assetId,
       src: historyFullSrc(currentImage, null),
       label: currentImage.prompt || "图片",
       x: canvasNodes.find((node) => node.id === currentImage.id)?.x ?? ((hostSize.w / 2 - view.x) / view.scale - 140 + (canvasNodes.length % 4) * 36),

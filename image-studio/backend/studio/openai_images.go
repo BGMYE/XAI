@@ -46,43 +46,94 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 		HTTPClient:              generation,
 		DeferURLDownload:        true,
 	}
+	image := j.Request.Image
+	opts.Quality, opts.Seed, opts.NegativePrompt = image.Quality, image.Seed, image.NegativePrompt
+	opts.Background, opts.OutputCompression, opts.InputFidelity = image.Background, image.OutputCompression, image.InputFidelity
+	opts.ImageStyle, opts.Moderation, opts.UserIdentifier = image.ImageStyle, image.Moderation, image.UserIdentifier
+	opts.DisablePreview, opts.PartialImages = image.DisablePreview, image.PartialImages
+	if image.OutputFormat != "" {
+		opts.OutputFormat = image.OutputFormat
+	}
+	if opts.PartialImages == 0 {
+		opts.PartialImages = client.DefaultPartialImages
+	}
+	opts.ResponsesTransport = client.ResponsesTransport(j.Profile.ResponsesTransport)
 	responses := j.Profile.ImageAPI == responsesImageAPI
 	if responses {
 		opts.APIMode = client.APIModeResponses
 	}
+	refs := []Output{}
 	if reference != nil {
+		refs = append(refs, *reference)
+	}
+	for _, id := range j.Request.ReferenceAssetIDs {
+		if p.ReadReference == nil {
+			return Output{}, &NotSentError{Reason: "素材库不可用"}
+		}
+		ref, err := p.ReadReference(id)
+		if err != nil {
+			return Output{}, &NotSentError{Reason: err.Error()}
+		}
+		refs = append(refs, ref)
+	}
+	if j.Request.MaskAssetID != "" {
+		if p.ReadReference == nil {
+			return Output{}, &NotSentError{Reason: "素材库不可用"}
+		}
+		mask, err := p.ReadReference(j.Request.MaskAssetID)
+		if err != nil {
+			return Output{}, &NotSentError{Reason: err.Error()}
+		}
+		opts.MaskB64 = base64.StdEncoding.EncodeToString(mask.Data)
+	}
+	for i := range refs {
+		reference := &refs[i]
 		opts.Mode = client.ModeEdit
 		if responses {
-			opts.ImageDataURLs = []string{"data:" + referenceMIME(reference) + ";base64," + base64.StdEncoding.EncodeToString(reference.Data)}
+			opts.ImageDataURLs = append(opts.ImageDataURLs, "data:"+referenceMIME(reference)+";base64,"+base64.StdEncoding.EncodeToString(reference.Data))
 		} else {
 			path, err := p.referenceFile(reference)
 			if err != nil {
 				return Output{}, &NotSentError{Reason: "参考图片无法写入临时文件"}
 			}
 			defer os.Remove(path)
-			opts.ImagePaths = []string{path}
+			opts.ImagePaths = append(opts.ImagePaths, path)
 		}
 	}
 
 	ctx, mayHaveSent := connected(ctx)
 	raw := &tailBuffer{limit: 256 << 10}
-	onPartial := func(client.PartialImage) { _ = checkpoint(Progress{Percent: 60}) }
+	defer func() {
+		if p.OnDiagnostic != nil {
+			p.OnDiagnostic(j.ID, redact(raw.String(), key))
+		}
+	}()
+	onPartial := func(partial client.PartialImage) {
+		_ = checkpoint(Progress{Percent: 60})
+		if p.OnPreview != nil {
+			p.OnPreview(j.ID, partial)
+		}
+	}
 	var result client.ImageResult
 	if responses {
-		result, err = client.RequestAndExtractWithPartial(ctx, &client.NativeTransport{Client: generation}, opts, raw, nil, onPartial)
+		result, err = client.RequestResponsesOnce(ctx, opts, raw, nil, onPartial)
 	} else {
 		result, err = client.RequestImagesAPIWithPartial(ctx, opts, raw, nil, onPartial)
 	}
 	if err != nil {
-		return Output{}, generationError(ctx, err, mayHaveSent(), raw.String())
+		return Output{}, generationError(ctx, err, mayHaveSent() || (responses && j.Profile.ResponsesTransport == "websocket" && !client.SafeToRetry(err)), raw.String())
 	}
 	if result.ImageB64 != "" {
-		return p.decodeBase64(result.ImageB64)
+		out, err := p.decodeBase64(result.ImageB64)
+		out.RevisedPrompt = result.RevisedPrompt
+		return out, err
 	}
 	if result.URL == "" {
 		return Output{}, errors.New("上游未返回图片；没有自动重试")
 	}
-	return p.imageResult(ctx, media, j.Profile, mediaResult{URL: result.URL}, checkpoint)
+	out, err := p.imageResult(ctx, media, j.Profile, mediaResult{URL: result.URL}, checkpoint)
+	out.RevisedPrompt = result.RevisedPrompt
+	return out, err
 }
 
 // generationError classifies a failed generation by what is known to have

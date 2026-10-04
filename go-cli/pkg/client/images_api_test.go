@@ -316,17 +316,8 @@ func TestRequestImagesAPIWithRetriesRetriesWhenOnlyPartialPreviewArrives(t *test
 			partials = append(partials, partial)
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if hits != 2 {
-		t.Fatalf("hits = %d, want 2", hits)
-	}
-	if res.ImageB64 != finalB64 || res.SourceEvent != "images_api" {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-	if len(partials) != 1 || partials[0].ImageB64 != partialB64 {
-		t.Fatalf("unexpected partials: %+v", partials)
+	if err == nil || hits != 1 {
+		t.Fatalf("partial generation replayed: hits=%d result=%+v err=%v", hits, res, err)
 	}
 }
 

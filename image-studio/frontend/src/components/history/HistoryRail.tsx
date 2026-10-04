@@ -1,3 +1,4 @@
+import { profileHasKey } from "../../lib/upstreamRegistry";
 import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown, ChevronRight, Clock3, CopyPlus, Filter, GalleryVerticalEnd,
@@ -484,7 +485,7 @@ export function HistoryRail() {
           </button>
           <button
             onClick={testAPIKey}
-            disabled={!apiKey.trim() || !baseURL.trim() || isTestingKey}
+            disabled={!profileHasKey(useStudioStore.getState().activeProfileId, apiKey) || !baseURL.trim() || isTestingKey}
             title="验证当前配置是否可连通"
             className={`platform-action-btn inline-flex min-h-[34px] min-w-[84px] items-center justify-center gap-1.5 border border-black/[0.08] px-3 text-[12px] font-medium text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300 ${isAndroidPhone ? "py-1.5" : isMac ? "py-2.5" : "py-2"} ${usesFluentUI ? "rounded-[8px]" : "rounded-full"}`}
           >

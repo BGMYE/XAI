@@ -2471,3 +2471,17 @@
     transform: none;
   }
 }
+
+.library-maintenance {
+  margin-bottom: 20px;
+}
+.library-maintenance fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.library-maintenance label {
+  display: grid;
+  gap: 5px;
+}

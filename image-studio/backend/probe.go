@@ -31,6 +31,22 @@ func (s *Service) ProbeUpstream(opts ProbeUpstreamOptions) (ProbeUpstreamResult,
 	if s.ctx == nil {
 		return ProbeUpstreamResult{}, errors.New("服务未启动")
 	}
+	if opts.ProfileID != "" && opts.APIKey == "" {
+		e, err := s.sharedEngine()
+		if err != nil {
+			return ProbeUpstreamResult{}, err
+		}
+		p, key, err := e.ProfileCredentials(opts.ProfileID)
+		if err != nil {
+			return ProbeUpstreamResult{}, err
+		}
+		if opts.BaseURL != "" && strings.TrimRight(opts.BaseURL, "/") != strings.TrimRight(p.BaseURL, "/") {
+			return ProbeUpstreamResult{}, errors.New("地址已修改，请先保存新地址及密钥后测试")
+		}
+		opts.APIKey, opts.BaseURL, opts.AllowInsecureConnection = key, p.BaseURL, p.AllowInsecure
+		n := e.Network()
+		opts.ProxyMode, opts.ProxyURL = n.ProxyMode, n.ProxyURL
+	}
 	return probeUpstream(s.ctx, opts)
 }
 
@@ -60,7 +76,9 @@ func probeUpstream(parent context.Context, opts ProbeUpstreamOptions) (ProbeUpst
 	if err != nil {
 		return ProbeUpstreamResult{}, err
 	}
-	httpClient := &http.Client{Timeout: probeUpstreamTimeout, Transport: transport}
+	httpClient := &http.Client{Timeout: probeUpstreamTimeout, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return ProbeUpstreamResult{}, fmt.Errorf("连接上游失败: %w", err)

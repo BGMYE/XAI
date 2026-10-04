@@ -32,8 +32,19 @@ export function useStudio() {
   // a delta reports.
   const accept = useCallback(
     (s: Snapshot, changed: Project[] = s.projects) => {
+      const previous = current.current;
       current.current = s;
+      for (const id of drafts.current.keys()) {
+        const remote = s.projects.find((p) => p.id === id);
+        // A newly saved draft may not have appeared in a lagging snapshot yet.
+        // Only a tombstone or removal of a previously observed project deletes it.
+        if (!remote?.deletedAt && (remote || !previous.projects.some((p) => p.id === id))) continue;
+        drafts.current.delete(id);
+        conflicts.current.delete(id);
+        failedSaves.current.delete(id);
+      }
       for (const remote of changed) {
+        if (remote.deletedAt) continue;
         const d = drafts.current.get(remote.id);
         if (!d) drafts.current.set(remote.id, { base: remote, local: remote });
         else if (
@@ -53,7 +64,7 @@ export function useStudio() {
       if (alive.current) {
         setSnapshot(s);
         setReady(true);
-        setActiveID((id) => id || s.projects[0]?.id || "");
+        setActiveID((id) => (drafts.current.has(id) ? id : s.projects.find((p) => !p.deletedAt)?.id || ""));
         bump((n) => n + 1);
       }
     },

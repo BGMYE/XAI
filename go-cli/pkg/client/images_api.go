@@ -412,7 +412,7 @@ func RequestImagesAPIWithPartial(
 	}
 	defer close(stopProgress)
 
-	resp, err := httpClient.Do(req)
+	resp, err := doGeneration(httpClient, req)
 	if err != nil {
 		return ImageResult{}, err
 	}

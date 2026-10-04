@@ -44,6 +44,15 @@ Object.assign(window, {
       backend.projects.set(id, { ...p, name, revision: p.revision + 1 });
       record("project", id);
     },
+    trashProject(id: string) {
+      const p = backend.projects.get(id)!;
+      backend.projects.set(id, { ...p, deletedAt: new Date().toISOString(), revision: p.revision + 1 });
+      record("project", id);
+    },
+    deleteJob(id: string) {
+      backend.jobs.delete(id);
+      record("job", id);
+    },
     restart() {
       backend.epoch = "second-run";
       backend.log = [];
@@ -85,9 +94,17 @@ Object.assign(window, {
             profiles: [],
             projects: structuredClone(ids("project").map((id) => backend.projects.get(id)!)),
             assets: [],
-            jobs: structuredClone(ids("job").map((id) => backend.jobs.get(id)!)),
+            jobs: structuredClone(
+              ids("job")
+                .filter((id) => backend.jobs.has(id))
+                .map((id) => backend.jobs.get(id)!),
+            ),
             promptCards: [],
-            removed: { profiles: [], promptCards: [] },
+            removed: {
+              profiles: [],
+              promptCards: [],
+              jobs: ids("job").filter((id) => !backend.jobs.has(id)),
+            },
           };
         },
         async SaveProject(project: Project) {

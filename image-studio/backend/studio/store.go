@@ -173,6 +173,8 @@ func (e *Engine) updateLocked(fn func(*tx) error) (*state, error) {
 		next.log = slices.Clone(next.log[over:])
 	}
 	e.cur.Store(next)
+	close(e.updates)
+	e.updates = make(chan struct{})
 	e.changed(next.rev)
 	return next, nil
 }
@@ -205,7 +207,9 @@ func (e *Engine) failure() error {
 
 // fail stops the engine after a state transition could not be persisted.
 func (e *Engine) fail(err error) {
-	e.fatal.CompareAndSwap(nil, &errFatal{fmt.Errorf("任务状态无法落盘，请重启并检查磁盘空间：%w", err)})
+	if e.fatal.CompareAndSwap(nil, &errFatal{fmt.Errorf("任务状态无法落盘，请重启并检查磁盘空间：%w", err)}) {
+		close(e.failed)
+	}
 	e.wakeDispatcher()
 }
 
@@ -281,6 +285,9 @@ type ChangeSet struct {
 
 // RemovedIDs lists entities deleted since the client's revision.
 type RemovedIDs struct {
+	Projects    []string `json:"projects"`
+	Assets      []string `json:"assets"`
+	Jobs        []string `json:"jobs"`
 	Profiles    []string `json:"profiles"`
 	PromptCards []string `json:"promptCards"`
 }
@@ -328,14 +335,20 @@ func (e *Engine) Changes(epoch string, since uint64) (ChangeSet, error) {
 		case colProjects:
 			if v, ok := st.doc.Projects[c.id]; ok {
 				cs.Projects = append(cs.Projects, cloneProject(v))
+			} else {
+				cs.Removed.Projects = append(cs.Removed.Projects, c.id)
 			}
 		case colAssets:
 			if v, ok := st.doc.Assets[c.id]; ok {
 				cs.Assets = append(cs.Assets, v)
+			} else {
+				cs.Removed.Assets = append(cs.Removed.Assets, c.id)
 			}
 		case colJobs:
 			if v, ok := st.doc.Jobs[c.id]; ok {
 				cs.Jobs = append(cs.Jobs, cloneJob(v))
+			} else {
+				cs.Removed.Jobs = append(cs.Removed.Jobs, c.id)
 			}
 		case colPromptCards:
 			if v, ok := st.doc.PromptCards[c.id]; ok {
@@ -386,7 +399,12 @@ func cloneProject(p Project) Project {
 }
 
 func cloneJob(j Job) Job {
+	if j.FallbackProfile != nil {
+		copy := cloneProfile(*j.FallbackProfile)
+		j.FallbackProfile = &copy
+	}
 	j.DependsOn = slices.Clone(j.DependsOn)
+	j.Request.ReferenceAssetIDs = slices.Clone(j.Request.ReferenceAssetIDs)
 	return j
 }
 

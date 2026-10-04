@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 var ErrConflict = errors.New("画布已更新，请重新载入后保存（revision conflict）")
 var validID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,159}$`)
@@ -91,7 +91,6 @@ func (p Profile) secretSlot() string {
 // editor-only metadata such as the model catalog.
 func (p Profile) forJob() Profile {
 	p.ModelIDs = nil
-	p.ConcurrencyLimit = 0
 	p.FallbackProfileID = ""
 	p.VerifiedAt = ""
 	return p
@@ -229,10 +228,12 @@ type Viewport struct {
 	Zoom float64 `json:"zoom"`
 }
 type Parameters struct {
-	Size        string `json:"size,omitempty"`
-	Seconds     int    `json:"seconds,omitempty"`
-	AspectRatio string `json:"aspectRatio,omitempty"`
-	Resolution  string `json:"resolution,omitempty"`
+	Quality      string `json:"quality,omitempty"`
+	EndpointPath string `json:"endpointPath,omitempty"`
+	Size         string `json:"size,omitempty"`
+	Seconds      int    `json:"seconds,omitempty"`
+	AspectRatio  string `json:"aspectRatio,omitempty"`
+	Resolution   string `json:"resolution,omitempty"`
 }
 type Node struct {
 	ID         string     `json:"id"`
@@ -250,6 +251,7 @@ type Edge struct {
 	To   string `json:"to"`
 }
 type Project struct {
+	DeletedAt string   `json:"deletedAt,omitempty"`
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
 	Revision  int64    `json:"revision"`
@@ -348,17 +350,49 @@ func (p Project) Order() ([]string, error) {
 }
 
 type Request struct {
-	ID               string     `json:"id"`
-	ProfileID        string     `json:"profileId"`
-	ProjectID        string     `json:"projectId"`
-	NodeID           string     `json:"nodeId,omitempty"`
-	Kind             string     `json:"kind"`
-	Prompt           string     `json:"prompt"`
-	ReferenceAssetID string     `json:"referenceAssetId,omitempty"`
-	Parameters       Parameters `json:"parameters"`
+	AutoFallback      bool            `json:"autoFallback,omitempty"`
+	UnsentRetries     int             `json:"unsentRetries,omitempty"`
+	Source            string          `json:"source,omitempty"`
+	Image             ImageParameters `json:"image,omitzero"`
+	ReferenceAssetIDs []string        `json:"referenceAssetIds,omitempty"`
+	MaskAssetID       string          `json:"maskAssetId,omitempty"`
+	ID                string          `json:"id"`
+	ProfileID         string          `json:"profileId"`
+	ProjectID         string          `json:"projectId"`
+	NodeID            string          `json:"nodeId,omitempty"`
+	Kind              string          `json:"kind"`
+	Prompt            string          `json:"prompt"`
+	ReferenceAssetID  string          `json:"referenceAssetId,omitempty"`
+	Parameters        Parameters      `json:"parameters"`
+}
+
+// ImageParameters contains generation choices only. Credentials and local file
+// paths never enter a persisted request; references are immutable asset IDs.
+type ImageParameters struct {
+	Quality           string `json:"quality,omitempty"`
+	OutputFormat      string `json:"outputFormat,omitempty"`
+	Seed              int64  `json:"seed,omitempty"`
+	NegativePrompt    string `json:"negativePrompt,omitempty"`
+	Background        string `json:"background,omitempty"`
+	OutputCompression int    `json:"outputCompression,omitempty"`
+	InputFidelity     string `json:"inputFidelity,omitempty"`
+	ImageStyle        string `json:"imageStyle,omitempty"`
+	Moderation        string `json:"moderation,omitempty"`
+	UserIdentifier    string `json:"userIdentifier,omitempty"`
+	DisablePreview    bool   `json:"disablePreview,omitempty"`
+	PartialImages     int    `json:"partialImages,omitempty"`
 }
 
 func (r Request) Validate(p Profile) error {
+	if r.Source != "" && r.Source != "classic" {
+		return errors.New("未知任务来源")
+	}
+	if len(r.ReferenceAssetIDs) > 16 || len(r.Image.NegativePrompt) > 16000 || len(r.Image.UserIdentifier) > 512 {
+		return errors.New("图像参数过长")
+	}
+	if (len(r.ReferenceAssetIDs) > 0 || r.MaskAssetID != "") && (r.Kind != "image" || p.Protocol != "openai") {
+		return errors.New("多参考图与蒙版需要 OpenAI 图像协议")
+	}
 	for _, id := range []string{r.ID, r.ProfileID, r.ProjectID} {
 		if err := checkID(id); err != nil {
 			return err
@@ -383,38 +417,49 @@ func (r Request) Validate(p Profile) error {
 		if p.Protocol == "xai" && (s < 1 || s > 15) {
 			return errors.New("xAI 视频时长必须为 1–15 秒")
 		}
-		if p.Protocol == "openai" && s != 4 && s != 8 && s != 12 {
-			return errors.New("OpenAI 视频协议时长必须为 4、8 或 12 秒")
+		if p.Protocol == "openai" {
+			if r.Source == "classic" {
+				if s < 1 || s > 60 {
+					return errors.New("视频时长必须为 1–60 秒")
+				}
+			} else if s != 4 && s != 8 && s != 12 {
+				return errors.New("OpenAI 视频协议时长必须为 4、8 或 12 秒")
+			}
 		}
 	}
-	if len(r.Parameters.Size) > 30 || len(r.Parameters.AspectRatio) > 10 || len(r.Parameters.Resolution) > 10 {
+	if len(r.Parameters.Size) > 30 || len(r.Parameters.AspectRatio) > 10 || len(r.Parameters.Resolution) > 10 || len(r.Parameters.Quality) > 64 || len(r.Parameters.EndpointPath) > 2000 {
 		return errors.New("生成参数无效")
 	}
 	return nil
 }
 
 type Asset struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	MIME      string `json:"mime"`
-	Bytes     int64  `json:"bytes"`
-	CreatedAt string `json:"createdAt"`
-	FileName  string `json:"fileName"`
+	ClassicPinned bool   `json:"classicPinned,omitempty"`
+	DeletedAt     string `json:"deletedAt,omitempty"`
+	ID            string `json:"id"`
+	Kind          string `json:"kind"`
+	Name          string `json:"name"`
+	MIME          string `json:"mime"`
+	Bytes         int64  `json:"bytes"`
+	CreatedAt     string `json:"createdAt"`
+	FileName      string `json:"fileName"`
 }
 
 func (a Asset) URL() string { return "/studio-media/" + a.ID }
 
 type Job struct {
-	ID            string  `json:"id"`
-	Request       Request `json:"request"`
-	Profile       Profile `json:"profile"`
-	Fingerprint   string  `json:"fingerprint"`
-	State         string  `json:"state"`
-	RemoteID      string  `json:"remoteId,omitempty"`
-	Progress      int     `json:"progress"`
-	Error         string  `json:"error,omitempty"`
-	ResultAssetID string  `json:"resultAssetId,omitempty"`
+	HistoryMode     string   `json:"historyMode,omitempty"`
+	FallbackProfile *Profile `json:"fallbackProfile,omitempty"`
+	RevisedPrompt   string   `json:"revisedPrompt,omitempty"`
+	ID              string   `json:"id"`
+	Request         Request  `json:"request"`
+	Profile         Profile  `json:"profile"`
+	Fingerprint     string   `json:"fingerprint"`
+	State           string   `json:"state"`
+	RemoteID        string   `json:"remoteId,omitempty"`
+	Progress        int      `json:"progress"`
+	Error           string   `json:"error,omitempty"`
+	ResultAssetID   string   `json:"resultAssetId,omitempty"`
 	// ResultURL is set once the upstream has produced an image but before it
 	// is downloaded. It lets an interrupted download resume without
 	// regenerating (and paying for) the image.
@@ -430,12 +475,6 @@ func terminal(state string) bool {
 		return true
 	}
 	return false
-}
-func (j Job) model() string {
-	if j.Request.Kind == "video" {
-		return j.Profile.VideoModel
-	}
-	return j.Profile.ImageModel
 }
 
 type Snapshot struct {

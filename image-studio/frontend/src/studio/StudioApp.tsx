@@ -1,3 +1,5 @@
+import { EndpointPreview } from "../components/panel/EndpointPreview";
+import { LibraryMaintenance } from "./LibraryMaintenance";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
@@ -296,6 +298,7 @@ function ProviderForm({
           spellCheck={false}
         />
       </label>
+      <EndpointPreview baseURL={draft.baseUrl} protocol={draft.protocol} />
       <label>
         API Key
         <input
@@ -611,7 +614,11 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
     const runtime = (window as unknown as { runtime?: Record<string, () => void> }).runtime;
     runtime?.[method]?.();
   };
-  const { jobs, assets: allAssets, projects } = studio.snapshot;
+  const { jobs, assets: allAssets } = studio.snapshot;
+  const projects = useMemo(
+    () => studio.snapshot.projects.filter((p) => !p.deletedAt),
+    [studio.snapshot.projects],
+  );
   // Prompts of the jobs that produced each asset, for search. Built once per
   // job list instead of scanning every job for every asset on each keystroke.
   const resultPrompts = useMemo(() => {
@@ -628,6 +635,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
     const needle = query.toLowerCase();
     return allAssets.filter(
       (a) =>
+        !a.deletedAt &&
         (page === "assets" || resultPrompts.has(a.id)) &&
         (filter === "all" || a.kind === filter) &&
         (a.name.toLowerCase().includes(needle) || (resultPrompts.get(a.id)?.includes(needle) ?? false)),
@@ -695,6 +703,18 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
             {j.error && <p className="studio-job-error">{j.error}</p>}
             {j.remoteId && <small>远端任务：{j.remoteId}</small>}
             <div className="studio-job-actions">
+              {["succeeded", "failed", "cancelled", "uncertain"].includes(j.state) && (
+                <button
+                  onClick={() =>
+                    void runAction(async () => {
+                      await client.libraryAction("DeleteJob", j.id);
+                      await studio.refresh();
+                    })
+                  }
+                >
+                  删除任务记录
+                </button>
+              )}
               {["queued", "running", "paused"].includes(j.state) && (
                 <button
                   onClick={() =>
@@ -1063,7 +1083,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                   value={studio.activeID}
                   onChange={(e) => studio.setActiveID(e.target.value)}
                 >
-                  {studio.snapshot.projects.map((p) => (
+                  {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {studio.getProject(p.id)?.name ?? p.name}
                     </option>
@@ -1188,7 +1208,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     <select value={referenceID} onChange={(e) => setReferenceID(e.target.value)}>
                       <option value="">无参考图</option>
                       {studio.snapshot.assets
-                        .filter((a) => a.kind === "image")
+                        .filter((a) => a.kind === "image" && !a.deletedAt)
                         .map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.name}
@@ -1270,7 +1290,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                   结果画布
                   <select value={studio.activeID} onChange={(e) => studio.setActiveID(e.target.value)}>
                     <option value="">自动创建创作画布</option>
-                    {studio.snapshot.projects.map((p) => (
+                    {projects.map((p) => (
                       <option value={p.id} key={p.id}>
                         {p.name}
                       </option>
@@ -1364,7 +1384,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
               </div>
             </div>
             <div className="studio-project-grid">
-              {studio.snapshot.projects.map((p) => (
+              {projects.map((p) => (
                 <button
                   className="studio-project-card"
                   key={p.id}
@@ -1436,6 +1456,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                 添加上游
               </button>
             </div>
+            <LibraryMaintenance snapshot={studio.snapshot} refresh={studio.refresh} report={studio.report} />
             <div className="studio-settings-grid">
               <section>
                 <div className="studio-section-title">
@@ -1507,7 +1528,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                 </p>
                 <p>浏览器预览仅在 IndexedDB 保存画布和导入图片，不保存密钥、不生成虚假结果。</p>
                 <p>
-                  旧项目与旧上游配置保持原样，可通过左侧「经典编辑」访问。新版采用独立存储，不覆盖旧数据。
+                  经典编辑与工作室共用上游、任务和素材库。旧输出目录保留为导入源；历史数据升级前会自动备份。
                 </p>
                 <button className="studio-secondary" onClick={onClassic}>
                   <Monitor size={16} />

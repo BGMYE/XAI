@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,11 @@ const MaxVideoResponseBytes = 16 * 1024 * 1024
 const MaxVideoMediaBytes = 32 * 1024 * 1024
 const DefaultVideoEndpointPath = "/v1/videos"
 const DefaultVideoPollInterval = 5 * time.Second
+
+// VideoProtocolError is a permanent invalid response, not a transport outage.
+type VideoProtocolError struct{ Message string }
+
+func (e *VideoProtocolError) Error() string { return e.Message }
 
 type VideoStatus string
 
@@ -34,17 +40,21 @@ const (
 )
 
 type VideoOptions struct {
-	BaseURL            string
-	APIKey             string
-	VideoModelID       string
-	EndpointPath       string
-	Prompt             string
-	Seconds            int
-	Size               string
-	Quality            string
-	InputReference     []byte
-	InputReferenceName string
-	HTTPClient         *http.Client
+	Protocol                string
+	AspectRatio             string
+	Resolution              string
+	AllowInsecureConnection bool
+	BaseURL                 string
+	APIKey                  string
+	VideoModelID            string
+	EndpointPath            string
+	Prompt                  string
+	Seconds                 int
+	Size                    string
+	Quality                 string
+	InputReference          []byte
+	InputReferenceName      string
+	HTTPClient              *http.Client
 }
 
 type VideoPollOptions struct {
@@ -56,15 +66,25 @@ type VideoPollOptions struct {
 }
 
 type VideoResult struct {
-	ID      string         `json:"id"`
-	Status  VideoStatus    `json:"status"`
-	URL     string         `json:"url,omitempty"`
-	B64JSON string         `json:"b64_json,omitempty"`
-	Error   string         `json:"error,omitempty"`
-	Raw     map[string]any `json:"-"`
+	RespectModeration *bool          `json:"respect_moderation,omitempty"`
+	Progress          int            `json:"progress"`
+	ID                string         `json:"id"`
+	Status            VideoStatus    `json:"status"`
+	URL               string         `json:"url,omitempty"`
+	B64JSON           string         `json:"b64_json,omitempty"`
+	Error             string         `json:"error,omitempty"`
+	Raw               map[string]any `json:"-"`
 }
 
 type videoResponse struct {
+	RespectModeration *bool  `json:"respect_moderation"`
+	RequestID         string `json:"request_id"`
+	Progress          int    `json:"progress"`
+	Video             struct {
+		RespectModeration *bool  `json:"respect_moderation"`
+		URL               string `json:"url"`
+		B64JSON           string `json:"b64_json"`
+	} `json:"video"`
 	ID       string          `json:"id"`
 	Status   string          `json:"status"`
 	URL      string          `json:"url"`
@@ -72,85 +92,26 @@ type videoResponse struct {
 	VideoURL string          `json:"video_url"`
 	Error    json.RawMessage `json:"error"`
 	Data     []struct {
-		URL     string `json:"url"`
-		B64JSON string `json:"b64_json"`
+		RespectModeration *bool  `json:"respect_moderation"`
+		URL               string `json:"url"`
+		B64JSON           string `json:"b64_json"`
 	} `json:"data"`
 }
 
 func CreateVideo(ctx context.Context, opts VideoOptions) (VideoResult, error) {
-	base, err := ValidateBaseURLWithSecurity(opts.BaseURL, opts.BaseURL != "" && isLoopbackBaseURL(opts.BaseURL))
-	if err != nil {
-		return VideoResult{}, err
-	}
-	if strings.TrimSpace(opts.APIKey) == "" {
-		return VideoResult{}, ErrEmptyAPIKey
-	}
-	if strings.TrimSpace(opts.VideoModelID) == "" {
-		return VideoResult{}, errors.New("video model id must not be empty")
-	}
-	if strings.TrimSpace(opts.Prompt) == "" {
-		return VideoResult{}, errors.New("video prompt must not be empty")
-	}
-	body, contentType, err := buildVideoMultipart(opts)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	endpoint, err := videoEndpoint(base, opts.EndpointPath, "")
-	if err != nil {
-		return VideoResult{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(opts.APIKey))
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", UserAgent())
-	resp, err := videoHTTPClient(opts.HTTPClient).Do(req)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	defer resp.Body.Close()
-	result, err := decodeVideoResponseForBase(resp, base)
+	result, err := (VideoRunner{Options: opts}).Create(ctx)
 	if err != nil {
 		return result, err
 	}
-	return localizeCompletedVideo(ctx, result, base)
+	return localizeCompletedVideo(ctx, result, opts.BaseURL)
 }
 
 func PollVideo(ctx context.Context, opts VideoPollOptions) (VideoResult, error) {
-	base, err := ValidateBaseURLWithSecurity(opts.BaseURL, opts.BaseURL != "" && isLoopbackBaseURL(opts.BaseURL))
-	if err != nil {
-		return VideoResult{}, err
-	}
-	if strings.TrimSpace(opts.APIKey) == "" {
-		return VideoResult{}, ErrEmptyAPIKey
-	}
-	if strings.TrimSpace(opts.VideoID) == "" {
-		return VideoResult{}, errors.New("video id must not be empty")
-	}
-	endpoint, err := videoEndpoint(base, opts.EndpointPath, opts.VideoID)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(opts.APIKey))
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", UserAgent())
-	resp, err := videoHTTPClient(opts.HTTPClient).Do(req)
-	if err != nil {
-		return VideoResult{}, err
-	}
-	defer resp.Body.Close()
-	result, err := decodeVideoResponseForBase(resp, base)
+	result, err := (VideoRunner{Options: VideoOptions{BaseURL: opts.BaseURL, APIKey: opts.APIKey, EndpointPath: opts.EndpointPath, HTTPClient: opts.HTTPClient}}).Query(ctx, opts.VideoID)
 	if err != nil {
 		return result, err
 	}
-	return localizeCompletedVideo(ctx, result, base)
+	return localizeCompletedVideo(ctx, result, opts.BaseURL)
 }
 
 func buildVideoMultipart(opts VideoOptions) (io.Reader, string, error) {
@@ -176,7 +137,10 @@ func buildVideoMultipart(opts VideoOptions) (io.Reader, string, error) {
 		if name == "" {
 			name = "input-reference.png"
 		}
-		part, err := form.CreateFormFile("input_reference", name)
+		header := textproto.MIMEHeader{}
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="input_reference"; filename=%q`, name))
+		header.Set("Content-Type", http.DetectContentType(opts.InputReference))
+		part, err := form.CreatePart(header)
 		if err != nil {
 			return nil, "", err
 		}
@@ -191,26 +155,60 @@ func buildVideoMultipart(opts VideoOptions) (io.Reader, string, error) {
 }
 
 func decodeVideoResponseForBase(resp *http.Response, base string) (VideoResult, error) {
+	result, err := decodeVideoResponse(resp, base, "")
+	if err == nil && result.Status == VideoStatusCompleted && result.URL == "" && result.B64JSON == "" {
+		err = errors.New("completed video response missing URL or b64_json")
+	}
+	return result, err
+}
+func decodeVideoResponse(resp *http.Response, base, fallbackID string) (VideoResult, error) {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxVideoResponseBytes+1))
 	if err != nil {
 		return VideoResult{}, err
 	}
 	if len(body) > MaxVideoResponseBytes {
-		return VideoResult{}, errors.New("video response exceeds body limit")
+		return VideoResult{}, &VideoProtocolError{"video response exceeds body limit"}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var parsed videoResponse
 		_ = json.Unmarshal(body, &parsed)
-		return VideoResult{}, fmt.Errorf("video API returned HTTP %d: %s", resp.StatusCode, videoErrorText(parsed.Error, body))
+		return VideoResult{}, &HTTPStatusError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("video API returned HTTP %d: %s", resp.StatusCode, videoErrorText(parsed.Error, body)), RetryAfter: resp.Header.Get("Retry-After")}
 	}
 	var parsed videoResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return VideoResult{}, fmt.Errorf("decode video response: %w", err)
+		return VideoResult{}, &VideoProtocolError{fmt.Sprintf("decode video response: %v", err)}
 	}
 	if parsed.ID == "" {
-		return VideoResult{}, errors.New("video response missing id")
+		parsed.ID = parsed.RequestID
 	}
-	result := VideoResult{ID: parsed.ID, Status: VideoStatus(strings.ToLower(strings.TrimSpace(parsed.Status))), URL: parsed.URL, B64JSON: parsed.B64JSON}
+	if parsed.ID == "" {
+		parsed.ID = fallbackID
+	}
+	if !videoIDPattern.MatchString(parsed.ID) {
+		return VideoResult{}, &VideoProtocolError{"video response missing or invalid id"}
+	}
+	if parsed.Status == "" && fallbackID == "" {
+		parsed.Status = "queued"
+	}
+	switch parsed.Status {
+	case "pending":
+		parsed.Status = "queued"
+	case "running", "processing":
+		parsed.Status = "in_progress"
+	case "done", "succeeded":
+		parsed.Status = "completed"
+	case "expired":
+		parsed.Status = "failed"
+	case "canceled":
+		parsed.Status = "cancelled"
+	}
+	if parsed.URL == "" {
+		parsed.URL = parsed.Video.URL
+	}
+	if parsed.B64JSON == "" {
+		parsed.B64JSON = parsed.Video.B64JSON
+	}
+	result := VideoResult{Progress: parsed.Progress, ID: parsed.ID, Status: VideoStatus(strings.ToLower(strings.TrimSpace(parsed.Status))), URL: parsed.URL, B64JSON: parsed.B64JSON}
 	if result.URL == "" {
 		result.URL = parsed.VideoURL
 	}
@@ -221,6 +219,20 @@ func decodeVideoResponseForBase(resp *http.Response, base string) (VideoResult, 
 		if result.B64JSON == "" {
 			result.B64JSON = parsed.Data[0].B64JSON
 		}
+	}
+	for _, moderation := range []*bool{parsed.RespectModeration, parsed.Video.RespectModeration} {
+		if moderation != nil && (result.RespectModeration == nil || !*moderation) {
+			result.RespectModeration = moderation
+		}
+	}
+	if len(parsed.Data) > 0 && parsed.Data[0].RespectModeration != nil {
+		if result.RespectModeration == nil || !*parsed.Data[0].RespectModeration {
+			result.RespectModeration = parsed.Data[0].RespectModeration
+		}
+	}
+	if result.RespectModeration != nil && !*result.RespectModeration {
+		result.Status = VideoStatusFailed
+		return result, errors.New("视频未通过上游内容审核")
 	}
 	if parsed.Error != nil {
 		result.Error = videoErrorText(parsed.Error, nil)
@@ -234,9 +246,6 @@ func decodeVideoResponseForBase(resp *http.Response, base string) (VideoResult, 
 			return VideoResult{}, err
 		}
 		result.URL = validatedURL
-	}
-	if result.Status == VideoStatusCompleted && result.URL == "" && strings.TrimSpace(result.B64JSON) == "" {
-		return result, errors.New("completed video response missing URL or b64_json")
 	}
 	return result, nil
 }

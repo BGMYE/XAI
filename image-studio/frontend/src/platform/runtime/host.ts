@@ -243,7 +243,7 @@ export function getHostCapabilities(): HostCapabilities {
   const kind = detectHostKind();
   const localGenerationCapable = kind === "wails-desktop" && hasServiceMethod("Generate") && hasServiceMethod("Edit");
   const localPromptOptimizeCapable = kind === "wails-desktop" && hasServiceMethod("OptimizePrompt");
-  const localModeEnabled = getForcedKernelRuntimeMode() !== "remote";
+  const localModeEnabled = kind === "wails-desktop" || getForcedKernelRuntimeMode() !== "remote";
   const hasDesktopNativeTransforms = kind === "wails-desktop"
     && hasServiceMethod("RotateImage")
     && hasServiceMethod("FlipImage")
@@ -802,9 +802,11 @@ export async function probeCurrentUpstream(
   responsesTransport = "sse",
   allowInsecureConnection = false,
   signal?: AbortSignal,
+  profileId?: string,
 ): Promise<ProbeUpstreamResultLike> {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const options: ProbeUpstreamOptionsLike = {
+    ...(profileId ? { profileId } : {}),
     baseURL,
     apiKey,
     proxyMode,

@@ -44,7 +44,7 @@ func (t *NativeTransport) Stream(ctx context.Context, req Request, rawSink io.Wr
 		}
 	}
 
-	resp, err := cli.Do(httpReq)
+	resp, err := doGeneration(cli, httpReq)
 	if err != nil {
 		return fmt.Errorf("post: %w", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/yuanhua/image-gptcodex/pkg/client"
 	"io"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 // StudioV2 is a thin Wails host. The core contains no Wails/runtime dependency.
 // Its upstream registry is shared with the classic editor.
 type StudioV2 struct {
+	classic *Service
 	mu      sync.Mutex
 	ctx     context.Context
 	engine  *studio.Engine
@@ -29,7 +31,11 @@ type studioSecrets struct{ keys apiKeyStore }
 func (s studioSecrets) Get(id string) (string, error) { return s.keys.Get("api-key:studio-v2:" + id) }
 func (s studioSecrets) Set(id, key string) error      { return s.keys.Set("api-key:studio-v2:"+id, key) }
 func (s studioSecrets) Delete(id string) error        { return s.keys.Delete("api-key:studio-v2:" + id) }
-func NewStudioV2(s *Service) *StudioV2                { return &StudioV2{keys: s.apiKeys} }
+func NewStudioV2(s *Service) *StudioV2 {
+	host := &StudioV2{keys: s.apiKeys, classic: s}
+	s.studio = host
+	return host
+}
 func (s *StudioV2) Startup(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,11 +47,22 @@ func (s *StudioV2) Startup(ctx context.Context) {
 	}
 	s.engine, s.initErr = studio.Open(filepath.Join(dir, "ImageStudio", "studio-v2"), studioSecrets{s.keys}, studio.Options{
 		Workers: 2,
+		OnDiagnostic: func(id, text string) {
+			if s.classic != nil {
+				s.classic.saveSharedDiagnostic(id, text)
+			}
+		},
 		// Events only announce that something changed; the window then asks for
 		// the delta with GetChanges, so a missed event costs nothing but latency.
 		OnChange: func(revision uint64) { runtime.EventsEmit(ctx, "studio:changed", revision) },
 		OnProgress: func(jobID string, percent int) {
 			runtime.EventsEmit(ctx, "studio:progress", map[string]any{"jobId": jobID, "percent": percent})
+			runtime.EventsEmit(ctx, "progress:"+jobID, ProgressPayload{Stage: "上游处理中"})
+		},
+		OnPreview: func(jobID string, preview client.PartialImage) {
+			if s.classic != nil {
+				s.classic.emitSharedPreview(jobID, preview)
+			}
 		},
 	})
 }
@@ -144,9 +161,8 @@ func (s *StudioV2) DuplicateProfile(id string) (studio.Profile, error) {
 	return e.DuplicateProfile(id)
 }
 
-// GetProfileKey returns the key of an OpenAI-compatible upstream for the
-// classic editor, which sends it with its own requests. The Studio never needs
-// keys in the window, and those of Studio-only upstreams are not handed out.
+// GetProfileKey reveals an OpenAI-compatible key for an explicit settings
+// action. Normal generation and initialization never send keys to the window.
 func (s *StudioV2) GetProfileKey(id string) (string, error) {
 	e, err := s.core()
 	if err != nil {

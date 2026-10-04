@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { desktopRegistry, profileHasKey, registryReadOnly, revealProfileKey } from "../../lib/upstreamRegistry";
+import { useState, useEffect, useMemo, useRef } from "react";
 import "./upstream-config.css";
 import "../../styles/_xai-typography.css";
 import { ClipboardPaste, Eye, EyeOff, HelpCircle, Info, Plug, Plus, RefreshCw, Sparkles } from "lucide-react";
@@ -51,6 +52,8 @@ export function UpstreamConfigModal({
   const [draft, setDraft] = useState<UpstreamProfile | null>(null);
   const [draftKey, setDraftKey] = useState("");
   const [showKey, setShowKey] = useState(false);
+  const revealEpoch = useRef(0);
+  const revealedKey = useRef<string | null>(null);
   const [savedKeyLoaded, setSavedKeyLoaded] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -63,7 +66,10 @@ export function UpstreamConfigModal({
 
   // 打开 modal / 切 selected → 重新加载草稿与 keyring 里的 apiKey
   useEffect(() => {
-    if (!open) return;
+    const epoch = ++revealEpoch.current;
+    revealedKey.current = null;
+    setShowKey(false);
+    if (!open) { setDraftKey(""); return; }
     const sid = selectedId && profiles.some((p) => p.id === selectedId)
       ? selectedId
       : (activeProfileId || profiles[0]?.id || "");
@@ -77,11 +83,12 @@ export function UpstreamConfigModal({
     setModelCatalogError(null);
     if (p) {
       readAPIKey(p.id)
-        .then((k) => { setDraftKey(k ?? ""); setSavedKeyLoaded(true); })
-        .catch(() => setSavedKeyLoaded(true));
+        .then((k) => { if (revealEpoch.current !== epoch) return; setDraftKey(k ?? ""); setSavedKeyLoaded(true); })
+        .catch(() => { if (revealEpoch.current === epoch) setSavedKeyLoaded(true); });
     } else {
       setSavedKeyLoaded(true);
     }
+    return () => { revealEpoch.current++; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedId, profiles.length]);
 
@@ -94,6 +101,28 @@ export function UpstreamConfigModal({
   }, [open]);
 
   // 列表切换 selected
+  function changeDraftKey(value: string) {
+    revealEpoch.current++;
+    revealedKey.current = null;
+    setSavedKeyLoaded(true);
+    setDraftKey(value);
+  }
+
+  async function toggleSavedKey() {
+    const epoch = ++revealEpoch.current;
+    if (showKey) {
+      setShowKey(false);
+      if (desktopRegistry() && revealedKey.current === draftKey) setDraftKey("");
+      revealedKey.current = null;
+      return;
+    }
+    if (desktopRegistry() && !draftKey && draft) {
+      try { const key = await revealProfileKey(draft.id); if (epoch !== revealEpoch.current) return; revealedKey.current = key; setDraftKey(key); }
+      catch (error) { useStudioStore.getState().pushToast(`读取密钥失败：${error}`, "error"); return; }
+    }
+    setShowKey(true);
+  }
+
   function selectProfile(id: string) {
     if (id === selectedId) return;
     setSelectedId(id);
@@ -101,7 +130,7 @@ export function UpstreamConfigModal({
 
   const baseURLError = useMemo(() => null, [draft?.baseURL]);
 
-  const canSave = !!draft && !!draft.baseURL.trim() && !!draftKey.trim();
+  const canSave = !registryReadOnly() && !!draft && !!draft.baseURL.trim() && (!!draftKey.trim() || profileHasKey(draft.id));
 
   function patchDraft(patch: Partial<UpstreamProfile>) {
     if (!draft) return;
@@ -269,7 +298,7 @@ export function UpstreamConfigModal({
       reasoningEffort: draft.reasoningEffort,
       concurrencyLimit: draft.concurrencyLimit,
       fallbackProfileId: draft.fallbackProfileId,
-      apiKey: draftKey,
+      apiKey: desktopRegistry() ? draftKey.trim() || undefined : draftKey,
     });
   }
 
@@ -309,7 +338,7 @@ export function UpstreamConfigModal({
     if (!draft) return;
     const apiKey = draftKey.trim();
     const baseURL = draft.baseURL.trim();
-    if (!apiKey) {
+    if (!apiKey && !profileHasKey(draft.id)) {
       pushToast("请先添入 API Key，让请求有凭可行", "warn");
       return;
     }
@@ -329,6 +358,7 @@ export function UpstreamConfigModal({
         draft.apiMode,
         draft.responsesTransport ?? "sse",
         draft.allowInsecureConnection === true,
+        undefined, desktopRegistry() ? draft.id : undefined,
       );
       const catalog = buildUpstreamModelCatalog(result.models ?? []);
       setModelCatalog(catalog);
@@ -476,6 +506,7 @@ export function UpstreamConfigModal({
       headerClassName="upstream-config-modal-header"
       bodyClassName="upstream-config-modal-body"
     >
+      {registryReadOnly() && <p role="status">共享配置不可用，上游设置暂为只读。请修复数据库后重启。</p>}
       <div className="upstream-redesign-layout flex min-w-0 gap-4">
         <UpstreamProfileList
           profiles={profiles}
@@ -506,7 +537,7 @@ export function UpstreamConfigModal({
               从左侧选一处上游，或添入新的创作源头。
             </div>
           ) : (
-            <UpstreamProfileEditor
+            <fieldset disabled={registryReadOnly()} style={{border:0,margin:0,padding:0,minWidth:0}}><UpstreamProfileEditor
               draft={draft}
               draftKey={draftKey}
               showKey={showKey}
@@ -521,13 +552,13 @@ export function UpstreamConfigModal({
               usesAppleUI={usesAppleUI}
               onOpenFAQ={() => setFaqOpen(true)}
               onPatchDraft={patchDraft}
-              onChangeDraftKey={setDraftKey}
-              onToggleShowKey={() => setShowKey((v) => !v)}
+              onChangeDraftKey={changeDraftKey}
+              onToggleShowKey={() => void toggleSavedKey()}
               onLoadModels={handleLoadModels}
               onTest={handleTest}
               onClose={onClose}
               onSaveAndClose={async () => { if (await handleSave()) onClose(); }}
-            />
+            /></fieldset>
           )}
         </section>
       </div>

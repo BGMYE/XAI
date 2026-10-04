@@ -42,6 +42,19 @@ export function registryActive(): boolean {
   return active && host() !== null;
 }
 
+export function desktopRegistry(): boolean {
+  return host() !== null;
+}
+export function registryReadOnly(): boolean {
+  return desktopRegistry() && !active;
+}
+export function profileHasKey(id: string, localKey = ""): boolean {
+  return desktopRegistry() ? known.get(id)?.hasKey === true : Boolean(localKey.trim());
+}
+export function requireRegistryWritable(): void {
+  if (registryReadOnly()) throw new Error("共享配置不可用：上游设置暂为只读，请修复数据库后重启");
+}
+
 function loadLastUsed(): Record<string, number> {
   try {
     const parsed = JSON.parse(localStorage.getItem(LAST_USED_KEY) ?? "{}");
@@ -122,6 +135,7 @@ export function toClassicProfile(p: Profile, lastUsedAt?: number): UpstreamProfi
   return {
     id: p.id,
     name: p.name,
+    hasKey: p.hasKey,
     apiMode: p.imageApi === "responses" ? "responses" : "images",
     responsesTransport: p.responsesTransport === "websocket" ? "websocket" : "sse",
     requestPolicy: p.requestPolicy === "compat" ? "compat" : "openai",
@@ -199,6 +213,7 @@ export async function syncClassicProfiles(
 
 /** Saves a classic profile; an empty key keeps the saved one. */
 export async function saveRegistryProfile(profile: UpstreamProfile, key = ""): Promise<UpstreamProfile> {
+  requireRegistryWritable();
   const registry = host();
   if (!registry) throw new Error("上游配置服务不可用");
   const saved = await registry.SaveProfile(toRegistryProfile(profile, known.get(profile.id)), key.trim());
@@ -207,12 +222,14 @@ export async function saveRegistryProfile(profile: UpstreamProfile, key = ""): P
 }
 
 export async function clearRegistryKey(id: string): Promise<void> {
+  requireRegistryWritable();
   const registry = host();
   if (!registry) throw new Error("上游配置服务不可用");
   known.set(id, await registry.ClearProfileKey(id));
 }
 
 export async function deleteRegistryProfile(id: string): Promise<void> {
+  requireRegistryWritable();
   const registry = host();
   if (!registry) throw new Error("上游配置服务不可用");
   await registry.DeleteProfile(id);
@@ -220,6 +237,7 @@ export async function deleteRegistryProfile(id: string): Promise<void> {
 }
 
 export async function duplicateRegistryProfile(id: string): Promise<UpstreamProfile> {
+  requireRegistryWritable();
   const registry = host();
   if (!registry) throw new Error("上游配置服务不可用");
   const copy = await registry.DuplicateProfile(id);
@@ -233,7 +251,7 @@ export async function readProfileKey(
   legacyRead: (id: string) => Promise<string>,
 ): Promise<string> {
   const registry = host();
-  if (registry && active) return (await registry.GetProfileKey(id)) ?? "";
+  if (registry) return "";
   return (await legacyRead(id)) ?? "";
 }
 
@@ -263,4 +281,11 @@ export function prepareSharedUpstreams(): Promise<void> {
     await importClassicProfiles().catch(() => 0);
   })();
   return prepared;
+}
+
+/** Explicit user action only; callers must clear the returned value on close. */
+export async function revealProfileKey(id: string): Promise<string> {
+  requireRegistryWritable();
+  const registry = host();
+  return registry ? registry.GetProfileKey(id) : "";
 }

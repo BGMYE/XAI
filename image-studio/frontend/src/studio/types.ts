@@ -1,5 +1,7 @@
 export type Kind = "image" | "video";
 export interface Parameters {
+  quality?: string;
+  endpointPath?: string;
   size?: string;
   seconds?: number;
   aspectRatio?: string;
@@ -55,6 +57,7 @@ export interface Edge {
   to: string;
 }
 export interface Project {
+  deletedAt?: string;
   id: string;
   name: string;
   revision: number;
@@ -64,6 +67,7 @@ export interface Project {
   edges: Edge[];
 }
 export interface Asset {
+  deletedAt?: string;
   id: string;
   kind: Kind;
   name: string;
@@ -142,7 +146,13 @@ export interface ChangeSet {
   assets: Asset[];
   jobs: Job[];
   promptCards: PromptCard[];
-  removed: { profiles: string[]; promptCards: string[] };
+  removed: {
+    profiles: string[];
+    promptCards: string[];
+    projects?: string[];
+    assets?: string[];
+    jobs?: string[];
+  };
   /** Volatile progress of running jobs. */
   progress: Record<string, number>;
 }

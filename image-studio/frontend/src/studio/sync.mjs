@@ -52,9 +52,12 @@ export function applyChanges(snapshot, changes) {
     epoch: changes.epoch,
     revision: changes.revision,
     profiles: merge(snapshot.profiles, changes.profiles, changes.removed?.profiles, orders.profiles),
-    projects: merge(snapshot.projects, changes.projects, [], orders.projects),
-    assets: merge(snapshot.assets, changes.assets, [], orders.assets),
-    jobs: withProgress(merge(snapshot.jobs, changes.jobs, [], orders.jobs), changes.progress),
+    projects: merge(snapshot.projects, changes.projects, changes.removed?.projects, orders.projects),
+    assets: merge(snapshot.assets, changes.assets, changes.removed?.assets, orders.assets),
+    jobs: withProgress(
+      merge(snapshot.jobs, changes.jobs, changes.removed?.jobs, orders.jobs),
+      changes.progress,
+    ),
     promptCards: merge(
       snapshot.promptCards ?? noCards,
       changes.promptCards,

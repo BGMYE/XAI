@@ -86,6 +86,7 @@ export function tryParseProfile(raw: unknown): UpstreamProfile | null {
   return {
     id,
     name,
+    hasKey: o.hasKey === true,
     apiMode,
     responsesTransport,
     requestPolicy,

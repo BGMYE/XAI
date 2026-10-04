@@ -10,16 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httptrace"
-	"net/textproto"
 	"net/url"
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -63,7 +60,10 @@ func validResultURL(raw string) bool {
 }
 
 type HTTPProvider struct {
-	PollInterval time.Duration
+	OnDiagnostic  func(jobID, text string)
+	ReadReference func(string) (Output, error)
+	OnPreview     func(string, client.PartialImage)
+	PollInterval  time.Duration
 	// MediaDir, when set, receives downloaded and decoded results as temporary
 	// files, so large media is streamed to disk instead of held in memory.
 	MediaDir string
@@ -251,111 +251,25 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 	if j.Request.Kind == "image" && j.Profile.Protocol == "openai" {
 		return p.runOpenAIImage(ctx, j, key, reference, media, checkpoint)
 	}
-	remoteID := j.RemoteID
-	if remoteID != "" && !validRemoteID(remoteID) {
-		return Output{}, errors.New("已存任务 ID 无效，拒绝查询")
+	if j.Request.Kind == "video" {
+		return p.runVideo(ctx, j, key, reference, api, media, checkpoint)
 	}
-	if remoteID == "" {
-		endpoint, contentType, body, err := buildPayload(j, reference)
-		if err != nil {
-			return Output{}, err
-		}
-		response, err := request(ctx, api, j.Profile, key, "POST", endpoint, contentType, body)
-		if err != nil {
-			return Output{}, err
-		}
-		result, err := readJSON(response, true)
-		if err != nil {
-			return Output{}, err
-		}
-		if j.Request.Kind == "image" {
-			if len(result.Data) == 0 {
-				return Output{}, errors.New("上游未返回图片；没有自动重试")
-			}
-			return p.imageResult(ctx, media, j.Profile, result.Data[0], checkpoint)
-		}
-		remoteID = result.ID
-		if j.Profile.Protocol == "xai" {
-			remoteID = result.RequestID
-		}
-		if !validRemoteID(remoteID) {
-			return Output{}, &UncertainError{}
-		}
-		if err = checkpoint(Progress{RemoteID: remoteID, Percent: result.Progress}); err != nil {
-			return Output{}, &UncertainError{}
-		}
+	endpoint, contentType, body, err := buildPayload(j, reference)
+	if err != nil {
+		return Output{}, err
 	}
-	interval := p.PollInterval
-	if interval <= 0 {
-		interval = 5 * time.Second
+	response, err := request(ctx, api, j.Profile, key, "POST", endpoint, contentType, body)
+	if err != nil {
+		return Output{}, err
 	}
-	delay := interval
-	for {
-		if err := wait(ctx, delay); err != nil {
-			return Output{}, err
-		}
-		response, err := request(ctx, api, j.Profile, key, "GET", "/videos/"+remoteID, "", nil)
-		if err != nil {
-			if ctx.Err() != nil {
-				return Output{}, ctx.Err()
-			}
-			delay = min(delay*2, 30*time.Second)
-			continue
-		}
-		if response.StatusCode == 429 || response.StatusCode >= 500 {
-			retry, _ := strconv.Atoi(response.Header.Get("Retry-After"))
-			response.Body.Close()
-			delay = min(max(delay*2, time.Duration(retry)*time.Second), 60*time.Second)
-			continue
-		}
-		result, err := readJSON(response, false)
-		if err != nil {
-			return Output{}, err
-		}
-		delay = interval
-		if err = checkpoint(Progress{RemoteID: remoteID, Percent: result.Progress}); err != nil {
-			return Output{}, err
-		}
-		switch result.Status {
-		case "pending", "queued", "in_progress", "processing", "running":
-			continue
-		case "failed", "expired", "cancelled", "canceled":
-			return Output{}, errors.New("上游视频任务失败、过期或已取消；请在上游核对原因")
-		case "done", "completed", "succeeded":
-			file := result.Video
-			if file.URL == "" && file.B64 == "" && len(result.Data) > 0 {
-				file = result.Data[0]
-			}
-			if file.URL == "" && file.B64 == "" {
-				file.URL = result.URL
-				file.B64 = result.B64
-			}
-			if file.URL != "" || file.B64 != "" {
-				return p.fetchResult(ctx, media, j.Profile, file)
-			}
-			if j.Profile.Protocol == "xai" {
-				return Output{}, errors.New("上游标记完成，但没有提供视频文件")
-			}
-			// OpenAI-compatible jobs can expose authenticated content instead of
-			// URLs. The download is not bounded by the API client's timeout.
-			response, err := request(ctx, media, j.Profile, key, "GET", "/videos/"+remoteID+"/content", "", nil)
-			if err != nil {
-				return Output{}, &ResumeError{}
-			}
-			if response.StatusCode >= 300 && response.StatusCode < 400 {
-				location, err := response.Location()
-				response.Body.Close()
-				if err != nil {
-					return Output{}, errors.New("视频下载重定向无效")
-				}
-				// Bearer token is NEVER sent to a CDN, even for a subdomain of the API.
-				return p.fetchMedia(ctx, media, j.Profile, location.String(), 0)
-			}
-			return p.readMedia(response)
-		default:
-			return Output{}, errors.New("上游返回未知的视频任务状态，未猜测成功")
-		}
+	result, err := readJSON(response, true)
+	if err != nil {
+		return Output{}, err
 	}
+	if len(result.Data) == 0 {
+		return Output{}, errors.New("上游未返回图片；没有自动重试")
+	}
+	return p.imageResult(ctx, media, j.Profile, result.Data[0], checkpoint)
 }
 
 // imageResult turns a finished image response into output. A result link is
@@ -405,86 +319,21 @@ func wait(ctx context.Context, d time.Duration) error {
 		return nil
 	}
 }
+
+// buildPayload is the xAI image adapter. Video request construction lives in
+// go-cli's VideoRunner; OpenAI images use its streaming image client.
 func buildPayload(j Job, reference *Output) (string, string, io.Reader, error) {
-	r := j.Request
-	fields := map[string]any{"model": j.model(), "prompt": r.Prompt}
+	fields := map[string]any{"model": j.Profile.ImageModel, "prompt": j.Request.Prompt}
 	endpoint := "/images/generations"
-	if r.Kind == "video" {
-		if j.Profile.Protocol == "xai" {
-			endpoint = "/videos/generations"
-			if r.Parameters.Seconds != 0 {
-				fields["duration"] = r.Parameters.Seconds
-			}
-		} else {
-			endpoint = "/videos"
-			if r.Parameters.Seconds != 0 {
-				fields["seconds"] = strconv.Itoa(r.Parameters.Seconds)
-			}
-		}
+	if j.Request.Parameters.AspectRatio != "" {
+		fields["aspect_ratio"] = j.Request.Parameters.AspectRatio
 	}
-	if j.Profile.Protocol == "xai" {
-		if r.Parameters.AspectRatio != "" {
-			fields["aspect_ratio"] = r.Parameters.AspectRatio
-		}
-		if r.Kind == "video" && r.Parameters.Resolution != "" {
-			fields["resolution"] = r.Parameters.Resolution
-		}
-		if reference != nil {
-			fields["image"] = map[string]string{"url": "data:" + reference.MIME + ";base64," + base64.StdEncoding.EncodeToString(reference.Data)}
-			if r.Kind == "image" {
-				endpoint = "/images/edits"
-			}
-		}
-	} else {
-		if r.Parameters.Size != "" {
-			fields["size"] = r.Parameters.Size
-		}
-		if r.Kind == "video" || reference != nil {
-			if r.Kind == "image" {
-				endpoint = "/images/edits"
-			}
-			buf := &bytes.Buffer{}
-			writer := multipart.NewWriter(buf)
-			for _, name := range []string{"model", "prompt", "size", "seconds"} {
-				if value, ok := fields[name]; ok {
-					if err := writer.WriteField(name, fmt.Sprint(value)); err != nil {
-						return "", "", nil, err
-					}
-				}
-			}
-			if reference != nil {
-				field := "input_reference"
-				if r.Kind == "image" {
-					field = "image"
-				}
-				header := textproto.MIMEHeader{}
-				header.Set("Content-Disposition", `form-data; name="`+field+`"; filename="reference"`)
-				header.Set("Content-Type", reference.MIME)
-				part, err := writer.CreatePart(header)
-				if err != nil {
-					return "", "", nil, err
-				}
-				if _, err = part.Write(reference.Data); err != nil {
-					return "", "", nil, err
-				}
-			}
-			if err := writer.Close(); err != nil {
-				return "", "", nil, err
-			}
-			return endpoint, writer.FormDataContentType(), buf, nil
-		}
+	if reference != nil {
+		fields["image"] = map[string]string{"url": "data:" + referenceMIME(reference) + ";base64," + base64.StdEncoding.EncodeToString(reference.Data)}
+		endpoint = "/images/edits"
 	}
 	b, err := json.Marshal(fields)
 	return endpoint, "application/json", bytes.NewReader(b), err
-}
-func (p *HTTPProvider) fetchResult(ctx context.Context, c *http.Client, profile Profile, result mediaResult) (Output, error) {
-	if result.RespectModeration != nil && !*result.RespectModeration {
-		return Output{}, errors.New("上游未通过内容审核，未保存输出")
-	}
-	if result.B64 != "" {
-		return p.decodeBase64(result.B64)
-	}
-	return p.fetchMedia(ctx, c, profile, result.URL, 0)
 }
 
 // decodeBase64 decodes an inline result, streaming it to a temporary file when
@@ -526,8 +375,18 @@ func (p *HTTPProvider) fetchMedia(ctx context.Context, c *http.Client, profile P
 	if err != nil {
 		return Output{}, errors.New("无法建立媒体请求")
 	}
-	// No Authorization, cookies, referrer, or API headers on external media.
-	response, err := c.Do(req)
+	// External URLs and every redirect connect directly first. A proxy may
+	// resolve again, so only the configured upstream origin may fall back to it.
+	direct, err := newClient(profile, NetworkSettings{ProxyMode: client.ProxyModeNone}, mediaRequest)
+	if err != nil {
+		return Output{}, err
+	}
+	defer closeClient(direct)
+	response, err := direct.Do(req)
+	upstream, _ := url.Parse(profile.BaseURL)
+	if err != nil && ctx.Err() == nil && !errors.Is(err, errBlockedAddress) && upstream != nil && u.Scheme == upstream.Scheme && strings.EqualFold(u.Host, upstream.Host) {
+		response, err = c.Do(req)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return Output{}, ctx.Err()

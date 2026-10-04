@@ -1,3 +1,4 @@
+import { openAIAPIEndpoint } from "../../../../../../shared/kernel/requestModel.js";
 import {
   describeProblem,
   normalizeBaseURL,
@@ -233,7 +234,7 @@ export async function requestResponsesOnce(
 ): Promise<RemoteJobResult> {
   const sourceDataURLs = await resolveSourceDataURLs(request.sourceImages, request.payload);
   const body = JSON.stringify(buildResponsesPayload(request.payload, sourceDataURLs));
-  const url = `${normalizeBaseURL(request.payload.baseURL)}/v1/responses`;
+  const url = openAIAPIEndpoint(request.payload.baseURL, "responses");
   const startedAt = Date.now();
   let lastStage = "等待接口响应";
   let bytesReceived = 0;

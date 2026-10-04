@@ -1,6 +1,8 @@
 package studio
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -55,7 +57,26 @@ func (e *Engine) storeAsset(output Output, name, kind string) (Asset, error) {
 	if !ok || !strings.HasPrefix(mime, kind+"/") {
 		return Asset{}, errors.New("上游素材不是支持的图片或视频文件")
 	}
-	a := Asset{ID: NewID(), Kind: kind, Name: name, MIME: mime, Bytes: size, CreatedAt: now()}
+	hash := sha256.New()
+	if output.Path != "" {
+		f, err := os.Open(output.Path)
+		if err != nil {
+			return Asset{}, err
+		}
+		_, err = io.Copy(hash, f)
+		f.Close()
+		if err != nil {
+			return Asset{}, err
+		}
+	} else {
+		_, _ = hash.Write(output.Data)
+	}
+	id := hex.EncodeToString(hash.Sum(nil))
+	if existing, ok := e.Asset(id); ok {
+		existing.DeletedAt = ""
+		return existing, nil
+	}
+	a := Asset{ID: id, Kind: kind, Name: name, MIME: mime, Bytes: size, CreatedAt: now()}
 	a.FileName = a.ID + ext
 	target := filepath.Join(e.repo.mediaDir(), a.FileName)
 	if output.Path != "" {
@@ -73,9 +94,15 @@ func (e *Engine) storeAsset(output Output, name, kind string) (Asset, error) {
 }
 
 func (e *Engine) removeAssetFile(a Asset) {
-	if a.ID != "" && safeAsset(a, a.ID) {
-		_ = os.Remove(filepath.Join(e.repo.mediaDir(), a.FileName))
+	if a.ID == "" || !safeAsset(a, a.ID) {
+		return
 	}
+	for _, current := range e.cur.Load().doc.Assets {
+		if current.FileName == a.FileName {
+			return
+		}
+	}
+	_ = os.Remove(filepath.Join(e.repo.mediaDir(), a.FileName))
 }
 
 // discardOutput removes a temporary result file that was not moved into place.
@@ -88,6 +115,12 @@ func discardOutput(o Output) {
 // attachResult records a finished job and appends its result to the canvas
 // the job was submitted from, next to the node that produced it.
 func attachResult(t *tx, j Job, a Asset) {
+	if current, exists := t.doc.Assets[a.ID]; exists {
+		a.ClassicPinned = current.ClassicPinned
+	}
+	if j.Request.Source == "classic" {
+		a.ClassicPinned = true
+	}
 	t.putAsset(a)
 	j.State = "succeeded"
 	j.Progress = 100
@@ -95,6 +128,9 @@ func attachResult(t *tx, j Job, a Asset) {
 	j.ResultAssetID = a.ID
 	j.UpdatedAt = now()
 	t.putJob(j)
+	if j.Request.Source == "classic" {
+		return
+	}
 	p, ok := t.doc.Projects[j.Request.ProjectID]
 	if !ok || len(p.Nodes) >= 2000 || len(p.Edges) >= 4000 {
 		return
@@ -135,6 +171,8 @@ func attachResult(t *tx, j Job, a Asset) {
 // Import stores a user-supplied reference image. The file is written before
 // the transaction, so a large import never blocks other writers.
 func (e *Engine) Import(data []byte, name string) (Asset, error) {
+	e.mediaMu.Lock()
+	defer e.mediaMu.Unlock()
 	if err := e.ready(); err != nil {
 		return Asset{}, err
 	}
@@ -149,7 +187,13 @@ func (e *Engine) Import(data []byte, name string) (Asset, error) {
 	if err != nil {
 		return Asset{}, err
 	}
-	if err = e.update(func(t *tx) error { t.putAsset(a); return nil }); err != nil {
+	if err = e.update(func(t *tx) error {
+		if current, exists := t.doc.Assets[a.ID]; exists {
+			a.ClassicPinned = current.ClassicPinned
+		}
+		t.putAsset(a)
+		return nil
+	}); err != nil {
 		e.removeAssetFile(a)
 		return Asset{}, err
 	}

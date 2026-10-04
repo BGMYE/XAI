@@ -11,12 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-const websocketQuickReconnectAttempts = 1
+const websocketQuickReconnectAttempts = 0
 
 type responsesWebSocketFallbackError struct {
 	err error
@@ -90,15 +91,27 @@ func requestResponsesWithWebSocketReplay(
 		RequestPayload: payload,
 	}
 	startedAt := time.Now()
+	var progressMu sync.Mutex
+	lastStage := "等待接口响应"
+	var received int64
+	reportProgress := func(stage string, seconds int, bytes int64) {
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		lastStage, received = stage, bytes
+		if onProgress != nil {
+			onProgress(stage, seconds, bytes)
+		}
+	}
 	progressDone := make(chan struct{})
-	defer close(progressDone)
+	progressStopped := make(chan struct{})
+	defer func() { close(progressDone); <-progressStopped }()
 	go func() {
+		defer close(progressStopped)
 		if onProgress == nil {
 			return
 		}
 		ticker := time.NewTicker(time.Duration(StatusIntervalSecond) * time.Second)
 		defer ticker.Stop()
-		lastStage := "等待接口响应"
 		for {
 			select {
 			case <-ctx.Done():
@@ -106,20 +119,16 @@ func requestResponsesWithWebSocketReplay(
 			case <-progressDone:
 				return
 			case <-ticker.C:
-				if snapshot.LatestEventType != "" {
-					lastStage = SummarizeSSELine(`data: {"type":"` + snapshot.LatestEventType + `"}`)
-					if lastStage == "" {
-						lastStage = "模型处理中"
-					}
-				}
-				onProgress(lastStage, int(time.Since(startedAt).Seconds()), snapshot.ReceivedBytes)
+				progressMu.Lock()
+				onProgress(lastStage, int(time.Since(startedAt).Seconds()), received)
+				progressMu.Unlock()
 			}
 		}
 	}()
 	if onLog != nil {
 		onLog("使用 Responses WebSocket mode 发起请求...")
 	}
-	result, err := requestResponsesOverWebSocket(ctx, baseURL, opts.APIKey, opts.Proxy, opts.AllowInsecureConnection, payload, rawSink, onPartial, snapshot, startedAt, onProgress)
+	result, err := requestResponsesOverWebSocket(ctx, baseURL, opts.APIKey, opts.Proxy, opts.AllowInsecureConnection, payload, rawSink, onPartial, snapshot, startedAt, reportProgress)
 	var fallbackErr *responsesWebSocketFallbackError
 	if errors.As(err, &fallbackErr) {
 		if onLog != nil {
@@ -129,10 +138,13 @@ func requestResponsesWithWebSocketReplay(
 		if terr != nil {
 			return ImageResult{}, terr
 		}
+		if opts.HTTPClient != nil {
+			transport = &NativeTransport{Client: opts.HTTPClient}
+		}
 		return RequestAndExtractWithPartial(ctx, transport, opts, rawSink, onProgress, onPartial)
 	}
 	if err != nil && !snapshot.HasFinalImage && onLog != nil {
-		onLog("WebSocket 连接中断，正在重新连接并重放本次生成...")
+		onLog("WebSocket 连接中断，结果未知；请先核对上游，未重放生成请求。")
 	}
 	return result, err
 }
@@ -207,8 +219,9 @@ func requestResponsesOverWebSocket(
 		if rawSink != nil {
 			_, _ = io.WriteString(rawSink, fmt.Sprintf("--- websocket-error-%d: %v ---\n", snapshot.SocketEpoch, err))
 		}
-		if isResponsesWebSocketFallbackError(err) {
-			return ImageResult{}, &responsesWebSocketFallbackError{err: err}
+		var fallback *responsesWebSocketFallbackError
+		if errors.As(err, &fallback) {
+			return ImageResult{}, err
 		}
 		lastErr = err
 		if snapshot.HasFinalImage {
@@ -242,6 +255,11 @@ func requestResponsesOverWebSocketOnce(
 	if err != nil {
 		return ImageResult{}, err
 	}
+	if c := websocketHTTPClient(ctx); c != nil {
+		if tr, ok := c.Transport.(*http.Transport); ok {
+			dialer.NetDialContext, dialer.Proxy, dialer.TLSClientConfig = tr.DialContext, tr.Proxy, tr.TLSClientConfig
+		}
+	}
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+apiKey)
 	headers.Set("User-Agent", UserAgent())
@@ -249,7 +267,7 @@ func requestResponsesOverWebSocketOnce(
 
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
-		return ImageResult{}, describeWebSocketDialError(err, resp)
+		return ImageResult{}, &responsesWebSocketFallbackError{err: describeWebSocketDialError(err, resp)}
 	}
 	defer conn.Close()
 
@@ -367,11 +385,11 @@ func responsesWebSocketKeepalive(ctx context.Context, conn *websocket.Conn, done
 }
 
 func responsesWebSocketURL(baseURL string, allowInsecureConnection bool) (string, error) {
-	normalized, err := ValidateBaseURLWithSecurity(baseURL, allowInsecureConnection)
+	normalized, err := ValidateAPIBaseURL(baseURL, allowInsecureConnection)
 	if err != nil {
 		return "", err
 	}
-	parsed, err := url.Parse(normalized)
+	parsed, err := url.Parse(OpenAIAPIEndpoint(normalized, "responses"))
 	if err != nil {
 		return "", err
 	}
@@ -383,7 +401,6 @@ func responsesWebSocketURL(baseURL string, allowInsecureConnection bool) (string
 	default:
 		return "", fmt.Errorf("BASE_URL 仅支持 http:// 或 https://")
 	}
-	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/v1/responses"
 	return parsed.String(), nil
 }
 
@@ -517,12 +534,4 @@ func summarizeWebSocketHandshakeBody(body []byte) string {
 		return text[:160]
 	}
 	return text
-}
-
-func isResponsesWebSocketFallbackError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "websocket handshake failed")
 }

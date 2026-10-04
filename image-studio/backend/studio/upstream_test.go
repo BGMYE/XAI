@@ -301,7 +301,7 @@ func TestJobsDoNotPinTheModelCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	j := await(t, e, "pinned", "succeeded")
-	if j.Profile.ModelIDs != nil || j.Profile.ConcurrencyLimit != 0 {
+	if j.Profile.ModelIDs != nil || j.Profile.ConcurrencyLimit != withCatalog.ConcurrencyLimit {
 		t.Fatalf("job pinned editor metadata: %+v", j.Profile)
 	}
 	data, _ := os.ReadFile(filepath.Join(e.repo.root, "studio.json"))

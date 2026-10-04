@@ -1,3 +1,6 @@
+import { importSharedHistory, readSharedHistory, withSharedHistoryLock } from "./sharedHistory";
+import { createClassicReferenceSync } from "./sharedCanvas";
+import { SetClassicAssetReferences } from "../../wailsjs/go/backend/Service";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -64,6 +67,7 @@ import {
   loadTrustedOutputRoots,
   persistHistoryItem,
   persistHistoryItems,
+  removeHistoryItem,
   rememberTrustedOutputRoot,
   loadAllHistory,
   loadHistoryPage,
@@ -189,7 +193,7 @@ import {
 } from "./studioStore.runtime";
 import { createMediaActions } from "./studioStore.media";
 import { createProfileActions, readAPIKey, storeAPIKey } from "./studioStore.profiles";
-import { shareProxySetting, syncClassicProfiles } from "../lib/upstreamRegistry";
+import { desktopRegistry, profileHasKey, shareProxySetting, syncClassicProfiles } from "../lib/upstreamRegistry";
 import { createWorkspaceActions } from "./studioStore.workspaces";
 import { createImageActions } from "./studioStore.images";
 import { saveHistoryItemToDirectory, saveHistoryItemToDirectoryAs } from "../lib/saveResultImage";
@@ -356,6 +360,7 @@ const INITIAL_HISTORY_LOAD = 18;
 const HISTORY_MEDIA_HYDRATE_CONCURRENCY = 4;
 
 let deferredHistoryLoadPromise: Promise<void> | null = null;
+let classicReferenceSync: ReturnType<typeof createClassicReferenceSync> | null = null;
 
 function readKeepLogs(): boolean {
   try {
@@ -1127,7 +1132,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     } catch {
       throw new Error("系统凭据存储写入失败，API Key 未更改");
     }
-    set({ apiKey: trimmed });
+    set({ apiKey: desktopRegistry() ? "" : trimmed });
   },
 
   createProfile: async (input) => profileActions.createProfile(input),
@@ -1162,7 +1167,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   submit: async () => {
     const s = get();
     if (s.isRunning) return;
-    if (!s.apiKey.trim()) {
+    if (!profileHasKey(s.activeProfileId, s.apiKey)) {
       set({ errorMessage: "请填写 API Key", errorCanRetry: false, errorRawPath: null });
       return;
     }
@@ -1365,6 +1370,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const forceDisableStreamPreview = streamPreviewDisableReason !== null;
 
     const basePayload: GenerateOptionsLike = {
+      profileId: desktopRegistry() ? s.activeProfileId : undefined,
       apiKey: s.apiKey,
       mode: s.mode,
       requestedJobId: "",
@@ -1945,7 +1951,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const runtimePlatform = readRuntimePlatformState();
     const shouldAutoOpenSettings = runtimePlatform.isAndroid
       ? false
-      : !activeProfile || !activeKey.trim() || !baseURL.trim();
+      : !activeProfile || !profileHasKey(activeProfile.id, activeKey) || !baseURL.trim();
     set({
       apiKey: activeKey, history: items, promptHistory, promptTemplates, presets, customAspectRatios, theme, fontScale,
       historyHasMore,
@@ -1993,9 +1999,15 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       appUpdate: shouldShowUpdate ? updateInfo : null,
       appUpdateModalOpen: shouldShowUpdate,
     });
+    if (desktopRegistry() && !registryProblem) {
+      classicReferenceSync ??= createClassicReferenceSync(SetClassicAssetReferences,
+        error => get().pushToast(`经典画布引用同步失败，暂勿清理素材：${error}`, "warn", 8000));
+      void classicReferenceSync(get());
+      void startSharedHistory();
+    }
     if (registryProblem) {
       get().pushToast(
-        `共享上游配置暂不可用（${registryProblem}）。本次对上游的修改只保存在经典编辑，不会同步到新版工作室；恢复后以共享配置为准。`,
+        `共享上游配置暂不可用（${registryProblem}）。上游设置暂为只读，可选择已有配置；请修复数据库后重启。`,
         "warn",
         12000,
       );
@@ -2172,13 +2184,14 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     set({ historyLoading: true });
     deferredHistoryLoadPromise = (async () => {
       try {
-        const currentHistory = get().history;
         const cursorBeforeDayStart = get().historyCursorBeforeDayStart;
         const nextPage = await loadHistoryPage({
           cursor: typeof cursorBeforeDayStart === "number" ? { beforeDayStart: cursorBeforeDayStart } : null,
           limit: INITIAL_HISTORY_LOAD,
         });
-        const merged = trimHistory([...currentHistory, ...nextPage.items]);
+        const byID = new Map(nextPage.items.map(item => [item.id, item]));
+        for (const item of get().history) byID.set(item.id, item);
+        const merged = trimHistory([...byID.values()].sort((a, b) => b.createdAt - a.createdAt));
         set({
           history: merged,
           historyHasMore: !!nextPage.nextCursor && merged.length < MAX_HISTORY_ITEMS,
@@ -2281,7 +2294,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   testAPIKey: async () => {
     const s = get();
-    if (!s.apiKey.trim()) {
+    if (!profileHasKey(s.activeProfileId, s.apiKey)) {
       s.pushToast("先填入 API Key", "warn");
       return;
     }
@@ -2303,6 +2316,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         s.apiMode,
         s.responsesTransport,
         activeProfile?.allowInsecureConnection === true,
+        undefined,
+        desktopRegistry() ? s.activeProfileId : undefined,
       );
       set({ isTestingKey: false });
       if (result.responsesTransport === "websocket" && result.responsesTransportOK === false) {
@@ -2342,7 +2357,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
     const apiKey = (await readAPIKey(aiProfile.id).catch(() => "")).trim();
     const baseURL = cleanBaseURL(aiProfile.baseURL);
-    if (!apiKey) {
+    if (!profileHasKey(aiProfile.id, apiKey)) {
       s.pushToast(`AI 渠道「${aiProfile.name}」缺少 API Key`, "warn", 5000);
       return;
     }
@@ -2363,6 +2378,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     set({ isOptimizingPrompt: true, errorMessage: null, errorCanRetry: false, errorRawPath: null });
     try {
       const optimized = await wailsOptimizePrompt({
+        profileId: desktopRegistry() ? aiProfile.id : undefined,
         apiKey,
         prompt: s.prompt,
         mode: s.mode,
@@ -2406,7 +2422,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
     const apiKey = (await readAPIKey(aiProfile.id).catch(() => "")).trim();
     const baseURL = cleanBaseURL(aiProfile.baseURL);
-    if (!apiKey || !baseURL) {
+    if (!profileHasKey(aiProfile.id, apiKey) || !baseURL) {
       s.pushToast(`AI 渠道「${aiProfile.name}」配置不完整`, "warn", 5000);
       return;
     }
@@ -2426,6 +2442,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         throw new Error("画布图片没有可读取的本地数据");
       }
       const inferred = await wailsOptimizePrompt({
+        profileId: desktopRegistry() ? aiProfile.id : undefined,
         apiKey,
         prompt: "",
         mode: "describe",
@@ -2645,10 +2662,12 @@ async function launchOneJob(
           const rd = [elapsedSec, ...store.getState().recentDurations].slice(0, 5);
           const willNotify = typeof document !== "undefined" && document.visibilityState !== "visible";
           const parentId = mode === "edit" ? (snapshot.sources[0]?.path || snapshot.currentImage?.savedPath) : undefined;
-          const itemID = cryptoIDFallback();
+          const itemID = r.jobId || cryptoIDFallback();
           const fallbackB64 = typeof r.imageB64 === "string" ? r.imageB64 : "";
           const previewItem: HistoryItem = {
             id: itemID,
+            sharedJobId: r.jobId || undefined,
+            assetId: r.assetId || undefined,
             imageId: r.imageId || undefined,
             previewUrl: r.previewUrl || undefined,
             thumbPath: r.thumbPath || undefined,
@@ -2692,44 +2711,47 @@ async function launchOneJob(
           };
           const { completed: completedNow, total: totalNow } = removeFromRunning();
           const currentItem = totalNow > 1 ? historyItem : activeItem;
-          const trimmed = trimHistory([historyItem, ...store.getState().history]);
-          store.setState((state) => {
-            const workspace = state.workspaces.find((w) => w.id === snapshot.workspaceId);
-            const existingBatchIDs = state.activeWorkspaceId === snapshot.workspaceId
-              ? state.batchResults.map((b) => b.id)
-              : workspace?.batchResultIds ?? [];
-            const gridWasOpen = state.activeWorkspaceId === snapshot.workspaceId
-              ? state.resultGridOpen
-              : workspace?.resultGridOpen ?? false;
-            const nextBatchIDs = existingBatchIDs.includes(historyItem.id)
-              ? existingBatchIDs
-              : [...existingBatchIDs, historyItem.id];
-            const nextGridOpen = gridWasOpen;
-            const batchResults = state.activeWorkspaceId === snapshot.workspaceId
-              ? [...state.batchResults, historyItem]
-              : state.batchResults;
-            return {
-              history: trimmed,
-              recentDurations: rd,
-              workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, {
-                currentImageId: historyItem.id,
-                batchResultIds: nextBatchIDs,
-                resultGridOpen: nextGridOpen,
-              }),
-              ...(state.activeWorkspaceId === snapshot.workspaceId
-                ? {
-                    currentImage: currentItem,
-                    batchResults,
-                    resultGridOpen: nextGridOpen,
-                    maskDataURL: null,
-                    annotations: [],
-                    tool: "pan",
-                  }
-                : {}),
-            } as Partial<StudioState>;
+          await withSharedHistoryLock(async () => {
+            const trimmed = trimHistory([historyItem, ...store.getState().history.filter(item =>
+              item.id !== historyItem.id && (!historyItem.sharedJobId || item.sharedJobId !== historyItem.sharedJobId))]);
+            store.setState((state) => {
+              const workspace = state.workspaces.find((w) => w.id === snapshot.workspaceId);
+              const existingBatchIDs = state.activeWorkspaceId === snapshot.workspaceId
+                ? state.batchResults.map((b) => b.id)
+                : workspace?.batchResultIds ?? [];
+              const gridWasOpen = state.activeWorkspaceId === snapshot.workspaceId
+                ? state.resultGridOpen
+                : workspace?.resultGridOpen ?? false;
+              const nextBatchIDs = existingBatchIDs.includes(historyItem.id)
+                ? existingBatchIDs
+                : [...existingBatchIDs, historyItem.id];
+              const nextGridOpen = gridWasOpen;
+              const batchResults = state.activeWorkspaceId === snapshot.workspaceId
+                ? [...state.batchResults, historyItem]
+                : state.batchResults;
+              return {
+                history: trimmed,
+                recentDurations: rd,
+                workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, {
+                  currentImageId: historyItem.id,
+                  batchResultIds: nextBatchIDs,
+                  resultGridOpen: nextGridOpen,
+                }),
+                ...(state.activeWorkspaceId === snapshot.workspaceId
+                  ? {
+                      currentImage: currentItem,
+                      batchResults,
+                      resultGridOpen: nextGridOpen,
+                      maskDataURL: null,
+                      annotations: [],
+                      tool: "pan",
+                    }
+                  : {}),
+              } as Partial<StudioState>;
+            });
+            persistTrimmedHistory(trimmed);
+            await persistHistoryItem(historyItem).catch(() => undefined);
           });
-          persistTrimmedHistory(trimmed);
-          persistHistoryItem(historyItem).catch(() => undefined);
           const loopMode = snapshot.loopGeneration.enabled;
           const isFinalLoopResult = loopMode && completedNow === totalNow;
           const shouldPlaySound = shouldPlayCompletionSound({
@@ -2921,6 +2943,7 @@ function enableCompatibilityExport() {
 }
 
 useStudioStore.subscribe((state) => {
+  void classicReferenceSync?.(state);
   if (!compatibilityExportEnabled) return;
   const next = compatibilityExportFingerprint(state);
   if (next === compatibilityFingerprint) return;
@@ -2938,4 +2961,53 @@ async function ensureFullHistoryItem(item: HistoryItem | null): Promise<HistoryI
   return ensureFullHistoryItemRuntime(item, {
     setState: (fn) => useStudioStore.setState((state) => fn(state)),
   });
+}
+
+let sharedHistoryStarted = false;
+let sharedHistorySync: Promise<void> | null = null;
+let sharedHistoryAgain = false;
+async function startSharedHistory() {
+  if (sharedHistoryStarted) return;
+  sharedHistoryStarted = true;
+  const refresh = () => {
+    if (sharedHistorySync) { sharedHistoryAgain = true; return; }
+    sharedHistorySync = withSharedHistoryLock(async () => {
+      do {
+        sharedHistoryAgain = false;
+        await deferredHistoryLoadPromise;
+        const before = useStudioStore.getState().history;
+        const local = new Map((await loadAllHistory()).map(item => [item.id, item]));
+        for (const item of before) local.set(item.id, item);
+        const all = await readSharedHistory([...local.values()]);
+        await deferredHistoryLoadPromise;
+        if (useStudioStore.getState().history !== before) { sharedHistoryAgain = true; continue; }
+        const liveIDs = new Set(all.map(item=>item.id));
+        for (const item of local.values()) if (item.sharedJobId && !liveIDs.has(item.id)) await removeHistoryItem(item.id);
+        const history = trimHistory(all);
+        useStudioStore.setState({ history, historyHasMore: false, historyCursorBeforeDayStart: null });
+        await persistHistoryItems(history);
+      } while (sharedHistoryAgain);
+    }).catch(error => useStudioStore.getState().pushToast(`共享历史同步失败：${error}`, "warn"))
+      .finally(() => { sharedHistorySync = null; });
+  };
+  try {
+    await withSharedHistoryLock(async () => {
+      const old = await loadAllHistory();
+      const imported = await importSharedHistory(old, message => useStudioStore.getState().pushToast(message, "warn", 8000));
+      const restored = await readSharedHistory(imported);
+      const liveIDs = new Set(restored.map(item=>item.id));
+      for (const item of imported) if (item.sharedJobId && !liveIDs.has(item.id)) await removeHistoryItem(item.id);
+      await persistHistoryItems(restored);
+      await deferredHistoryLoadPromise;
+      const current = useStudioStore.getState().history;
+      const byID = new Map(restored.map(item => [item.id, item]));
+      for (const item of current) if (!byID.has(item.id) && !item.sharedJobId) byID.set(item.id, item);
+      useStudioStore.setState({ history: trimHistory([...byID.values()].sort((a,b)=>b.createdAt-a.createdAt)), historyHasMore: false, historyCursorBeforeDayStart: null });
+      EventsOn("studio:changed", refresh);
+      refresh();
+    });
+  } catch (error) {
+    sharedHistoryStarted = false;
+    useStudioStore.getState().pushToast(`旧历史暂未导入，原文件保留：${error}`, "warn", 8000);
+  }
 }

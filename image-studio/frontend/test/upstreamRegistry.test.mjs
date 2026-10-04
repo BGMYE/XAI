@@ -121,7 +121,7 @@ test("classic profiles convert to the shared shape and back without loss", async
   assert.equal(shared.imageApi, "responses");
   assert.equal(shared.createdAt, new Date(original.createdAt).toISOString());
   const back = mod.toClassicProfile({ ...shared, hasKey: true, updatedAt: "x" }, 42);
-  assert.deepEqual(back, { ...original, lastUsedAt: 42 });
+  assert.deepEqual(back, { ...original, hasKey: true, lastUsedAt: 42 });
 });
 
 test("local upstreams keep working and long names fit the registry", async () => {
@@ -159,7 +159,11 @@ test("the desktop imports stored classic profiles and then reads the registry", 
   const list = await mod.syncClassicProfiles([classic("a"), classic("b")]);
   assert.deepEqual(list.map((p) => p.id).sort(), ["a", "b"], "xAI profiles stay Studio-only");
   assert.equal(mod.registryActive(), true);
-  assert.equal(await mod.readProfileKey("a", async () => "legacy"), "sk-a");
+  window.go.backend.StudioV2.GetProfileKey = async () => {
+    throw new Error("plaintext must not be read");
+  };
+  assert.equal(await mod.readProfileKey("a", async () => "legacy"), "");
+  assert.equal(mod.profileHasKey("a"), true);
   // Deleted profiles are never imported again from the stale local copy.
   await mod.deleteRegistryProfile("b");
   await mod.syncClassicProfiles([classic("a"), classic("b")]);
@@ -175,7 +179,7 @@ test("without the desktop registry the classic editor keeps its own storage", as
   assert.equal(await mod.readProfileKey("a", async () => "legacy"), "legacy");
 });
 
-test("a registry that cannot be used says why and leaves browser storage in charge", async () => {
+test("an unavailable desktop registry allows selection but refuses edits and secret reads", async () => {
   installStorage();
   const fake = installRegistry();
   fake.profiles.set("a", { id: "a", protocol: "openai" });
@@ -187,7 +191,10 @@ test("a registry that cannot be used says why and leaves browser storage in char
   assert.equal(await mod.syncClassicProfiles([classic("a")], (reason) => reasons.push(reason)), null);
   assert.deepEqual(reasons, ["工作室数据无法打开"]);
   assert.equal(mod.registryActive(), false);
-  assert.equal(await mod.readProfileKey("a", async () => "legacy"), "legacy");
+  assert.equal(mod.registryReadOnly(), true);
+  assert.equal(await mod.readProfileKey("a", async () => "legacy"), "");
+  await assert.rejects(mod.saveRegistryProfile(classic("a")), /只读/);
+  await assert.rejects(mod.deleteRegistryProfile("a"), /只读/);
 });
 
 test("saving keeps fields the classic editor does not show", async () => {

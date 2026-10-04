@@ -16,28 +16,49 @@ func decodeEvent(payload string, ev *Event) error {
 	return json.Unmarshal([]byte(payload), ev)
 }
 
-// IterEvents returns an iterator over decoded SSE events in raw.
-// Lines that don't start with `data: `, or that hold `[DONE]`/empty, are skipped.
-// Malformed JSON is silently ignored (parity with Python iter_sse_events).
+// IterEvents decodes SSE frames, including event names and multiline data.
+// Malformed JSON and [DONE] markers are ignored. Explicit JSON types win.
 func IterEvents(raw string) iter.Seq[Event] {
 	return func(yield func(Event) bool) {
+		eventName := ""
+		var data []string
+		flush := func() bool {
+			payload := strings.TrimSpace(strings.Join(data, "\n"))
+			data = nil
+			var ev Event
+			if payload == "" || payload == "[DONE]" || decodeEvent(payload, &ev) != nil || ev == nil {
+				eventName = ""
+				return true
+			}
+			if _, ok := ev["type"]; !ok && eventName != "" {
+				ev["type"] = eventName
+			}
+			eventName = ""
+			return yield(ev)
+		}
 		for line := range strings.SplitSeq(raw, "\n") {
 			line = strings.TrimRight(line, "\r")
-			if !strings.HasPrefix(line, "data: ") {
+			if line == "" {
+				if !flush() {
+					return
+				}
 				continue
 			}
-			payload := strings.TrimSpace(line[6:])
-			if payload == "" || payload == "[DONE]" {
-				continue
+			if strings.HasPrefix(line, "event:") {
+				eventName = strings.TrimSpace(line[6:])
 			}
-			var ev Event
-			if err := decodeEvent(payload, &ev); err != nil {
-				continue
-			}
-			if !yield(ev) {
-				return
+			if strings.HasPrefix(line, "data:") {
+				// Older relay dumps omit blank separators between complete JSON objects.
+				var previous Event
+				if len(data) > 0 && decodeEvent(strings.Join(data, "\n"), &previous) == nil && previous != nil {
+					if !flush() {
+						return
+					}
+				}
+				data = append(data, strings.TrimPrefix(line[5:], " "))
 			}
 		}
+		flush()
 	}
 }
 
@@ -48,7 +69,7 @@ func IterEvents(raw string) iter.Seq[Event] {
 //
 // Partial preview frames are intentionally not treated as success. If the
 // stream only delivered partial_image previews but never produced the final
-// image result, callers should retry instead of persisting a blurry preview as
+// image result, callers must report an uncertain outcome rather than persist it as
 // if it were the completed image.
 func ExtractImageResult(raw string) (ImageResult, error) {
 	for ev := range IterEvents(raw) {

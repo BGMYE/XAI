@@ -100,7 +100,7 @@ func validatePromptReferences(d *document, p PromptCard) error {
 	}
 	if p.PreviewAssetID != "" {
 		a, ok := d.Assets[p.PreviewAssetID]
-		if !ok || (a.Kind != "image" && a.Kind != "video") {
+		if !ok || a.DeletedAt != "" || (a.Kind != "image" && a.Kind != "video") {
 			return errors.New("预览素材不存在，请先导入图片")
 		}
 	}
