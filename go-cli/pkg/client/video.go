@@ -190,10 +190,6 @@ func buildVideoMultipart(opts VideoOptions) (io.Reader, string, error) {
 	return &buf, form.FormDataContentType(), nil
 }
 
-func decodeVideoResponse(resp *http.Response) (VideoResult, error) {
-	return decodeVideoResponseForBase(resp, "")
-}
-
 func decodeVideoResponseForBase(resp *http.Response, base string) (VideoResult, error) {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxVideoResponseBytes+1))
 	if err != nil {
@@ -466,10 +462,6 @@ func videoEndpoint(base, path, id string) (string, error) {
 		path += "/" + url.PathEscape(id)
 	}
 	return strings.TrimRight(base, "/") + path, nil
-}
-
-func validateVideoMediaURL(raw string) (string, error) {
-	return validateVideoMediaURLForBase(raw, "")
 }
 
 func validateVideoMediaURLForBase(raw, base string) (string, error) {

@@ -9,7 +9,7 @@
 | 界面 | React + TypeScript + Vite | 新版工作室、上游设置、创作、作品和任务历史 |
 | 无限画布 | React 节点、SVG 连线、CSS 坐标变换 | 平移缩放、拖动连线、撤销、模板与自动保存 |
 | 桌面宿主 | Wails v2 | 系统 WebView、Go 绑定、文件对话框、窗口生命周期 |
-| 本地后端 | Go `backend/studio/` | 上游配置、图片和视频任务、依赖调度、轮询、下载和素材回填 |
+| 本地后端 | Go `backend/studio/` | 上游配置（与经典编辑共用）、图片和视频任务、依赖调度、轮询、下载和素材回填 |
 | 持久化 | 本地 JSON 与媒体文件 | 项目、节点、任务元数据及图片/视频 |
 | 密钥 | 操作系统凭据库 | 独立保存 API Key，任务固定引用提交时的凭据版本 |
 
@@ -37,10 +37,18 @@
 # 仓库根目录；离线检查 workspace、核心入口和发布依赖
 node scripts/verify-desktop-architecture.mjs
 
+# 格式与静态检查（staticcheck 配置见仓库根目录 staticcheck.conf）
+git ls-files '*.go' | xargs gofmt -l
+(cd go-cli && go vet ./... && staticcheck ./...)
+(cd image-studio && go vet ./backend/... && staticcheck ./backend/studio/...)
+
 # Go 核心与真实 HTTP 适配器连接本地模拟上游
+(cd go-cli && go test -race ./...)
 cd image-studio
 go test -race -count=3 ./backend/studio/...
+go test -race ./backend/
 cd frontend
+npx prettier@3.8.1 --check src/studio src/lib/upstreamRegistry.ts test/studio-*.test.mjs test/upstreamRegistry.test.mjs test/fixtures/studio-*.tsx
 npm ci
 npm test
 npx tsc --noEmit
@@ -51,6 +59,6 @@ CI 在实际已移除客户端的源码树上运行核心测试、依赖清单�
 
 ## Android APK 下线与公共提示词中心
 
-`android-shell/` 已移除，Release 不再构建或发布 APK；主工作室继续使用 React + Wails + Go。专用 Android SDK/JDK CI 步骤与 Android 验证结果依赖已移除。旧的共享平台类型、检测与兼容测试保留，避免破坏经典编辑器；这不意味着仍提供 APK。用户设备中已安装的程序、数据和旧 Releases 不会被删除。
+`android-shell/` 已移除，Release 不再构建或发布 APK；主工作室继续使用 React + Wails + Go。专用 Android SDK/JDK CI 步骤与 Android 验证结果依赖已移除。旧的共享平台类型、检测与兼容测试保留，避免破坏经典编辑器；这不意味着仍提供 APK。Android 样式与 Wails 运行时替身只在 Android 目标按需加载，桌面启动不再解析这部分样式和脚本。用户设备中已安装的程序、数据和旧 Releases 不会被删除。
 
 专业模式新增同源公共图库与本地提示词中心，见 [prompt-center.md](./prompt-center.md)。`cloudflare-worker/` 保留原实现，它不是图库或视频通用网关。

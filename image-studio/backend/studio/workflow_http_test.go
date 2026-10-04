@@ -163,7 +163,7 @@ func TestHTTPVideoResumeAfterDownloadFailureDoesNotRepost(t *testing.T) {
 		case "/media.mp4":
 			downloads.Add(1)
 			if !available.Load() {
-				http.Error(w, "temporary storage failure", 503)
+				http.Error(w, "temporary storage failure", http.StatusServiceUnavailable)
 				return
 			}
 			_, _ = w.Write(mp4())

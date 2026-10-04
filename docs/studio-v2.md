@@ -126,6 +126,7 @@ API Key 存入操作系统凭据库，不写入 JSON、浏览器存储或工作�
 ```bash
 cd image-studio
 go test -race -count=3 ./backend/studio/...
+go test -race ./backend/
 cd frontend
 npm ci
 npm test
@@ -140,6 +141,6 @@ node scripts/studio-browser-smoke.mjs
 
 旧 Node 22 版本运行直接导入 TypeScript 的测试时可能需要 `NODE_OPTIONS=--experimental-strip-types`。CI 使用更新的 Node 22。
 
-`.github/workflows/studio-rebuild.yml` 包含 Linux race、Windows 原生核心、完整前端测试与类型检查、生产构建、Windows 交叉编译，以及 Chromium 画布交互。`studio-browser-evidence` 保留对应提交的日志、截图和报告；是否通过以该提交的实际 Actions 结果为准。
+`.github/workflows/studio-rebuild.yml` 包含 gofmt、go vet 与 staticcheck 检查、go-cli 与 Linux race、Windows 原生核心、Studio 源码的 Prettier 检查、完整前端测试与类型检查、生产构建、Windows 交叉编译，以及 Chromium 画布交互与增量同步回归。`studio-browser-evidence` 保留对应提交的日志、截图和报告；是否通过以该提交的实际 Actions 结果为准。
 
 自动测试只使用本地 mock 上游，没有提交真实收费请求。发布前仍需在目标桌面系统人工验证系统凭据库、保存对话框、退出恢复、WebView 视频播放以及有权限的真实图像/视频 API。CI 成功不等于所有平台 GUI 与所有第三方上游均已验收。

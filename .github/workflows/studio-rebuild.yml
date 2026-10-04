@@ -35,13 +35,42 @@ jobs:
             go.work.sum
             image-studio/go.sum
             go-cli/go.sum
+      - name: Go formatting, vet and static analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(git ls-files '*.go' | xargs gofmt -l)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt is required for:"
+            echo "$unformatted"
+            exit 1
+          fi
+          (cd go-cli && go vet ./...)
+          (cd image-studio && go vet ./backend/...)
+          # Build the analyzer with the workspace toolchain so it can load it.
+          GOTOOLCHAIN=go1.26.3 go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+          staticcheck="$(go env GOPATH)/bin/staticcheck"
+          (cd go-cli && "$staticcheck" ./...)
+          (cd image-studio && "$staticcheck" ./backend/studio/...)
+      - name: Test go-cli client
+        working-directory: go-cli
+        run: go test -race -count=1 ./...
       - name: Test studio domain with race detector
         working-directory: image-studio
         run: go test -race -count=3 -v ./backend/studio/...
+      - name: Test desktop bindings
+        working-directory: image-studio
+        run: go test -race -count=1 ./backend/
       - name: Install frontend
         if: always()
         working-directory: image-studio/frontend
         run: npm ci
+      - name: Check Studio formatting
+        if: always()
+        working-directory: image-studio/frontend
+        run: >-
+          npx --yes prettier@3.8.1 --check src/studio src/lib/upstreamRegistry.ts
+          test/studio-*.test.mjs test/upstreamRegistry.test.mjs test/fixtures/studio-*.tsx
       - name: Frontend unit tests
         if: always()
         working-directory: image-studio/frontend

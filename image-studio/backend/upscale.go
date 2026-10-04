@@ -53,8 +53,9 @@ func (s *Service) UpscaleImage(path string, scale int) (UpscaleResult, error) {
 	if err != nil {
 		return UpscaleResult{}, fmt.Errorf("read image dimensions for %s: %w", filepath.Base(allowed), err)
 	}
-	targetWidth, targetHeight, err := validateUpscaleDimensions(cfg.Width, cfg.Height, scale)
-	if err != nil {
+	// Check the declared size before decoding, so an oversized image is never
+	// decoded at all.
+	if _, _, err = validateUpscaleDimensions(cfg.Width, cfg.Height, scale); err != nil {
 		return UpscaleResult{}, err
 	}
 
@@ -64,7 +65,7 @@ func (s *Service) UpscaleImage(path string, scale int) (UpscaleResult, error) {
 	}
 	// DecodeConfig and Decode should agree. Validate the decoded bounds again so
 	// a malformed or changing input cannot bypass the allocation limits.
-	targetWidth, targetHeight, err = validateUpscaleDimensions(src.Bounds().Dx(), src.Bounds().Dy(), scale)
+	targetWidth, targetHeight, err := validateUpscaleDimensions(src.Bounds().Dx(), src.Bounds().Dy(), scale)
 	if err != nil {
 		return UpscaleResult{}, err
 	}
