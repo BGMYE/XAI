@@ -30,6 +30,8 @@ func TestImportsDirUsesConfigRootOnNonWindows(t *testing.T) {
 	}
 	home := filepath.Join(t.TempDir(), "home")
 	t.Setenv("HOME", home)
+	// os.UserConfigDir prefers XDG_CONFIG_HOME on Linux, which CI runners set.
+	t.Setenv("XDG_CONFIG_HOME", "")
 
 	got, err := importsDir()
 	if err != nil {

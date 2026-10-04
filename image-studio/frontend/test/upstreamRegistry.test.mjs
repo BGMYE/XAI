@@ -128,8 +128,14 @@ test("local upstreams keep working and long names fit the registry", async () =>
   const mod = await freshModule();
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://127.0.0.1:3000/" })).allowLocal, true);
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://localhost:3000" })).allowLocal, true);
-  assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "http://api.localhost:3000" })).allowLocal, true);
-  assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "https://localhost:8443/v1" })).allowLocal, true);
+  assert.equal(
+    mod.toRegistryProfile(classic("a", { baseURL: "http://api.localhost:3000" })).allowLocal,
+    true,
+  );
+  assert.equal(
+    mod.toRegistryProfile(classic("a", { baseURL: "https://localhost:8443/v1" })).allowLocal,
+    true,
+  );
   assert.equal(mod.toRegistryProfile(classic("a", { baseURL: "https://img.example.com" })).allowLocal, false);
   const name = mod.toRegistryProfile(classic("a", { name: "图".repeat(100) })).name;
   assert.ok(new TextEncoder().encode(name).length <= 160 && name.length === 53);
