@@ -1,12 +1,12 @@
 # 应用展示与能力概览
 
-本文档集中展示当前应用界面与高层能力。安装包选择见 [packages.md](./packages.md)，详细功能说明见 [features.md](./features.md)，首次配置见 [usage.md](./usage.md)。
+本文保留历史界面截图。当前功能和入口以 [工作室说明](./studio-v2.md) 为准；旧经典编辑器与 Android 界面不再提供。安装包选择见 [packages.md](./packages.md)，详细功能说明见 [features.md](./features.md)，首次配置见 [usage.md](./usage.md)。
 
 ## 新版工作室
 
-桌面主线为 React + TypeScript + Wails + Go：API Key 生图、生视频、异步任务以及节点式无限画布由同一工作室提供，详见 [studio-v2.md](./studio-v2.md)。以下截图和详细能力表仍包含保留的经典编辑器与 Android 界面；不能将经典蒙版工具等全部视为新版画布已实现的功能。
+桌面主线为 React + TypeScript + Wails + Go：API Key 生图、生视频、异步任务以及节点式无限画布由同一工作室提供，详见 [studio-v2.md](./studio-v2.md)。以下截图和能力表记录历史版本，不是当前工作室的验收证明。经典编辑入口已移除，旧功能不能据截图推定为新版已提供。
 
-## 界面预览
+## 历史界面预览
 
 <p align="center">
   <img src="./picture/mac.png" alt="Image Studio · macOS" width="880">
@@ -15,10 +15,10 @@
   <br />
   <img src="./picture/android.jpg" alt="Image Studio · Android" width="280">
   <br />
-  <sub>macOS · Windows · Android 端界面预览</sub>
+  <sub>历史版本：macOS · Windows · Android</sub>
 </p>
 
-## 产品定位
+## 历史版本定位
 
 Image Studio 面向 OpenAI 兼容图像上游，重点覆盖三类使用场景：
 
@@ -26,9 +26,9 @@ Image Studio 面向 OpenAI 兼容图像上游，重点覆盖三类使用场景�
 - 需要把图像生成、图生图、蒙版编辑、历史复用放在同一个本地工作台里完成。
 - 希望在桌面端与 Android 端保持相近的参数模型、历史行为和保存路径语义。
 
-## 能力概览
+## 历史版本能力概览
 
-| 模块 | 当前能力 |
+| 模块 | 历史能力 |
 |---|---|
 | Responses API | 使用 `/v1/responses` 和 `image_generation` 工具，SSE 持续回流事件，适合长推理和抗空闲断连场景。 |
 | Images API | 支持 `/v1/images/generations` 与 `/v1/images/edits`，兼容只开放 image 分组的中转站。 |
@@ -40,7 +40,7 @@ Image Studio 面向 OpenAI 兼容图像上游，重点覆盖三类使用场景�
 | 双端内核 | 桌面端优先走 Go/Wails 本地内核；Android / 浏览器预览可走前端远程内核，Android 壳层提供 native HTTP、文件和保存桥接。 |
 | 本地数据 | API Key、历史、图片和日志默认保存在本机；外部请求只发往你配置的上游 BASE_URL。 |
 
-## 界面分工
+## 历史界面分工
 
 - 左侧控制面板：负责 prompt、参数、参考图、上游配置入口和提交操作。
 - 中央画板：负责当前图像预览、蒙版与标注编辑、对比和变换操作。

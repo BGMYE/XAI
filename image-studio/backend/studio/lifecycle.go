@@ -33,7 +33,10 @@ func assetReferences(d document) map[string]int {
 		}
 	}
 	for _, j := range d.Jobs {
-		for _, id := range append([]string{j.ResultAssetID, j.Request.ReferenceAssetID, j.Request.MaskAssetID}, j.Request.ReferenceAssetIDs...) {
+		ids := append([]string{j.ResultAssetID, j.Request.ReferenceAssetID, j.Request.MaskAssetID}, j.Request.ReferenceAssetIDs...)
+		ids = append(ids, j.ResultAssetIDs...)
+		ids = append(ids, j.ParentAssetIDs...)
+		for _, id := range ids {
 			if id != "" {
 				refs[id]++
 			}

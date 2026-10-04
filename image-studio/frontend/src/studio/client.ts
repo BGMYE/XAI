@@ -4,7 +4,8 @@ import { emptySnapshot } from "./types";
 import { catalogURL } from "./publicCatalog.mjs";
 import { orderGraph, uid } from "./graph.mjs";
 import { savePromptToSnapshot, removePromptFromSnapshot, importPromptsToSnapshot } from "./promptLibrary.mjs";
-import { prepareSharedUpstreams } from "../lib/upstreamRegistry";
+import { prepareLegacyStudioData, takeMigrationWarning } from "./legacyMigration";
+import { normalizeChangeSetCollections, normalizeProjectCollections, normalizeSnapshotCollections } from "./snapshotCollections.mjs";
 type LibraryAction = "TrashProject" | "RestoreProject" | "TrashAsset" | "RestoreAsset" | "DeleteJob";
 interface Host extends Record<LibraryAction, (id: string) => Promise<void>> {
   ArchiveJobs(days: number): Promise<string>;
@@ -45,12 +46,13 @@ function transaction<T>(fn: () => Promise<T>): Promise<T> {
   return result;
 }
 async function preview(): Promise<Snapshot> {
-  return (await get<Snapshot>(previewKey)) ?? emptySnapshot();
+  return normalizeSnapshotCollections((await get<Snapshot>(previewKey)) ?? emptySnapshot());
 }
 function unavailable(): never {
   throw Error("浏览器仅提供本地画布预览。请在桌面应用中配置 API Key 并生成作品。");
 }
 export const client = {
+  takeMigrationWarning,
   async libraryAction(action: LibraryAction, id: string) {
     const desktop = host();
     if (!desktop) return unavailable();
@@ -148,8 +150,8 @@ export const client = {
   async changes(epoch: string, since: number): Promise<ChangeSet | null> {
     const desktop = host();
     if (!desktop?.GetChanges) return null;
-    await prepareSharedUpstreams().catch(() => undefined);
-    return desktop.GetChanges(epoch, since);
+    await prepareLegacyStudioData();
+    return normalizeChangeSetCollections(await desktop.GetChanges(epoch, since));
   },
   /**
    * Subscribes to backend notifications. Returns the unsubscribe function, or
@@ -175,9 +177,9 @@ export const client = {
   },
   async snapshot(): Promise<Snapshot> {
     if (host()) {
-      // The first read waits until the classic editor's upstreams are shared.
-      await prepareSharedUpstreams().catch(() => undefined);
-      return host()!.GetSnapshot();
+      // Restore existing profiles, settings and image history before the first snapshot.
+      await prepareLegacyStudioData();
+      return normalizeSnapshotCollections(await host()!.GetSnapshot());
     }
     const s = await preview();
     await Promise.all(
@@ -192,7 +194,7 @@ export const client = {
   },
   async saveProject(p: Project): Promise<Project> {
     orderGraph(p);
-    if (host()) return host()!.SaveProject(p);
+    if (host()) return normalizeProjectCollections(await host()!.SaveProject(p));
     return transaction(async () => {
       const s = await preview(),
         old = s.projects.find((x) => x.id === p.id);

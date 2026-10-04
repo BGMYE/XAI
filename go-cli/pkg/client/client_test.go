@@ -753,7 +753,7 @@ func TestRequestResponsesWithWebSocketReplayFallsBackToSSEOnHandshakeFailure(t *
 	if result.ImageB64 != pngB64 {
 		t.Fatalf("result image mismatch")
 	}
-	if !strings.Contains(raw.String(), "websocket-error-1") {
+	if !strings.Contains(raw.String(), "websocket-error: websocket handshake failed: HTTP 426") {
 		t.Fatalf("expected raw log to record websocket handshake failure, got %q", raw.String())
 	}
 }

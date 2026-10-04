@@ -345,7 +345,7 @@ func TestBuildPayloadOmitsMaskWhenEmpty(t *testing.T) {
 }
 
 func TestBuildPayloadIncludesMaskWhenSet(t *testing.T) {
-	raw, _ := BuildPayload(Options{Prompt: "x", MaskB64: "AAAA"})
+	raw, _ := BuildPayload(Options{Prompt: "x", ImageDataURL: "data:image/png;base64,AAAA", MaskB64: "AAAA"})
 	v := mustDecodePayload(t, raw)
 	tool := v["tools"].([]any)[0].(map[string]any)
 	mask, ok := tool["input_image_mask"].(map[string]any)
@@ -359,7 +359,7 @@ func TestBuildPayloadIncludesMaskWhenSet(t *testing.T) {
 
 func TestBuildPayloadDetectsMaskMimeTypeFromBase64(t *testing.T) {
 	jpegMask := base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43})
-	raw, _ := BuildPayload(Options{Prompt: "x", MaskB64: jpegMask})
+	raw, _ := BuildPayload(Options{Prompt: "x", ImageDataURL: "data:image/png;base64,AAAA", MaskB64: jpegMask})
 	v := mustDecodePayload(t, raw)
 	tool := v["tools"].([]any)[0].(map[string]any)
 	mask := tool["input_image_mask"].(map[string]any)

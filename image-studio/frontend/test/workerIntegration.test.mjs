@@ -238,7 +238,7 @@ test("desktop remote kernel can reach mock upstream through worker for images ap
   }
 });
 
-test("desktop remote kernel honors configured auto retry count for 503 retries", async () => {
+test("desktop remote kernel and Worker do not multiply ambiguous generation retries", async () => {
   const requests = [];
   let attempt = 0;
   const server = http.createServer(async (req, res) => {
@@ -264,7 +264,7 @@ test("desktop remote kernel honors configured auto retry count for 503 retries",
   try {
     await withWorkerProxy(upstreamBaseURL, async () => {
       const kernel = await loadRemoteKernel();
-      const result = await kernel.runRemoteImageJob(
+      const job = kernel.runRemoteImageJob(
         {
           payload: {
             apiKey: "worker-key",
@@ -291,8 +291,8 @@ test("desktop remote kernel honors configured auto retry count for 503 retries",
         },
         { signal: new AbortController().signal },
       );
-      assert.equal(result.imageB64, "cmV0cnktb2s=");
-      assert.equal(attempt, 4);
+      await assert.rejects(job, /Upstream request failed/);
+      assert.equal(attempt, 1);
     });
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));

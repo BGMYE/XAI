@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_AUTO_RETRY_COUNT } from "../../../shared/kernel/requestModel.js";
 
 const realFetch = globalThis.fetch;
 const realSetTimeout = globalThis.setTimeout;
@@ -153,7 +152,79 @@ function loadRemoteKernel() {
   return import(`../src/platform/runtime/remoteKernel.ts?test=${Date.now()}-${Math.random().toString(36).slice(2)}`);
 }
 
-test("runRemoteImageJob retries retryable responses and returns parsed SSE image", async () => {
+test("remote Responses accepts completed-only final and rejects incomplete after an item", async () => {
+  const frames = [
+    'data:{"type":"response.completed","response":{"output":[{"type":"image_generation_call","result":"ZmluYWw="}]}}\n\n',
+    'data:{"type":"response.output_item.done","item":{"type":"image_generation_call","result":"ZmluYWw="}}\n\ndata:{"type":"response.incomplete","response":{"status":"incomplete"}}\n\n',
+  ];
+  let calls = 0;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async () => new Response(frames[calls++], { headers: { "content-type": "text/event-stream" } });
+  }, async () => {
+    const kernel = await loadRemoteKernel();
+    const request = { payload: { prompt: "cat", baseURL: "https://upstream.example", apiKey: "key", apiMode: "responses", imagePaths: [], imagePath: "", mode: "generate" } };
+    const result = await kernel.runRemoteImageJob(request, { signal: new AbortController().signal });
+    assert.equal(result.imageB64, "ZmluYWw=");
+    await assert.rejects(kernel.runRemoteImageJob(request, { signal: new AbortController().signal }), /未完整完成/);
+    assert.equal(calls, 2);
+  });
+});
+
+test("native WebSocket does not replay a disconnect, auth rejection, or handshake-like error after progress", async () => {
+  for (const scenario of [
+    { error: "socket closed after submit", progress: false },
+    { error: "websocket handshake failed: HTTP 403", progress: false },
+    { error: "websocket handshake failed: HTTP 426", progress: true },
+  ]) {
+    const calls = [];
+    await withPatchedGlobals(async () => {
+      globalThis.window.AndroidImageStudio = {
+        invoke(requestId, method, payloadJson) {
+          calls.push(method);
+          const args = JSON.parse(payloadJson);
+          queueMicrotask(() => {
+            if (scenario.progress) window.__imageStudioNativeProgress?.(args[0].requestKey, { event: { type: "response.created", response: { id: "accepted" } } });
+            window.__imageStudioNativeReject?.(requestId, scenario.error);
+          });
+        },
+      };
+      globalThis.fetch = async () => { throw new Error("browser fallback must not run"); };
+    }, async () => {
+      const kernel = await loadRemoteKernel();
+      await assert.rejects(kernel.runRemoteImageJob({ payload: {
+        prompt: "cat", mode: "generate", baseURL: "https://upstream.example", apiKey: "key",
+        apiMode: "responses", responsesTransport: "websocket", imagePaths: [], imagePath: "",
+        autoRetryEnabled: true, autoRetryCount: 10,
+      } }, { signal: new AbortController().signal }));
+      assert.deepEqual(calls, ["ResponsesWebSocketRequest"]);
+    });
+  }
+});
+
+test("native partial result never becomes a successful final image", async () => {
+  for (const apiMode of ["images", "responses"]) {
+    let calls = 0;
+    await withPatchedGlobals(async () => {
+      globalThis.window.AndroidImageStudio = {
+        invoke(requestId) {
+          calls++;
+          queueMicrotask(() => window.__imageStudioNativeResolve?.(requestId, {
+            status: 200, body: "", resultImageB64: "cGFydGlhbA==", sourceEvent: "partial",
+          }));
+        },
+      };
+    }, async () => {
+      const kernel = await loadRemoteKernel();
+      await assert.rejects(kernel.runRemoteImageJob({ payload: {
+        prompt: "cat", mode: "generate", baseURL: "https://upstream.example", apiKey: "key",
+        apiMode, imagePaths: [], imagePath: "", negativePrompt: "", requestPolicy: "openai",
+      } }, { signal: new AbortController().signal }), /没有返回最终图片/);
+      assert.equal(calls, 1);
+    });
+  }
+});
+
+test("runRemoteImageJob submits once on an ambiguous Responses timeout", async () => {
   let calls = 0;
   await withPatchedGlobals(async () => {
     globalThis.fetch = async () => {
@@ -171,7 +242,7 @@ test("runRemoteImageJob retries retryable responses and returns parsed SSE image
     };
   }, async () => {
     const kernel = await loadRemoteKernel();
-    const result = await kernel.runRemoteImageJob(
+    const job = kernel.runRemoteImageJob(
       {
         payload: {
           apiKey: "key",
@@ -195,15 +266,12 @@ test("runRemoteImageJob retries retryable responses and returns parsed SSE image
       },
       { signal: new AbortController().signal },
     );
-    assert.equal(calls, 2);
-    assert.equal(result.imageB64, "YWJj");
-    assert.equal(result.revisedPrompt, "rev");
-    assert.equal(result.sourceEvent, "final");
-    assert.ok(result.rawPath?.startsWith("memory://text/"));
+    await assert.rejects(job, /524/);
+    assert.equal(calls, 1);
   });
 });
 
-test("runRemoteImageJob can fall back to a backup upstream profile after main retries fail", async () => {
+test("runRemoteImageJob does not switch provider after an ambiguous timeout", async () => {
   const seen = [];
   await withPatchedGlobals(async () => {
     globalThis.fetch = async (url) => {
@@ -222,7 +290,7 @@ test("runRemoteImageJob can fall back to a backup upstream profile after main re
     };
   }, async () => {
     const kernel = await loadRemoteKernel();
-    const result = await kernel.runRemoteImageJob(
+    const job = kernel.runRemoteImageJob(
       {
         payload: {
           apiKey: "key",
@@ -255,10 +323,9 @@ test("runRemoteImageJob can fall back to a backup upstream profile after main re
       },
       { signal: new AbortController().signal },
     );
-    assert.equal(result.imageB64, "YmFja3Vw");
-    assert.equal(result.revisedPrompt, "backup-rev");
-    assert.equal(seen.filter((url) => url.startsWith("https://primary.example")).length, DEFAULT_AUTO_RETRY_COUNT + 1);
-    assert.equal(seen.filter((url) => url.startsWith("https://backup.example")).length, 1);
+    await assert.rejects(job, /524/);
+    assert.equal(seen.filter((url) => url.startsWith("https://primary.example")).length, 1);
+    assert.equal(seen.filter((url) => url.startsWith("https://backup.example")).length, 0);
   });
 });
 
@@ -319,7 +386,7 @@ test("runRemoteImageJob emits Responses API partial image previews", async () =>
   });
 });
 
-test("runRemoteImageJob retries when Responses API only returns partial previews", async () => {
+test("runRemoteImageJob keeps Responses previews incomplete without replay", async () => {
   let calls = 0;
   const partials = [];
   await withPatchedGlobals(async () => {
@@ -339,7 +406,7 @@ test("runRemoteImageJob retries when Responses API only returns partial previews
     };
   }, async () => {
     const kernel = await loadRemoteKernel();
-    const result = await kernel.runRemoteImageJob(
+    const job = kernel.runRemoteImageJob(
       {
         payload: {
           apiKey: "key",
@@ -368,9 +435,8 @@ test("runRemoteImageJob retries when Responses API only returns partial previews
         onPartialImage: (partial) => partials.push(partial),
       },
     );
-    assert.equal(calls, 2);
-    assert.equal(result.imageB64, "ZmluYWw=");
-    assert.equal(result.sourceEvent, "final");
+    await assert.rejects(job, /预览帧/);
+    assert.equal(calls, 1);
     assert.equal(partials.length, 1);
     assert.equal(partials[0].imageB64, "cGFydGlhbA==");
   });
@@ -599,7 +665,7 @@ test("runRemoteImageJob emits Images API stream partial image previews", async (
   });
 });
 
-test("runRemoteImageJob retries when Images API only returns partial previews", async () => {
+test("runRemoteImageJob keeps Images previews incomplete without replay", async () => {
   let calls = 0;
   const partials = [];
   await withPatchedGlobals(async () => {
@@ -619,7 +685,7 @@ test("runRemoteImageJob retries when Images API only returns partial previews", 
     };
   }, async () => {
     const kernel = await loadRemoteKernel();
-    const result = await kernel.runRemoteImageJob(
+    const job = kernel.runRemoteImageJob(
       {
         payload: {
           apiKey: "key",
@@ -648,15 +714,14 @@ test("runRemoteImageJob retries when Images API only returns partial previews", 
         onPartialImage: (partial) => partials.push(partial),
       },
     );
-    assert.equal(calls, 2);
-    assert.equal(result.imageB64, "aW1hZ2VzLWZpbmFs");
-    assert.equal(result.sourceEvent, "images_api");
+    await assert.rejects(job, /可用图片/);
+    assert.equal(calls, 1);
     assert.equal(partials.length, 1);
     assert.equal(partials[0].imageB64, "aW1hZ2VzLXBhcnRpYWw=");
   });
 });
 
-test("runRemoteImageJob repairs invalid 16-alignment size errors and retries once", async () => {
+test("runRemoteImageJob reports invalid size without silently changing or resubmitting", async () => {
   let calls = 0;
   const bodies = [];
   await withPatchedGlobals(async () => {
@@ -683,7 +748,7 @@ test("runRemoteImageJob repairs invalid 16-alignment size errors and retries onc
     };
   }, async () => {
     const kernel = await loadRemoteKernel();
-    const result = await kernel.runRemoteImageJob(
+    const job = kernel.runRemoteImageJob(
       {
         payload: {
           apiKey: "key",
@@ -708,10 +773,9 @@ test("runRemoteImageJob repairs invalid 16-alignment size errors and retries onc
       },
       { signal: new AbortController().signal },
     );
-    assert.equal(calls, 2);
+    await assert.rejects(job, /Invalid size/);
+    assert.equal(calls, 1);
     assert.equal(bodies[0].tools[0].size, "872x2048");
-    assert.equal(bodies[1].tools[0].size, "880x2048");
-    assert.equal(result.imageB64, "ZmluYWw=");
   });
 });
 

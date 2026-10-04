@@ -29,9 +29,9 @@ image-studio/
 └── go.mod
 ```
 
-`backend/studio/` 负责新版工作室的项目仓储、系统凭据引用、图片/视频任务、异步轮询、DAG 调度及素材回填，并保存新版工作室与经典编辑共用的上游配置；OpenAI 兼容图像请求复用 `go-cli/pkg/client`。`backend/studio_v2.go` 提供薄 Wails 绑定。`frontend/src/studio/` 负责新版界面和无限画布，`frontend/src/lib/upstreamRegistry.ts` 让经典编辑在桌面端读写同一份上游配置。
+`backend/studio/` 负责新版工作室的项目仓储、系统凭据引用、图片/视频任务、异步轮询、DAG 调度及素材回填，并保存统一上游配置；OpenAI 兼容图像请求复用 `go-cli/pkg/client`。`backend/studio_v2.go` 提供薄 Wails 绑定。`frontend/src/studio/` 负责新版界面和无限画布，`frontend/src/lib/upstreamRegistry.ts` 保留旧上游和代理设置的迁移。工作室是唯一界面，不再加载经典编辑器。
 
-`backend/` 中保留的经典编辑器服务也暴露 Wails bindings:
+`backend/` 中保留的兼容与迁移服务仍暴露 Wails bindings：
 
 - `service.go`:Service 生命周期、Generate/Edit/Cancel、并发限制。
 - `types.go`:与前端 JSON 绑定的类型。
@@ -47,7 +47,7 @@ image-studio/
 关键边界:
 
 - `studio/`:新版首页、API Key 创作、无限画布、任务与自动保存。
-- `app/`:经典编辑器顶层装配、全局 hooks、modal gates。
+- `app/`:旧编辑器兼容代码与可复用 hooks；不再作为主入口加载。
 - `components/`:纯 UI 组件。
 - `platform/`:平台检测、桌面/Android 壳层、runtime host、远程内核。
 - `state/`:zustand store 和 workspace runtime。
@@ -96,7 +96,7 @@ cloudflare-worker/
 
 ## Android 状态
 
-Android APK 壳层已下线，不再构建或发布手机/平板安装包。少量前端平台兼容类型与测试保留，避免影响经典编辑器共享代码；它们不是受维护的 APK 入口。
+Android APK 壳层已下线，不再构建或发布手机/平板安装包。少量前端平台兼容类型与测试保留，用于共享兼容代码；它们不是受维护的 APK 入口。
 
 ## `scripts/`
 

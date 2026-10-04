@@ -250,3 +250,46 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
     flex: 0 0 auto;
   }
 }
+
+.studio-protocol-tips {
+  margin: 12px 0 18px;
+  padding: 14px 16px;
+  color: #284a71;
+  background: #edf5ff;
+  border: 1px solid #c7def8;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.studio-protocol-tips > strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #1d63a6;
+}
+.studio-protocol-tips p { margin: 8px 0 0; }
+.studio-field-tip {
+  margin: -5px 0 14px;
+  color: #536e92;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.studio-capability-editor {
+  padding: 12px 14px;
+  border: 1px solid #d0dff0;
+  border-radius: 12px;
+  margin: 16px 0;
+}
+.studio-capability-editor summary, .studio-job-prompts summary {
+  cursor: pointer;
+  color: #375e90;
+  font-weight: 600;
+}
+.studio-capability-model { display: block; overflow-wrap: anywhere; font-size: 12px; }
+.studio-job-prompts { margin: 10px 0; font-size: 12px; }
+.studio-job-prompts dt { font-weight: 600; margin-top: 10px; }
+.studio-job-prompts dd { margin: 3px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-generation-form .studio-field-tip { font-weight: 400; }
+.studio-reference-item { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 12px; margin: 7px 0; }
+.studio-reference-item span { overflow-wrap: anywhere; }
+.studio-reference-item button { white-space: nowrap; color: #286bc0; }

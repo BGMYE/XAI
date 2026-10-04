@@ -49,6 +49,9 @@ func (t *NativeTransport) Stream(ctx context.Context, req Request, rawSink io.Wr
 		return fmt.Errorf("post: %w", err)
 	}
 	defer resp.Body.Close()
+	if receiver, ok := rawSink.(interface{ setResponseHeaders(http.Header) }); ok {
+		receiver.setResponseHeaders(resp.Header)
+	}
 
 	scanner := NewSSEScanner(resp.Body)
 	for scanner.Scan() {

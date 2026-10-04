@@ -1,9 +1,12 @@
 package studio
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -56,7 +59,15 @@ func TestClassicImagePreservesReferencesMaskAndOptionsOverHTTP(t *testing.T) {
 	r.Prompt = "edit"
 	r.Parameters.Size = "1024x1024"
 	r.ReferenceAssetIDs = []string{a.ID, a.ID}
-	r.MaskAssetID = a.ID
+	var mask bytes.Buffer
+	if err := png.Encode(&mask, image.NewNRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	maskAsset, err := e.Import(mask.Bytes(), "mask.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.MaskAssetID = maskAsset.ID
 	r.Image = ImageParameters{Quality: "high", OutputFormat: "webp", Background: "transparent", InputFidelity: "high", Seed: 42, NegativePrompt: "blur"}
 	if _, err = e.Submit(r); err != nil {
 		t.Fatal(err)

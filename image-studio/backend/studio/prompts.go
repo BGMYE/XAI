@@ -2,6 +2,7 @@ package studio
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -106,7 +107,8 @@ func validatePromptReferences(d *document, p PromptCard) error {
 	}
 	if p.SourceJobID != "" {
 		j, ok := d.Jobs[p.SourceJobID]
-		if !ok || j.State != "succeeded" || j.ResultAssetID == "" || j.ResultAssetID != p.PreviewAssetID || j.Request.Kind != p.Kind {
+		matchesResult := p.PreviewAssetID != "" && (j.ResultAssetID == p.PreviewAssetID || slices.Contains(j.ResultAssetIDs, p.PreviewAssetID))
+		if !ok || j.State != "succeeded" || !matchesResult || j.Request.Kind != p.Kind {
 			return errors.New("来源不是匹配的已完成生成任务")
 		}
 		for _, other := range d.PromptCards {

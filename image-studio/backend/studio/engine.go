@@ -28,6 +28,17 @@ type SecretStore interface {
 // place; otherwise the bytes are held in Data. MIME is only a hint: the stored
 // type is always sniffed from the content.
 type Output struct {
+	// Images contains only complete final images. Partial previews never enter
+	// this collection; even a failed/uncertain response can retain finals.
+	Images        []Output
+	ResponseID    string
+	RequestID     string
+	Usage         map[string]any
+	Status        string
+	ItemID        string
+	OutputIndex   *int
+	Width         int
+	Height        int
 	RevisedPrompt string
 	Data          []byte
 	MIME          string
@@ -39,9 +50,11 @@ type Output struct {
 // crash or interruption can resume retrieval without re-submitting a paid
 // request. Percent is volatile and never written to disk on its own.
 type Progress struct {
-	RemoteID  string
-	ResultURL string
-	Percent   int
+	RemoteID        string
+	ResultURL       string
+	ResultURLs      []string
+	ResultDownloads []ResultDownload
+	Percent         int
 }
 
 type Checkpoint func(Progress) error
@@ -168,12 +181,18 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 		e.runner = e.provider
 	}
 	e.cur.Store(&state{doc: d, rev: 1, logStart: 1})
+	if err := e.recoverCredentialCleanup(); err != nil {
+		cancel()
+		return nil, err
+	}
 	if err := e.CollectTrash(time.Now()); err != nil {
 		cancel()
 		return nil, err
 	}
 	e.wg.Add(1)
 	go e.collectDaily()
+	e.wg.Add(1)
+	go e.retryCredentialCleanup()
 	e.wg.Add(1)
 	go e.dispatch()
 	if e.onChange != nil {
@@ -296,7 +315,7 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 	}
 	if r.Source == "classic" && r.ProjectID == "classic" {
 		if _, ok := t.doc.Projects["classic"]; !ok {
-			t.putProject(Project{ID: "classic", Name: "经典编辑", Viewport: Viewport{Zoom: 1}, UpdatedAt: now(), Revision: 1})
+			t.putProject(Project{ID: "classic", Name: "经典编辑", Viewport: Viewport{Zoom: 1}, Nodes: []Node{}, Edges: []Edge{}, UpdatedAt: now(), Revision: 1})
 		}
 	}
 	project, ok := t.doc.Projects[r.ProjectID]
@@ -365,6 +384,11 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 	}
 	j := Job{ID: r.ID, Request: r, Profile: p.forJob(), Fingerprint: fingerprint(r, deps), State: "queued",
 		DependsOn: append([]string{}, deps...), CreatedAt: now(), UpdatedAt: now()}
+	j.OriginalPrompt, j.ConfirmedPrompt, j.SentPrompt = r.OriginalPrompt, r.ConfirmedPrompt, r.Prompt
+	if j.OriginalPrompt == "" {
+		j.OriginalPrompt = r.Prompt
+	}
+	j.ParentAssetIDs = requestParents(r)
 	if r.AutoFallback && p.FallbackProfileID != "" {
 		if backup, ok := t.doc.Profiles[p.FallbackProfileID]; ok && r.Validate(backup) == nil {
 			copy := backup.forJob()
@@ -593,6 +617,7 @@ func (e *Engine) claim() (Job, *jobRun, bool) {
 			for _, dep := range j.DependsOn {
 				j.Request.ReferenceAssetID = t.doc.Jobs[dep].ResultAssetID
 			}
+			j.ParentAssetIDs = requestParents(j.Request)
 			j.State = "running"
 			j.UpdatedAt = now()
 			t.putJob(j)
@@ -665,7 +690,7 @@ func (e *Engine) run(ctx context.Context, j Job, release func()) (out Output, ru
 	}
 	result, err := e.runWithPolicy(ctx, j, key, ref, func(p Progress) error { return e.checkpoint(j.ID, p, release) })
 	if err != nil {
-		return Output{}, redactError(err, key)
+		return result, redactError(err, key)
 	}
 	return result, nil
 }
@@ -702,12 +727,22 @@ func (e *Engine) checkpoint(id string, p Progress, release func()) error {
 	if p.ResultURL != "" && !validResultURL(p.ResultURL) {
 		return errors.New("上游返回无效结果地址")
 	}
+	for _, u := range p.ResultURLs {
+		if !validResultURL(u) {
+			return errors.New("上游返回无效结果地址")
+		}
+	}
+	for _, image := range p.ResultDownloads {
+		if !validResultURL(image.URL) {
+			return errors.New("上游返回无效结果地址")
+		}
+	}
 	percent := max(0, min(p.Percent, 99))
 	current, ok := e.cur.Load().doc.Jobs[id]
 	if !ok || current.State != "running" {
 		return context.Canceled
 	}
-	if (p.RemoteID != "" && p.RemoteID != current.RemoteID) || (p.ResultURL != "" && p.ResultURL != current.ResultURL) {
+	if (p.RemoteID != "" && p.RemoteID != current.RemoteID) || (p.ResultURL != "" && p.ResultURL != current.ResultURL) || len(p.ResultURLs) > 0 {
 		e.writeMu.Lock()
 		current, ok = e.cur.Load().doc.Jobs[id]
 		if !ok || current.State != "running" {
@@ -720,6 +755,13 @@ func (e *Engine) checkpoint(id string, p Progress, release func()) error {
 			}
 			if p.ResultURL != "" {
 				current.ResultURL = p.ResultURL
+			}
+			if len(p.ResultURLs) > 0 {
+				current.ResultURLs = append([]string(nil), p.ResultURLs...)
+				current.ResultURL = p.ResultURLs[0]
+			}
+			if len(p.ResultDownloads) > 0 {
+				current.ResultDownloads = append([]ResultDownload(nil), p.ResultDownloads...)
 			}
 			current.Progress = percent
 			current.UpdatedAt = now()
@@ -745,10 +787,31 @@ func (e *Engine) complete(job Job, output Output, runErr error) {
 	e.mediaMu.Lock()
 	defer e.mediaMu.Unlock()
 	defer discardOutput(output)
-	var asset Asset
+	outputs := output.Images
+	if len(outputs) == 0 && (len(output.Data) > 0 || output.Path != "") {
+		outputs = []Output{output}
+	}
+	assets := make([]Asset, 0, len(outputs))
+	results := make([]ResultImage, 0, len(outputs))
 	var assetErr error
-	if runErr == nil && e.stillRunning(job.ID) {
-		asset, assetErr = e.storeAsset(output, resultName(job.Request.Kind), job.Request.Kind)
+	if e.stillRunning(job.ID) {
+		for _, item := range outputs {
+			a, err := e.storeAsset(item, resultName(job.Request.Kind), job.Request.Kind)
+			if err != nil {
+				if assetErr == nil {
+					assetErr = err
+				}
+				continue
+			}
+			assets = append(assets, a)
+			results = append(results, ResultImage{AssetID: a.ID, ItemID: item.ItemID, OutputIndex: item.OutputIndex,
+				RevisedPrompt: item.RevisedPrompt, Source: "final", Width: a.Width, Height: a.Height})
+		}
+	}
+	removeFiles := func() {
+		for _, a := range assets {
+			e.removeAssetFile(a)
+		}
 	}
 	e.writeMu.Lock()
 	defer e.writeMu.Unlock()
@@ -756,40 +819,60 @@ func (e *Engine) complete(job Job, output Output, runErr error) {
 	progress, hasProgress := e.progress.take(job.ID)
 	current, ok := e.cur.Load().doc.Jobs[job.ID]
 	if !ok || current.State != "running" || e.failure() != nil {
-		e.removeAssetFile(asset)
+		removeFiles()
 		return
 	}
 	if hasProgress {
 		current.Progress = progress
 	}
-	var err error
+	if output.ResponseID != "" {
+		current.ResponseID = output.ResponseID
+	}
+	if output.RequestID != "" {
+		current.RequestID = output.RequestID
+	}
+	if output.Usage != nil {
+		current.Usage = output.Usage
+	}
+	if output.Status != "" {
+		current.OutputStatus = output.Status
+	}
+	if output.RevisedPrompt != "" {
+		current.RevisedPrompt = output.RevisedPrompt
+	}
+	state, message := "succeeded", ""
 	switch {
 	case runErr != nil:
-		state, message := e.classify(current, runErr)
-		_, err = e.updateLocked(func(t *tx) error {
-			current.State, current.Error, current.UpdatedAt = state, message, now()
-			t.putJob(current)
-			return nil
-		})
+		state, message = e.classify(current, runErr)
 	case assetErr != nil:
-		_, err = e.updateLocked(func(t *tx) error {
-			current.State, current.Error, current.UpdatedAt = "failed", assetErr.Error(), now()
-			t.putJob(current)
-			return nil
-		})
-	default:
-		_, err = e.updateLocked(func(t *tx) error {
-			current.RevisedPrompt = output.RevisedPrompt
-			attachResult(t, current, asset)
-			return nil
-		})
-		if err != nil {
-			e.removeAssetFile(asset)
-		}
+		state, message = "failed", assetErr.Error()
+	case current.OutputStatus == "uncertain":
+		state, message = "uncertain", "已保留完整成品，但响应终态未知；未自动重新生成"
+	case current.OutputStatus == "failed" || current.OutputStatus == "incomplete":
+		state, message = "failed", "上游响应未完整成功；已保留收到的完整成品，未自动重发"
+	case len(assets) == 0 && len(current.ResultAssetIDs) == 0:
+		state, message = "failed", "上游未返回完整成品；未自动重发"
 	}
+	_, err := e.updateLocked(func(t *tx) error {
+		current.State, current.Error, current.UpdatedAt = state, message, now()
+		if state == "succeeded" {
+			current.Progress = 100
+		}
+		attachResults(t, current, assets, results)
+		return nil
+	})
 	if err != nil {
+		removeFiles()
 		e.fail(err)
 	}
+}
+
+func requestParents(r Request) []string {
+	ids := make([]string, 0, len(r.ReferenceAssetIDs)+1)
+	if r.ReferenceAssetID != "" {
+		ids = append(ids, r.ReferenceAssetID)
+	}
+	return append(ids, r.ReferenceAssetIDs...)
 }
 
 func (e *Engine) stillRunning(id string) bool {

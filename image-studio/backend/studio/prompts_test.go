@@ -246,3 +246,20 @@ func TestPromptGeneratedSourceDeduplicatesWithoutNewRequests(t *testing.T) {
 		t.Fatal("source was lost")
 	}
 }
+
+func TestPromptReferencesAcceptAnyFinalImage(t *testing.T) {
+	d := emptyDocument()
+	d.Assets["first"] = Asset{ID: "first", Kind: "image"}
+	d.Assets["second"] = Asset{ID: "second", Kind: "image"}
+	d.Assets["unrelated"] = Asset{ID: "unrelated", Kind: "image"}
+	d.Jobs["source"] = Job{ID: "source", State: "succeeded", ResultAssetID: "first", ResultAssetIDs: []string{"first", "second"}, Request: Request{Kind: "image"}}
+	p := samplePrompt()
+	p.SourceJobID, p.PreviewAssetID = "source", "second"
+	if err := validatePromptReferences(&d, p); err != nil {
+		t.Fatal("second final image rejected", err)
+	}
+	p.PreviewAssetID = "unrelated"
+	if err := validatePromptReferences(&d, p); err == nil {
+		t.Fatal("unrelated image accepted as a result")
+	}
+}

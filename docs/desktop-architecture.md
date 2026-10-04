@@ -9,13 +9,13 @@
 | 界面 | React + TypeScript + Vite | 新版工作室、上游设置、创作、作品和任务历史 |
 | 无限画布 | React 节点、SVG 连线、CSS 坐标变换 | 平移缩放、拖动连线、撤销、模板与自动保存 |
 | 桌面宿主 | Wails v2 | 系统 WebView、Go 绑定、文件对话框、窗口生命周期 |
-| 本地后端 | Go `backend/studio/` | 上游配置（与经典编辑共用）、图片和视频任务、依赖调度、轮询、下载和素材回填 |
+| 本地后端 | Go `backend/studio/` | 统一上游配置与旧数据迁移、图片和视频任务、依赖调度、轮询、下载和素材回填 |
 | 持久化 | 本地 JSON 与媒体文件 | 项目、节点、任务元数据及图片/视频 |
 | 密钥 | 操作系统凭据库 | 独立保存 API Key，任务固定引用提交时的凭据版本 |
 
 任务路径为：React 操作 → Wails 绑定 → Go 本地任务引擎 → 用户配置的上游 API → 本地媒体文件 → 原画布结果节点。生成由远端模型服务执行，不是在本机运行生成模型；本机 Go 后端不需要另租服务器。
 
-`go.work` 保留 `image-studio`、`go-cli` 和 `shared/compat-go` 三个模块。`go-cli/` 与 `shared/` 仍被主工作室使用，不属于本次下线范围。经典编辑器与可选 Worker 保留。Android APK 壳层已下线，主线只维护桌面程序。
+`go.work` 保留 `image-studio`、`go-cli` 和 `shared/compat-go` 三个模块。`go-cli/` 与 `shared/` 仍被主工作室使用，不属于本次下线范围。工作室成为唯一界面，经典编辑入口已移除；旧数据迁移接口及可选 Worker 保留。Android APK 壳层已下线，主线只维护桌面程序。
 
 新版浏览器模式仍只是本地画布预览，不保存 API Key、不代理生成请求。桌面端的 API Key 生图、生视频及节点工作流说明见 [studio-v2.md](./studio-v2.md)。本次精简不新增多人云端服务、时间线剪辑或其他供应商适配器。
 
@@ -59,6 +59,6 @@ CI 在实际已移除客户端的源码树上运行核心测试、依赖清单�
 
 ## Android APK 下线与公共提示词中心
 
-`android-shell/` 已移除，Release 不再构建或发布 APK；主工作室继续使用 React + Wails + Go。专用 Android SDK/JDK CI 步骤与 Android 验证结果依赖已移除。旧的共享平台类型、检测与兼容测试保留，避免破坏经典编辑器；这不意味着仍提供 APK。Android 样式与 Wails 运行时替身只在 Android 目标按需加载，桌面启动不再解析这部分样式和脚本。用户设备中已安装的程序、数据和旧 Releases 不会被删除。
+`android-shell/` 已移除，Release 不再构建或发布 APK；主工作室继续使用 React + Wails + Go。专用 Android SDK/JDK CI 步骤与 Android 验证结果依赖已移除。旧的共享平台类型、检测与兼容测试保留，用于共享兼容层；这不意味着仍提供 APK 或经典编辑入口。Android 样式与 Wails 运行时替身只在 Android 目标按需加载，桌面启动不再解析这部分样式和脚本。用户设备中已安装的程序、数据和旧 Releases 不会被删除。
 
 专业模式新增同源公共图库与本地提示词中心，见 [prompt-center.md](./prompt-center.md)。`cloudflare-worker/` 保留原实现，它不是图库或视频通用网关。

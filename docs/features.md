@@ -1,92 +1,34 @@
-# 功能说明
+# 当前工作室功能
 
-本文档记录当前软件能力。应用界面展示见 [showcase.md](./showcase.md)，安装包选择见 [packages.md](./packages.md)，首次配置见 [usage.md](./usage.md)。
+新版工作室是唯一界面，经典编辑入口已经移除。旧代码中仍有迁移与共享兼容实现，不能据其存在推断当前提供旧版 UI。配置步骤见 [使用说明](./usage.md)，架构见 [工作室说明](./studio-v2.md)。
 
-## 生成能力
-
-- 文生图与图生图，支持多张参考图。
-- 桌面端图生图批处理:可在图生图里切换到批处理模式，按目录逐张处理图片，默认保存回原图目录，也可单独指定输出目录。详见 [batch-img2img](./batch-img2img/README.md)。
-- 输入图源:文件对话框、拖拽窗口、剪贴板粘贴、历史复用、双击历史项设为源图。
-- 参数:Auto 与固定尺寸、Auto / high / medium / low 质量、PNG / JPEG / WebP 输出格式、seed、negative prompt、风格 chip。
-- 尺寸语义:比例与分辨率是同一个 `size` 的拆分视图；当比例切到 `Auto` 时，底层尺寸会整体交给上游决定。细节见 [size-auto.md](./size-auto.md)。
-- 参数预设:可在提示词上方的独立预设分区里展开查看、直接切换，并通过保存/新建/管理弹窗维护常用尺寸、质量、输出格式、风格与批量张数组合。
-- 比例管理:内置常用宽高比，也支持通过「自定义比例」弹窗添加多个用户自定义宽高比并持久化保存；新增比例会立即出现在参数按钮区，并按当前 1K / 2K / 4K 档位自动换算尺寸。
-- 双 API 形态:
-  - Responses API:POST `/v1/responses`，使用 `image_generation` 工具，SSE 流式接收事件。
-  - Images API:POST `/v1/images/generations` 与 `/v1/images/edits`。
-- 参数策略:
-  - `OpenAI 标准`:只发送官方公开字段。
-  - `兼容中转扩展`:额外发送部分 relay 常见扩展字段，例如 seed / negative_prompt。
-- prompt 辅助:prompt 历史、内置模板、一键 AI 优化 prompt；Responses API 请求默认要求上游按原始 prompt 生成。
-
-## 画板
-
-- Konva 画布，支持缩放、拖动、双击 fit 与 100% 切换。
-- 蒙版:画笔、橡皮、大小滑块、实时半透明叠加。
-- 标注:矩形、箭头、自由画笔、文字、颜色选择、选中删除。
-- 图像变换:
-  - macOS 桌面端优先走 Core Image / Metal。
-  - Windows、Linux 与浏览器预览优先走 WebGL 或 canvas 路径，再把结果持久化回宿主可读路径。
-  - 不可用时回退 CPU / canvas。
-  - 旋转、翻转、裁剪是就地编辑当前画板图，不创建新的生成历史条目。
-- 历史对比:Shift + 点击历史项进入左右分屏对比，可拖动分割条。
-- 全屏:`Ctrl+Cmd+F`(macOS) / `F11`(Windows/Linux)。
-
-## 历史
-
-- IndexedDB 本地持久化。
-- 搜索 prompt、按 mode 筛选、按日期筛选。
-- 历史项右键菜单:复制 prompt、复制本地路径、查看 raw 响应、设为源图、用作对比、以此参数重新生成、应用参数但不生成。
-- JSON 导入 / 导出，便于跨设备迁移。
-
-## Workspace
-
-- 多 workspace 标签页。
-- 每个 workspace 独立保存 prompt、参数、源图、当前图与运行状态。
-- macOS 下 `Cmd+N` / `Cmd+W` 新建或关闭；Windows/Linux 下 `Ctrl+N` / `Ctrl+W`。
-- 撤销 / 重做覆盖蒙版笔触、标注、清空等画板操作。
-
-## 设置
-
-- 上游配置:API 形态、BASE_URL、API Key、文本模型 ID、图像模型 ID、连接测试。
-- API Key:
-  - 桌面端使用系统安全存储(Keychain / Credential Manager / Secret Service)。
-- 主题:深色 / 浅色。
-- 字号:小 / 中 / 大。
-- 参数编辑:桌面端共用同一套比例 / 分辨率 / 质量语义，差异只体现在展示形态与触控交互。
-- 输出目录选择、打开输出目录、历史导入 / 导出、清除 API Key、清空历史。
-- 关于窗口:版本号、AGPLv3 协议、GitHub、Issues。
-
-## 平台能力
-
-| 平台 | UI | 内核与宿主能力 |
-|---|---|---|
-| macOS | Apple 风格主题 | Wails + Go 本地内核；图像变换优先 Core Image / Metal；本地自签 universal app。 |
-| Windows | Fluent 风格主题 | Wails + Go 本地内核；WebView2；图像变换走 WebGL/canvas 或本地持久化回退。 |
-| Linux | 通用桌面主题 | Wails + Go 本地内核；依赖 GTK/WebKitGTK；图像变换走 WebGL/canvas 或本地持久化回退。 |
-| 浏览器预览 | 按目标平台预览 | 主要用于前端调试；文件、保存和 raw 响应通过浏览器能力或内存虚拟路径回退。 |
-
-Android APK 已下线。
-
-## 快捷键
-
-| 快捷键 | 功能 |
+| 模块 | 当前范围 |
 |---|---|
-| `Cmd+Enter`(macOS) / `Ctrl+Enter`(Windows/Linux) | 提交生成 |
-| `Cmd+N` / `Cmd+W`(macOS) | 新建 / 关闭 workspace |
-| `Ctrl+N` / `Ctrl+W`(Windows/Linux) | 新建 / 关闭 workspace |
-| `Cmd+Z` / `Shift+Cmd+Z`(macOS) | 撤销 / 重做 |
-| `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y`(Windows/Linux) | 撤销 / 重做 |
-| `Cmd+C` / `Ctrl+C` | 复制当前画板图 |
-| `Cmd+V` / `Ctrl+V` | 粘贴剪贴板图到画板 |
-| `1` / `2` / `3` | 切换拖动 / 蒙版 / 标注工具 |
-| `Space` | 按住临时切到拖动 |
-| `F` | 重置视图 |
-| 双击画板 | fit 与 100% 切换 |
-| `Ctrl+Cmd+F`(macOS) / `F11`(Windows/Linux) | 全屏 |
-| `[` / `]` | 笔刷大小减 / 加 5 |
-| `Esc` | 取消生成、退出对比、清除选中或关闭错误 |
-| `Delete` | 删除选中的标注 |
-| `Shift` + 点击历史 | 设为对比图 B |
-| 双击历史 | 作为源图 |
-| 右键历史 | 打开上下文菜单 |
+| 创作 | 文字生成图片或视频；OpenAI 图像路径按序追加多参考图，能力确认后选择已有 PNG 蒙版；成品可作为下一轮参考 |
+| 图像接口 | OpenAI 兼容 Images 生成/编辑及 Responses 图像工具；xAI 原生协议单独配置 |
+| 设置 | Base URL、系统凭据库中的 API Key、精确模型 ID、sub2api 预设和协议 TIPS |
+| 能力配置 | 按精确模型和协议确认支持范围；未知能力不自动标成支持；高质量预设仅从已确认的 high、PNG 与原生尺寸生成 |
+| 提示词模式 | Responses 精确执行 / 创作辅助；另有可编辑确认的两步文本优化，再由用户单独生成 |
+| 专业画布 | 提示词、生成、素材、便签节点，连线工作流，平移缩放、撤销重做、模板、自动保存 |
+| 本地资源 | 图片和视频作品、任务历史、项目与素材管理、提示词中心 |
+| 任务处理 | 持久化任务、单次生成提交、不确定状态、可恢复的视频查询和结果下载 |
+| 旧数据 | 启动时导入旧上游与可读取历史，保留失败记录及原文件 |
+
+## 协议与效果边界
+
+Images 和 Responses 都可以流式返回，是否可用取决于上游。SSE/WebSocket、桥接策略、reasoning 不等同于画质档位。模型、质量、分辨率、参考素材和提示词影响最终效果；未确认的参数不能一律设为最大值。
+
+接收到的预览帧不算最终成品。上游返回多个最终图片时，各自成为本地资产；重复事件不应产生重复作品。以最终图继续编辑不依赖服务器会话，当前不宣称完成 `previous_response_id` 续接。
+
+旧 Konva 蒙版画笔、标注、目录批处理、历史左右对比、本地插值放大和旧版快捷键文档属于历史实现，不作为工作室当前 UI 的功能承诺。当前支持的参考图和蒙版输入，以实际创作面板及确认的上游能力为准。
+
+## 平台
+
+| 平台 | 运行方式 |
+|---|---|
+| Windows | Wails + Go，依赖 WebView2 |
+| macOS | Wails + Go；签名、公证取决于实际构建产物 |
+| Linux | Wails + Go，依赖 GTK/WebKitGTK |
+| 浏览器 | 本地 IndexedDB 画布预览；不保存 API Key，不代理生成 |
+
+Android APK 和独立 Gio 客户端已下线。当前不提供独立多用户 Web 服务。桌面作品元数据在 `ImageStudio/studio-v2/studio.json`，媒体在相邻 `media/`，密钥保存在操作系统凭据库。

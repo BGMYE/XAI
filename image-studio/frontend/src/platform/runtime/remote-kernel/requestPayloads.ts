@@ -3,6 +3,7 @@ import {
   imageExtensionForMimeType,
 } from "../../../lib/images.ts";
 import {
+  DEFAULT_PARTIAL_IMAGES,
   buildResponsesPayload as buildSharedResponsesPayload,
   normalizeBackground,
   normalizeImageStyle,
@@ -17,7 +18,8 @@ import {
   shouldSendExtendedImageParameters,
   supportsImageBackground,
   supportsImageStyle,
-  supportsInputFidelity,
+  supportsConfiguredInputFidelity,
+  validateImageRequest,
   supportsImageModeration,
   supportsOutputCompression,
   shouldUseImagesNewAPICompat,
@@ -87,6 +89,7 @@ export async function buildImagesRequestBody(
   request: RemoteJobRequest,
   sourceDataURLs: string[],
 ): Promise<{ url: string; headers?: Record<string, string>; body: BodyInit; protocol: ImagesRequestProtocol }> {
+  validateImageRequest({ ...request.payload, reasoningEffort: normalizeReasoningEffort(request.payload.reasoningEffort || "") }, sourceDataURLs, "images");
   // Image endpoints are joined to the base as entered (see openAIAPIEndpoint),
   // so ".../openai/v1" keeps its version; only the trailing slash goes.
   const baseURL = String(request.payload.baseURL ?? "").trim().replace(/\/+$/, "");
@@ -102,7 +105,7 @@ export async function buildImagesRequestBody(
   const moderation = normalizeModeration(request.payload.moderation);
   const userIdentifier = normalizeUserIdentifier(request.payload.userIdentifier || "");
   const includeExtended = shouldSendExtendedImageParameters(request.payload.requestPolicy);
-  const partialImages = request.payload.disablePreview ? 0 : normalizePartialImages(request.payload.partialImages);
+  const partialImages = request.payload.disablePreview ? 0 : normalizePartialImages(request.payload.partialImages || DEFAULT_PARTIAL_IMAGES);
   const useNewAPICompat = shouldUseImagesNewAPICompat(request.payload);
 
   if (shouldUseGoogleNativeInteractions(baseURL, imageModel)) {
@@ -138,7 +141,7 @@ export async function buildImagesRequestBody(
       const payload = dataURL.slice(dataURL.indexOf(",") + 1);
       const mimeType = dataURL.slice(5, dataURL.indexOf(";")) || "image/png";
       const ext = imageExtensionForMimeType(mimeType);
-      form.append(i === 0 ? "image" : "image[]", new Blob([Uint8Array.from(atob(payload), (ch) => ch.charCodeAt(0))], { type: mimeType }), `source-${i + 1}.${ext}`);
+      form.append(sourceDataURLs.length === 1 ? "image" : "image[]", new Blob([Uint8Array.from(atob(payload), (ch) => ch.charCodeAt(0))], { type: mimeType }), `source-${i + 1}.${ext}`);
     }
     if (request.payload.maskB64) {
       const maskMime = detectImageMimeTypeFromBase64(request.payload.maskB64);
@@ -162,7 +165,7 @@ export async function buildImagesRequestBody(
     if (supportsOutputCompression(imageModel, outputFormat)) {
       form.append("output_compression", String(outputCompression));
     }
-    if (supportsInputFidelity(imageModel) && inputFidelity !== "auto") {
+    if (supportsConfiguredInputFidelity({ ...request.payload, reasoningEffort: normalizeReasoningEffort(request.payload.reasoningEffort || "") }) && inputFidelity !== "auto") {
       form.append("input_fidelity", inputFidelity);
     }
     if (supportsImageModeration(imageModel)) {
@@ -174,7 +177,7 @@ export async function buildImagesRequestBody(
     if (useNewAPICompat || supportsImagesResponseFormat(imageModel, mode)) {
       form.append("response_format", "b64_json");
     }
-    if (!useNewAPICompat) {
+    if (!useNewAPICompat && !request.payload.disableImageStreaming) {
       form.append("stream", "true");
       form.append("partial_images", String(partialImages));
     }
@@ -209,7 +212,7 @@ export async function buildImagesRequestBody(
   if (useNewAPICompat || supportsImagesResponseFormat(imageModel, mode)) {
     payload.response_format = "b64_json";
   }
-  if (!useNewAPICompat) {
+  if (!useNewAPICompat && !request.payload.disableImageStreaming) {
     payload.stream = true;
     payload.partial_images = partialImages;
   }

@@ -150,7 +150,7 @@ func optimizePromptWithLLM(
 		textModelID = client.TextModel
 	}
 
-	instruction := "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Keep the meaning, preserve the requested subject, and only return the improved prompt text. Do not add explanations, labels, markdown, or quotes."
+	instruction := "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Preserve the user's exact requested text, subjects, counts, identities, and all edit constraints. Never translate or reword text intended to appear in the image. Do not add or remove subjects or alter areas the user asked to preserve. Only return the improved prompt text. Do not add explanations, labels, markdown, or quotes."
 	inputText := fmt.Sprintf("Original prompt:\n%s", strings.TrimSpace(prompt))
 	if isDescribe {
 		instruction = "Analyze the attached image and reconstruct a detailed image-generation prompt that could reproduce it. Describe the subject, composition, perspective, lighting, colors, materials, environment, and visual style. Return the prompt in Simplified Chinese. Only return the prompt text; do not add explanations, labels, markdown, or quotes."

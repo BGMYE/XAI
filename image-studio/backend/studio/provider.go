@@ -244,6 +244,25 @@ func (p *HTTPProvider) Run(ctx context.Context, j Job, key string, reference *Ou
 	defer closeClient(api)
 	defer closeClient(media)
 	if j.ResultURL != "" {
+		if len(j.ResultURLs) > 0 {
+			out := Output{Status: j.OutputStatus}
+			var downloadErr error
+			for i, u := range j.ResultURLs {
+				image, err := p.fetchMedia(ctx, media, j.Profile, u, 0)
+				if err != nil {
+					if downloadErr == nil {
+						downloadErr = expiredLink(err)
+					}
+					continue
+				}
+				if i < len(j.ResultDownloads) && j.ResultDownloads[i].URL == u {
+					meta := j.ResultDownloads[i]
+					image.ItemID, image.OutputIndex, image.RevisedPrompt = meta.ItemID, meta.OutputIndex, meta.RevisedPrompt
+				}
+				out.Images = append(out.Images, image)
+			}
+			return out, downloadErr
+		}
 		// The upstream already produced this result; only the download remains.
 		out, err := p.fetchMedia(ctx, media, j.Profile, j.ResultURL, 0)
 		return out, expiredLink(err)

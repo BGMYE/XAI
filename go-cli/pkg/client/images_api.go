@@ -7,8 +7,8 @@ package client
 // 与 Responses API 路径(client.go / sse.go)的最大区别:
 //   - 结果事件形态不同;支持官方 Images API 的 stream/partial_images 时可流式预览,
 //     否则回退解析一次性 JSON 响应。
-//   - 多图编辑能力受上游约束(OpenAI 官方仅接受 1 张 image,部分中转站允许 image[] 数组),
-//     为最大兼容,这里默认只取第一张源图;如果上游支持多张,可后续扩展
+//   - 多图编辑能力受上游与模型约束;多张参考图按有序 image[] 字段提交,
+//     单张使用 image,超出已确认能力时在发送前拒绝。
 //   - 默认优先走 OpenAI 官方公开字段;若请求策略切到 compat,可附带 relay 扩展字段
 
 import (
@@ -113,6 +113,11 @@ type imagesAPIDatum struct {
 	B64JSON       string `json:"b64_json"`
 	URL           string `json:"url"`
 	RevisedPrompt string `json:"revised_prompt"`
+	ID            string `json:"id,omitempty"`
+	OutputFormat  string `json:"output_format,omitempty"`
+	Width         int    `json:"width,omitempty"`
+	Height        int    `json:"height,omitempty"`
+	Size          string `json:"size,omitempty"`
 }
 
 type imagesAPIError struct {
@@ -137,82 +142,13 @@ func (e *imagesAPIError) UnmarshalJSON(data []byte) error {
 }
 
 type imagesAPIResponse struct {
-	Created int              `json:"created"`
-	Data    []imagesAPIDatum `json:"data"`
-	Error   *imagesAPIError  `json:"error,omitempty"`
-}
-
-type imageStreamExtractor struct {
-	partialB64 string
-	final      ImageResult
-	hasFinal   bool
-	onPartial  func(PartialImage)
-}
-
-func (e *imageStreamExtractor) consume(line string) bool {
-	stripped := strings.TrimSpace(line)
-	if stripped == "" {
-		return false
-	}
-	if !strings.HasPrefix(stripped, "data:") {
-		return false
-	}
-	payload := strings.TrimSpace(stripped[len("data:"):])
-	if payload == "" || payload == "[DONE]" {
-		return true
-	}
-	var ev Event
-	if err := decodeEvent(payload, &ev); err != nil {
-		return false
-	}
-	evType, _ := ev["type"].(string)
-	switch evType {
-	case "image_generation.partial_image", "image_edit.partial_image":
-		if b64, ok := ev["b64_json"].(string); ok && b64 != "" {
-			e.partialB64 = b64
-			partial := PartialImage{ImageB64: b64, PartialImageIndex: -1}
-			if idx, ok := numberFromAny(ev["partial_image_index"]); ok {
-				partial.PartialImageIndex = idx
-			}
-			if e.onPartial != nil {
-				e.onPartial(partial)
-			}
-		}
-		return true
-	case "image_generation.completed", "image_edit.completed":
-		if b64, ok := ev["b64_json"].(string); ok && b64 != "" {
-			e.final = ImageResult{ImageB64: b64, SourceEvent: "images_api"}
-			e.hasFinal = true
-			return true
-		}
-	case "error":
-		return true
-	}
-	if ev["object"] == "image.generation.result" || ev["object"] == "image.edit.result" {
-		b, err := json.Marshal(ev)
-		if err == nil {
-			if result, err := parseImagesAPIResponseBytes(b, 200); err == nil {
-				e.final = result
-				e.hasFinal = true
-				return true
-			}
-		}
-	}
-	if b, err := json.Marshal(ev); err == nil {
-		if result, err := parseImagesAPIResponseBytes(b, http.StatusOK); err == nil {
-			e.final = result
-			e.hasFinal = true
-			return true
-		}
-	}
-	return true
-}
-
-func (e *imageStreamExtractor) result() (ImageResult, bool) {
-	if e.hasFinal {
-		return e.final, true
-	}
-	return ImageResult{}, false
+	Created    int              `json:"created"`
+	ID         string           `json:"id,omitempty"`
+	ResponseID string           `json:"response_id,omitempty"`
+	RequestID  string           `json:"request_id,omitempty"`
+	Data       []imagesAPIDatum `json:"data"`
+	Usage      map[string]any   `json:"usage,omitempty"`
+	Error      *imagesAPIError  `json:"error,omitempty"`
 }
 
 // RequestImagesAPI executes a single (no-retry) request against the standard
@@ -233,12 +169,19 @@ func RequestImagesAPIWithPartial(
 	rawSink io.Writer,
 	onProgress func(stage string, elapsedSeconds int, bytesReceived int64),
 	onPartial func(PartialImage),
-) (ImageResult, error) {
+) (outResult ImageResult, outErr error) {
+	if rawSink == nil {
+		rawSink = io.Discard
+	}
 	if strings.TrimSpace(opts.APIKey) == "" {
 		return ImageResult{}, ErrEmptyAPIKey
 	}
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return ImageResult{}, ErrEmptyPrompt
+	}
+	opts.APIMode = APIModeImages
+	if err := ValidateImageRequest(opts); err != nil {
+		return ImageResult{}, err
 	}
 
 	baseURL := strings.TrimSpace(opts.BaseURL)
@@ -310,7 +253,10 @@ func RequestImagesAPIWithPartial(
 		if len(paths) == 0 {
 			return ImageResult{}, errors.New("图生图模式需要至少一张源图(请在面板里添加参考图)")
 		}
-		multipartBuf, mpType, err := buildEditsMultipart(paths, opts.MaskB64, opts.Prompt, model, size, quality, outputFormat, background, outputCompression, inputFidelity, moderation, userIdentifier, opts.NegativePrompt, opts.Seed, opts.RequestPolicy, partialImages, useNewAPICompat)
+		multipartBuf, mpType, err := buildEditsMultipart(paths, opts.MaskB64, opts.Prompt, model, size, quality, outputFormat, background, outputCompression, inputFidelity, moderation, userIdentifier, opts.NegativePrompt, opts.Seed, opts.RequestPolicy, partialImages, useNewAPICompat, editsMultipartOptions{
+			InputFidelitySupported: supportsConfiguredInputFidelity(opts),
+			DisableStreaming:       opts.DisableImageStreaming,
+		})
 		if err != nil {
 			return ImageResult{}, err
 		}
@@ -344,7 +290,7 @@ func RequestImagesAPIWithPartial(
 		if useNewAPICompat || supportsImagesResponseFormat(model, opts.Mode) {
 			payload["response_format"] = "b64_json"
 		}
-		if !useNewAPICompat {
+		if !useNewAPICompat && !opts.DisableImageStreaming {
 			payload["stream"] = true
 			payload["partial_images"] = partialImages
 		}
@@ -390,11 +336,11 @@ func RequestImagesAPIWithPartial(
 	}
 
 	startedAt := time.Now()
-	progressStage := "等待 Images API 返回(无 SSE 保活)"
+	progressStage := "等待 Images API 返回"
 	if useGoogleInteractions {
 		progressStage = "等待 Google Interactions 返回(无 SSE 保活)"
 	}
-	// Progress ticker — Images API has no streaming so we just tick elapsed time.
+	// Keep progress alive while waiting for either streaming or JSON results.
 	stopProgress := make(chan struct{})
 	if onProgress != nil {
 		go func() {
@@ -417,41 +363,59 @@ func RequestImagesAPIWithPartial(
 		return ImageResult{}, err
 	}
 	defer resp.Body.Close()
+	defer func() {
+		outResult.RequestID = requestIDFromHeaders(resp.Header, outResult.RequestID)
+		if outErr != nil {
+			if outResult.Error == "" {
+				outResult.Error = outErr.Error()
+			}
+			if outResult.Status == "" {
+				outResult.Status = "uncertain"
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					outResult.Status = "failed"
+				}
+			}
+		} else if outResult.Status == "" {
+			outResult.Status = "completed"
+		}
+		if len(outResult.Images) == 0 && (outResult.ImageB64 != "" || outResult.URL != "") {
+			outResult.Images = []GeneratedImage{{ImageB64: outResult.ImageB64, URL: outResult.URL, RevisedPrompt: outResult.RevisedPrompt, Source: "final"}}
+		}
+	}()
 	if useGoogleInteractions {
 		return readGoogleInteractionResponse(ctx, resp, httpClient, rawSink, onProgress, startedAt, opts.DeferURLDownload)
 	}
 
 	contentTypeHeader := strings.ToLower(resp.Header.Get("Content-Type"))
 	if strings.Contains(contentTypeHeader, "text/event-stream") {
-		var rawBytes int64
-		extractor := imageStreamExtractor{onPartial: onPartial}
+		collector := newResponseCollectorWithPartial(rawSink, onPartial)
+		collector.setResponseHeaders(resp.Header)
 		scanner := NewSSEScanner(resp.Body)
 		for scanner.Scan() {
-			line := scanner.Bytes()
-			rawBytes += int64(len(line) + 1)
-			if _, err := rawSink.Write(line); err != nil {
-				return ImageResult{}, fmt.Errorf("write raw: %w", err)
+			if _, err := collector.Write(append(scanner.Bytes(), '\n')); err != nil {
+				result, _ := collector.result()
+				return result, fmt.Errorf("read Images API stream: %w", err)
 			}
-			if _, err := rawSink.Write([]byte("\n")); err != nil {
-				return ImageResult{}, fmt.Errorf("write raw: %w", err)
-			}
-			if extractor.consume(string(line)) && onProgress != nil {
-				onProgress("已收到 Images API 流式事件", int(time.Since(startedAt).Seconds()), rawBytes)
+			if onProgress != nil {
+				onProgress("已收到 Images API 流式事件", int(time.Since(startedAt).Seconds()), collector.bytesReceived())
 			}
 		}
-		if err := scanner.Err(); err != nil {
-			if result, ok := extractor.result(); ok && result.ImageB64 != "" {
-				return result, nil
-			}
-			return ImageResult{}, fmt.Errorf("read Images API stream: %w", err)
-		}
+		result, resultErr := collector.result()
 		if resp.StatusCode/100 != 2 {
-			return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d", resp.StatusCode)
+			if resp.StatusCode < 500 {
+				result.Status = "failed"
+			} else {
+				result.Status = "uncertain"
+			}
+			return result, statusError(resp.StatusCode, "上游返回 HTTP %d", resp.StatusCode)
 		}
-		if result, ok := extractor.result(); ok {
-			return result, nil
+		if err := scanner.Err(); err != nil && resultErr != nil {
+			return result, fmt.Errorf("read Images API stream: %w", err)
 		}
-		return ImageResult{}, ErrNoImageInResponse
+		if resultErr != nil {
+			return result, resultErr
+		}
+		return resolveImagesResultURLs(ctx, result, opts.DeferURLDownload, httpClient, onProgress, startedAt)
 	}
 
 	preview := newCappedPreviewBuffer(4096)
@@ -486,32 +450,37 @@ func RequestImagesAPIWithPartial(
 			return ImageResult{}, fmt.Errorf("解析 Images API 响应失败:%w", err)
 		}
 
-		// Non-2xx with JSON body — decode has already captured the structured error.
+		// Retain the gateway ID and usage even when the structured response
+		// describes an error rather than images.
 		if resp.StatusCode/100 != 2 {
+			result, _ := resultFromImagesResponse(parsed)
+			if resp.StatusCode < 500 {
+				result.Status = "failed"
+			} else {
+				result.Status = "uncertain"
+			}
 			if parsed.Error != nil {
-				return ImageResult{}, statusError(resp.StatusCode, "上游返回 %d:%s", resp.StatusCode, parsed.Error.Message)
+				return result, statusError(resp.StatusCode, "上游返回 %d:%s", resp.StatusCode, parsed.Error.Message)
 			}
 			bodyPreview := preview.String()
 			if len(bodyPreview) > 400 {
 				bodyPreview = bodyPreview[:400] + "..."
 			}
-			return ImageResult{}, statusError(resp.StatusCode, "上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
+			return result, statusError(resp.StatusCode, "上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
 		}
 		if parsed.Error != nil {
-			return ImageResult{}, fmt.Errorf("上游返回错误:%s", parsed.Error.Message)
+			return resultFromImagesResponse(parsed)
 		}
+
 		if len(parsed.Data) > 0 {
-			d := parsed.Data[0]
-			if d.B64JSON != "" {
-				return imageResultFromImagesDatum(d), nil
+			result, resultErr := resultFromImagesResponse(parsed)
+			result.RequestID = requestIDFromHeaders(resp.Header, result.RequestID)
+			if resultErr != nil {
+				return result, resultErr
 			}
-			if d.URL != "" {
-				if opts.DeferURLDownload {
-					return ImageResult{URL: d.URL, RevisedPrompt: d.RevisedPrompt, SourceEvent: "images_api_url"}, nil
-				}
-				return downloadImagesAPIURL(ctx, httpClient, d.URL, d.RevisedPrompt, onProgress, startedAt)
-			}
+			return resolveImagesResultURLs(ctx, result, opts.DeferURLDownload, httpClient, onProgress, startedAt)
 		}
+
 		if !useNewAPICompat {
 			return ImageResult{}, ErrNoImageInResponse
 		}
@@ -566,11 +535,59 @@ func readGoogleInteractionResponse(
 }
 
 func imageResultFromImagesDatum(d imagesAPIDatum) ImageResult {
-	return ImageResult{
-		ImageB64:      d.B64JSON,
-		RevisedPrompt: d.RevisedPrompt,
-		SourceEvent:   "images_api",
+	result, _ := resultFromImagesResponse(imagesAPIResponse{Data: []imagesAPIDatum{d}})
+	return result
+}
+
+func resultFromImagesResponse(parsed imagesAPIResponse) (ImageResult, error) {
+	data, err := json.Marshal(parsed)
+	if err != nil {
+		return ImageResult{}, err
 	}
+	var ev Event
+	if err := decodeEvent(string(data), &ev); err != nil {
+		return ImageResult{}, err
+	}
+	extractor := streamImageExtractor{}
+	extractor.consumeDocument(ev)
+	return extractor.resultWithError()
+}
+
+func requestIDFromHeaders(headers http.Header, fallback string) string {
+	for _, name := range []string{"X-Request-Id", "Request-Id", "Openai-Request-Id"} {
+		if id := strings.TrimSpace(headers.Get(name)); id != "" {
+			return id
+		}
+	}
+	return fallback
+}
+
+func resolveImagesResultURLs(ctx context.Context, result ImageResult, deferDownload bool, httpClient *http.Client, onProgress func(string, int, int64), startedAt time.Time) (ImageResult, error) {
+	for i := range result.Images {
+		image := &result.Images[i]
+		if image.ImageB64 != "" || image.URL == "" {
+			continue
+		}
+		if i == 0 {
+			result.SourceEvent = "images_api_url"
+		}
+		if deferDownload {
+			continue
+		}
+		downloaded, err := downloadImagesAPIURL(ctx, httpClient, image.URL, image.RevisedPrompt, onProgress, startedAt)
+		if err != nil {
+			result.Status, result.Error = "incomplete", err.Error()
+			result.syncLegacyImage()
+			return result, err
+		}
+		image.ImageB64 = downloaded.ImageB64
+		image.URL = ""
+	}
+	result.syncLegacyImage()
+	if len(result.Images) > 0 && (result.URL != "" || result.SourceEvent == "images_api_url") {
+		result.SourceEvent = "images_api_url"
+	}
+	return result, nil
 }
 
 func downloadImagesAPIURL(
@@ -641,10 +658,7 @@ func parseImagesAPIResponseBytes(raw []byte, statusCode int) (ImageResult, error
 	if parsed.Error != nil {
 		return ImageResult{}, fmt.Errorf("上游返回错误:%s", parsed.Error.Message)
 	}
-	if len(parsed.Data) == 0 || parsed.Data[0].B64JSON == "" {
-		return ImageResult{}, ErrNoImageInResponse
-	}
-	return imageResultFromImagesDatum(parsed.Data[0]), nil
+	return resultFromImagesResponse(parsed)
 }
 
 type cappedPreviewBuffer struct {
@@ -734,17 +748,27 @@ func writeDataURLToTemp(dataURL string) (string, error) {
 // buildEditsMultipart constructs the multipart/form-data body for /v1/images/edits.
 // 多张源图按 image[] / image[1] / ... 形式串联 —— 不同中转站对多图编辑支持不一,
 // 仅第一张是 OpenAI 官方接受的最小可用形态,其余作为兼容性 best-effort。
+type editsMultipartOptions struct {
+	InputFidelitySupported bool
+	DisableStreaming       bool
+}
+
 func buildEditsMultipart(
 	paths []string, maskB64, prompt, model, size, quality, outputFormat, background string, outputCompression int, inputFidelity, moderation, userIdentifier, negativePrompt string, seed int64, requestPolicy RequestPolicy, partialImages int, useNewAPICompat bool,
+	requestOptions ...editsMultipartOptions,
 ) (*bytes.Buffer, string, error) {
 	buf := &bytes.Buffer{}
 	w := multipart.NewWriter(buf)
+	requestConfig := editsMultipartOptions{InputFidelitySupported: supportsInputFidelity(model)}
+	if len(requestOptions) > 0 {
+		requestConfig = requestOptions[0]
+	}
 
-	for i, p := range paths {
+	for _, p := range paths {
 		fieldName := "image"
-		if i > 0 {
-			// Some relays accept multiple `image` fields, others want image[] —
-			// we send both to maximise compatibility. The extra field is cheap.
+		if len(paths) > 1 {
+			// Use one consistent array field for all references; mixing image
+			// with image[] can lose the first reference in gateway parsers.
 			fieldName = "image[]"
 		}
 		if err := writeMultipartFile(w, fieldName, p); err != nil {
@@ -797,7 +821,7 @@ func buildEditsMultipart(
 	if supportsOutputCompression(model, outputFormat) {
 		_ = w.WriteField("output_compression", fmt.Sprintf("%d", outputCompression))
 	}
-	if supportsInputFidelity(model) && inputFidelity != DefaultInputFidelity {
+	if requestConfig.InputFidelitySupported && inputFidelity != DefaultInputFidelity {
 		_ = w.WriteField("input_fidelity", inputFidelity)
 	}
 	if supportsImageModeration(model) {
@@ -809,7 +833,7 @@ func buildEditsMultipart(
 	if useNewAPICompat || supportsImagesResponseFormat(model, ModeEdit) {
 		_ = w.WriteField("response_format", "b64_json")
 	}
-	if !useNewAPICompat {
+	if !useNewAPICompat && !requestConfig.DisableStreaming {
 		_ = w.WriteField("stream", "true")
 		_ = w.WriteField("partial_images", fmt.Sprintf("%d", partialImages))
 	}

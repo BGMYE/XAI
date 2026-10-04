@@ -1,15 +1,23 @@
 package studio
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
+
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -25,10 +33,18 @@ var mediaExtensions = map[string]string{
 // storeAsset moves a result into the media directory and returns its metadata.
 // It performs all file I/O itself, so callers must not hold the write lock.
 func (e *Engine) storeAsset(output Output, name, kind string) (Asset, error) {
+	// A managed media directory must never redirect imports through a symlink.
+	mediaInfo, err := os.Lstat(e.repo.mediaDir())
+	if err != nil {
+		return Asset{}, err
+	}
+	if !mediaInfo.IsDir() || mediaInfo.Mode()&os.ModeSymlink != 0 {
+		return Asset{}, errors.New("素材目录不是安全的本地目录，未写入文件")
+	}
 	var head []byte
 	var size int64
 	if output.Path != "" {
-		f, err := os.Open(output.Path)
+		f, err := openRegularAssetFile(output.Path)
 		if err != nil {
 			return Asset{}, errors.New("素材文件不可读")
 		}
@@ -57,40 +73,148 @@ func (e *Engine) storeAsset(output Output, name, kind string) (Asset, error) {
 	if !ok || !strings.HasPrefix(mime, kind+"/") {
 		return Asset{}, errors.New("上游素材不是支持的图片或视频文件")
 	}
+	a := Asset{Kind: kind, Name: name, MIME: mime, Bytes: size, CreatedAt: now()}
+	if kind == "image" {
+		var config image.Config
+		var configErr error
+		if output.Path != "" {
+			f, err := openRegularAssetFile(output.Path)
+			if err == nil {
+				config, _, configErr = image.DecodeConfig(f)
+				f.Close()
+			} else {
+				configErr = err
+			}
+		} else {
+			config, _, configErr = image.DecodeConfig(bytes.NewReader(output.Data))
+		}
+		if configErr != nil || config.Width < 1 || config.Height < 1 {
+			return Asset{}, errors.New("图片损坏或无法读取原始尺寸")
+		}
+		a.Width, a.Height = config.Width, config.Height
+		a.OriginalWidth, a.OriginalHeight = config.Width, config.Height
+	}
 	hash := sha256.New()
 	if output.Path != "" {
-		f, err := os.Open(output.Path)
+		f, err := openRegularAssetFile(output.Path)
 		if err != nil {
 			return Asset{}, err
 		}
-		_, err = io.Copy(hash, f)
+		n, err := io.Copy(hash, io.LimitReader(f, size+1))
 		f.Close()
 		if err != nil {
 			return Asset{}, err
+		}
+		if n != size {
+			return Asset{}, errors.New("导入期间素材文件发生变化，未写入文件")
 		}
 	} else {
 		_, _ = hash.Write(output.Data)
 	}
 	id := hex.EncodeToString(hash.Sum(nil))
 	if existing, ok := e.Asset(id); ok {
-		existing.DeletedAt = ""
-		return existing, nil
-	}
-	a := Asset{ID: id, Kind: kind, Name: name, MIME: mime, Bytes: size, CreatedAt: now()}
-	a.FileName = a.ID + ext
-	target := filepath.Join(e.repo.mediaDir(), a.FileName)
-	if output.Path != "" {
-		// The runner already synced the file in the media directory; the rename
-		// is atomic on the same filesystem.
-		if err := os.Rename(output.Path, target); err != nil {
+		target := filepath.Join(e.repo.mediaDir(), existing.FileName)
+		healthy, err := assetFileMatches(target, id, size)
+		if err != nil {
 			return Asset{}, err
 		}
-		return a, nil
+		if !healthy {
+			// Index entries outlive a lost or damaged file. Publish the current
+			// validated input atomically under the same name, repairing every
+			// project/history reference without replacing its asset identity.
+			if err := publishAssetFile(output, target); err != nil {
+				return Asset{}, err
+			}
+		}
+		existing.DeletedAt = ""
+		// Content-derived metadata comes from this validated input; labels,
+		// creation time, pinning and the stable file name retain their identity.
+		existing.Bytes, existing.MIME = a.Bytes, a.MIME
+		if kind == "image" {
+			existing.Width, existing.Height = a.Width, a.Height
+			existing.OriginalWidth, existing.OriginalHeight = a.OriginalWidth, a.OriginalHeight
+		}
+		return existing, nil
 	}
-	if err := atomicWrite(target, output.Data); err != nil {
+	a.ID = id
+
+	a.FileName = a.ID + ext
+	target := filepath.Join(e.repo.mediaDir(), a.FileName)
+	if err := publishAssetFile(output, target); err != nil {
 		return Asset{}, err
 	}
 	return a, nil
+}
+
+// Only regular files may be read or replaced. Lstat rejects symlinks (including
+// dangling ones); comparing the opened file also catches a replacement during
+// the open. I/O errors are surfaced instead of treating an unreadable file as
+// corrupt and destructively replacing it.
+func openRegularAssetFile(path string) (*os.File, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("素材路径不是普通文件，未读取或覆盖")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := f.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		f.Close()
+		return nil, errors.New("素材路径在读取期间发生变化，未覆盖文件")
+	}
+	return f, nil
+}
+
+func assetFileMatches(path, id string, size int64) (bool, error) {
+	f, err := openRegularAssetFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+	if info.Size() != size {
+		return false, nil
+	}
+	hash := sha256.New()
+	n, err := io.Copy(hash, io.LimitReader(f, size+1))
+	if err != nil {
+		return false, err
+	}
+	return n == size && hex.EncodeToString(hash.Sum(nil)) == id, nil
+}
+
+func publishAssetFile(output Output, target string) error {
+	info, err := os.Lstat(target)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil && !info.Mode().IsRegular() {
+		return errors.New("素材目标路径不是普通文件，未覆盖")
+	}
+	if output.Path != "" {
+		// The runner already synced the file in the media directory; the rename
+		// is atomic on the same filesystem.
+		info, err := os.Lstat(output.Path)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return errors.New("临时素材不是普通文件，未覆盖")
+		}
+		return os.Rename(output.Path, target)
+	}
+	return atomicWrite(target, output.Data)
 }
 
 func (e *Engine) removeAssetFile(a Asset) {
@@ -107,6 +231,9 @@ func (e *Engine) removeAssetFile(a Asset) {
 
 // discardOutput removes a temporary result file that was not moved into place.
 func discardOutput(o Output) {
+	for _, image := range o.Images {
+		discardOutput(image)
+	}
 	if o.Path != "" {
 		_ = os.Remove(o.Path)
 	}
@@ -115,6 +242,42 @@ func discardOutput(o Output) {
 // attachResult records a finished job and appends its result to the canvas
 // the job was submitted from, next to the node that produced it.
 func attachResult(t *tx, j Job, a Asset) {
+	j.State, j.Error, j.Progress, j.UpdatedAt = "succeeded", "", 100, now()
+	attachResults(t, j, []Asset{a}, []ResultImage{{AssetID: a.ID, Source: "final", Width: a.Width, Height: a.Height}})
+}
+
+func attachResults(t *tx, j Job, assets []Asset, results []ResultImage) {
+	j.ResultAssetIDs = slices.Clone(j.ResultAssetIDs)
+	j.ResultImages = slices.Clone(j.ResultImages)
+	if len(j.ResultAssetIDs) == 0 && j.ResultAssetID != "" {
+		j.ResultAssetIDs = append(j.ResultAssetIDs, j.ResultAssetID)
+	}
+	for i, a := range assets {
+		if slices.Contains(j.ResultAssetIDs, a.ID) {
+			continue
+		}
+		j.ResultAssetIDs = append(j.ResultAssetIDs, a.ID)
+		if i < len(results) {
+			j.ResultImages = append(j.ResultImages, results[i])
+		}
+		attachResultAsset(t, j, a)
+	}
+	if len(j.ResultImages) == len(j.ResultAssetIDs) {
+		sort.SliceStable(j.ResultImages, func(a, b int) bool {
+			x, y := j.ResultImages[a].OutputIndex, j.ResultImages[b].OutputIndex
+			return x != nil && y != nil && *x < *y
+		})
+		for i, result := range j.ResultImages {
+			j.ResultAssetIDs[i] = result.AssetID
+		}
+	}
+	if len(j.ResultAssetIDs) > 0 {
+		j.ResultAssetID = j.ResultAssetIDs[0]
+	}
+	t.putJob(j)
+}
+
+func attachResultAsset(t *tx, j Job, a Asset) {
 	if current, exists := t.doc.Assets[a.ID]; exists {
 		a.ClassicPinned = current.ClassicPinned
 	}
@@ -122,12 +285,6 @@ func attachResult(t *tx, j Job, a Asset) {
 		a.ClassicPinned = true
 	}
 	t.putAsset(a)
-	j.State = "succeeded"
-	j.Progress = 100
-	j.Error = ""
-	j.ResultAssetID = a.ID
-	j.UpdatedAt = now()
-	t.putJob(j)
 	if j.Request.Source == "classic" {
 		return
 	}

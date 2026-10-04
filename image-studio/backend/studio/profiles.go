@@ -61,6 +61,11 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	if rotate || p.connection() != old.connection() {
 		p.VerifiedAt = ""
 	}
+	if exists && (rotate || p.capabilityScope() != old.capabilityScope()) {
+		// Permission observations belong to one endpoint, credential and model
+		// configuration. Saving or discovering models never confirms them.
+		p.Capabilities = nil
+	}
 	p.CreatedAt = old.CreatedAt
 	if !exists || p.CreatedAt == "" {
 		p.CreatedAt = now()
@@ -68,22 +73,18 @@ func (e *Engine) SaveProfile(p Profile, key string) (Profile, error) {
 	p.UpdatedAt = now()
 	slot := ""
 	if rotate {
-		slot = NewID()
-		if err := e.secrets.Set(slot, key); err != nil {
-			return Profile{}, errors.New("系统凭据存储失败；未回退到明文保存")
+		var err error
+		if slot, err = e.reserveCredentialLocked(key); err != nil {
+			e.cleanupCredentialsLocked()
+			return Profile{}, err
 		}
 		p.CredentialID = slot
 		p.HasKey = true
 	}
-	st, err := e.updateLocked(func(t *tx) error { t.putProfile(p); return nil })
+	_, err := e.updateLocked(func(t *tx) error { t.putProfile(p); t.forgetCredential(slot); return nil })
 	if err != nil {
-		if slot != "" {
-			_ = e.secrets.Delete(slot)
-		}
+		e.cleanupCredentialsLocked()
 		return Profile{}, err
-	}
-	if rotate && old.HasKey {
-		e.releaseSlot(st, old.secretSlot())
 	}
 	return cloneProfile(p), nil
 }
@@ -103,29 +104,14 @@ func (e *Engine) ClearProfileKey(id string) (Profile, error) {
 	if !p.HasKey {
 		return cloneProfile(p), nil
 	}
-	slot := p.secretSlot()
 	p.HasKey, p.CredentialID, p.VerifiedAt = false, "", ""
+	p.Capabilities = nil
 	p.UpdatedAt = now()
-	st, err := e.updateLocked(func(t *tx) error { t.putProfile(p); return nil })
+	_, err := e.updateLocked(func(t *tx) error { t.putProfile(p); return nil })
 	if err != nil {
 		return Profile{}, err
 	}
-	e.releaseSlot(st, slot)
 	return cloneProfile(p), nil
-}
-
-// releaseSlot deletes a replaced credential unless a job that can still run
-// pins it, including paused jobs.
-func (e *Engine) releaseSlot(st *state, slot string) {
-	for _, j := range st.doc.Jobs {
-		if j.FallbackProfile != nil && j.FallbackProfile.secretSlot() == slot && !terminal(j.State) {
-			return
-		}
-		if j.Profile.secretSlot() == slot && !terminal(j.State) {
-			return
-		}
-	}
-	_ = e.secrets.Delete(slot)
 }
 
 func (e *Engine) DeleteProfile(id string) error {
@@ -138,36 +124,29 @@ func (e *Engine) DeleteProfile(id string) error {
 		return err
 	}
 	doc := e.cur.Load().doc
-	p, ok := doc.Profiles[id]
+	_, ok := doc.Profiles[id]
 	if !ok {
 		return errors.New("上游不存在")
-	}
-	slots := map[string]bool{}
-	if p.HasKey {
-		slots[p.secretSlot()] = true
 	}
 	for _, j := range doc.Jobs {
 		if j.Request.ProfileID == id || j.Profile.ID == id || (j.FallbackProfile != nil && j.FallbackProfile.ID == id) {
 			if !terminal(j.State) {
 				return errors.New("上游仍有未结束任务，请先取消任务")
 			}
-			if j.Profile.ID == id && j.Profile.HasKey {
-				slots[j.Profile.secretSlot()] = true
-			}
-			if j.FallbackProfile != nil && j.FallbackProfile.ID == id && j.FallbackProfile.HasKey {
-				slots[j.FallbackProfile.secretSlot()] = true
-			}
 		}
 	}
-	// Remove secrets before metadata. A partial keychain failure is surfaced and
-	// metadata stays available so the user can retry cleanup or save a fresh key.
-	for slot := range slots {
-		if err := e.secrets.Delete(slot); err != nil {
-			return errors.New("清理系统凭据失败，请重试")
-		}
-	}
+	// Commit retirement before touching the keychain. Other current profiles
+	// and resumable jobs can still pin shared slots; failures remain journaled.
 	_, err := e.updateLocked(func(t *tx) error {
 		t.deleteProfile(id)
+		for _, j := range t.doc.Jobs {
+			if j.Profile.ID == id && j.Profile.HasKey {
+				t.queueCredential(j.Profile.secretSlot())
+			}
+			if j.FallbackProfile != nil && j.FallbackProfile.ID == id && j.FallbackProfile.HasKey {
+				t.queueCredential(j.FallbackProfile.secretSlot())
+			}
+		}
 		for _, other := range t.doc.Profiles {
 			if other.FallbackProfileID == id {
 				other.FallbackProfileID = ""
@@ -196,6 +175,7 @@ func (e *Engine) DuplicateProfile(id string) (Profile, error) {
 	p.ID = NewID()
 	p.Name = truncateUTF8(src.Name+" · 副本", 160)
 	p.CredentialID, p.HasKey, p.VerifiedAt = "", false, ""
+	p.Capabilities = nil
 	p.CreatedAt, p.UpdatedAt = now(), now()
 	slot := ""
 	if src.HasKey {
@@ -203,16 +183,14 @@ func (e *Engine) DuplicateProfile(id string) (Profile, error) {
 		if err != nil || key == "" {
 			return Profile{}, errors.New("系统凭据复制失败，上游配置未复制")
 		}
-		slot = NewID()
-		if err := e.secrets.Set(slot, key); err != nil {
-			return Profile{}, errors.New("系统凭据复制失败，上游配置未复制")
+		if slot, err = e.reserveCredentialLocked(key); err != nil {
+			e.cleanupCredentialsLocked()
+			return Profile{}, err
 		}
 		p.CredentialID, p.HasKey = slot, true
 	}
-	if _, err := e.updateLocked(func(t *tx) error { t.putProfile(p); return nil }); err != nil {
-		if slot != "" {
-			_ = e.secrets.Delete(slot)
-		}
+	if _, err := e.updateLocked(func(t *tx) error { t.putProfile(p); t.forgetCredential(slot); return nil }); err != nil {
+		e.cleanupCredentialsLocked()
 		return Profile{}, err
 	}
 	return cloneProfile(p), nil
@@ -242,9 +220,9 @@ func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (s
 		known[id] = true
 	}
 	fresh := []Profile{}
-	slots := []string{}
 	for _, p := range incoming {
 		p.CredentialID, p.HasKey, p.VerifiedAt = "", false, ""
+		p.Capabilities = nil
 		if known[p.ID] {
 			continue
 		}
@@ -255,10 +233,9 @@ func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (s
 		known[p.ID] = true
 		if legacyKey != nil {
 			if key, err := legacyKey(p.ID); err == nil && strings.TrimSpace(key) != "" && len(key) <= 8192 {
-				slot := NewID()
-				if e.secrets.Set(slot, strings.TrimSpace(key)) == nil {
+				slot, slotErr := e.reserveCredentialLocked(strings.TrimSpace(key))
+				if slotErr == nil {
 					p.CredentialID, p.HasKey = slot, true
-					slots = append(slots, slot)
 				}
 			}
 		}
@@ -277,13 +254,12 @@ func (e *Engine) ImportProfiles(incoming []Profile, legacyKey func(id string) (s
 				p.FallbackProfileID = ""
 			}
 			t.putProfile(p)
+			t.forgetCredential(p.CredentialID)
 		}
 		return nil
 	})
 	if err != nil {
-		for _, slot := range slots {
-			_ = e.secrets.Delete(slot)
-		}
+		e.cleanupCredentialsLocked()
 		return 0, err
 	}
 	return len(fresh), nil

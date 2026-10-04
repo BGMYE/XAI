@@ -20,6 +20,9 @@ import (
 // Exactly one request is sent. go-cli's automatic retries are not used: a
 // retried generation may be billed twice.
 func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, reference *Output, media *http.Client, checkpoint Checkpoint) (Output, error) {
+	if err := validateImageCapabilities(j.Profile, j.Request); err != nil {
+		return Output{}, &NotSentError{Reason: err.Error()}
+	}
 	generation, err := newClient(j.Profile, p.network(), generationRequest)
 	if err != nil {
 		return Output{}, &NotSentError{Reason: "网络代理设置无效：" + err.Error()}
@@ -32,6 +35,7 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 	opts := client.Options{
 		APIKey:                  key,
 		Prompt:                  j.Request.Prompt,
+		PromptMode:              j.Request.Parameters.PromptMode,
 		Mode:                    client.ModeGenerate,
 		Size:                    size,
 		OutputFormat:            "png",
@@ -45,14 +49,24 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 		AllowInsecureConnection: j.Profile.AllowInsecure,
 		HTTPClient:              generation,
 		DeferURLDownload:        true,
+		ModelCapabilities:       profileClientModelCapabilities(j.Profile),
+		DisableImageStreaming:   imageStreamingDisabled(j.Profile),
 	}
 	image := j.Request.Image
 	opts.Quality, opts.Seed, opts.NegativePrompt = image.Quality, image.Seed, image.NegativePrompt
+	if opts.Quality == "" {
+		opts.Quality = j.Request.Parameters.Quality
+	}
 	opts.Background, opts.OutputCompression, opts.InputFidelity = image.Background, image.OutputCompression, image.InputFidelity
+	if opts.InputFidelity == "" {
+		opts.InputFidelity = j.Request.Parameters.InputFidelity
+	}
 	opts.ImageStyle, opts.Moderation, opts.UserIdentifier = image.ImageStyle, image.Moderation, image.UserIdentifier
 	opts.DisablePreview, opts.PartialImages = image.DisablePreview, image.PartialImages
 	if image.OutputFormat != "" {
 		opts.OutputFormat = image.OutputFormat
+	} else if j.Request.Parameters.OutputFormat != "" {
+		opts.OutputFormat = j.Request.Parameters.OutputFormat
 	}
 	if opts.PartialImages == 0 {
 		opts.PartialImages = client.DefaultPartialImages
@@ -82,6 +96,12 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 		}
 		mask, err := p.ReadReference(j.Request.MaskAssetID)
 		if err != nil {
+			return Output{}, &NotSentError{Reason: err.Error()}
+		}
+		if len(refs) == 0 {
+			return Output{}, &NotSentError{Reason: "蒙版编辑需要对应的主参考图"}
+		}
+		if err := validateImageMask(&refs[0], &mask); err != nil {
 			return Output{}, &NotSentError{Reason: err.Error()}
 		}
 		opts.MaskB64 = base64.StdEncoding.EncodeToString(mask.Data)
@@ -120,20 +140,81 @@ func (p *HTTPProvider) runOpenAIImage(ctx context.Context, j Job, key string, re
 	} else {
 		result, err = client.RequestImagesAPIWithPartial(ctx, opts, raw, nil, onPartial)
 	}
+	out := Output{ResponseID: result.ResponseID, RequestID: result.RequestID, Usage: result.Usage, Status: result.Status, RevisedPrompt: result.RevisedPrompt}
+	var generationErr error
 	if err != nil {
-		return Output{}, generationError(ctx, err, mayHaveSent() || (responses && j.Profile.ResponsesTransport == "websocket" && !client.SafeToRetry(err)), raw.String())
+		generationErr = generationError(ctx, err, mayHaveSent() || (responses && j.Profile.ResponsesTransport == "websocket" && !client.SafeToRetry(err)), raw.String())
+		if result.Status == "failed" || result.Status == "incomplete" {
+			var uncertain *UncertainError
+			if errors.As(generationErr, &uncertain) {
+				generationErr = errors.New(err.Error() + "（未自动重试）")
+			}
+		}
 	}
-	if result.ImageB64 != "" {
-		out, err := p.decodeBase64(result.ImageB64)
-		out.RevisedPrompt = result.RevisedPrompt
-		return out, err
+	finals := result.Images
+	// Older non-stream adapters may still supply only the legacy single image.
+	if len(finals) == 0 && result.SourceEvent != "partial" && (result.ImageB64 != "" || result.URL != "") {
+		finals = []client.GeneratedImage{{ImageB64: result.ImageB64, URL: result.URL, RevisedPrompt: result.RevisedPrompt, Source: "final"}}
 	}
-	if result.URL == "" {
-		return Output{}, errors.New("上游未返回图片；没有自动重试")
+	urls := []string{}
+	downloads := []ResultDownload{}
+	for i := range finals {
+		if finals[i].OutputIndex == nil {
+			index := i
+			finals[i].OutputIndex = &index
+		}
+		item := finals[i]
+		if item.Source != "partial" && item.ImageB64 == "" && item.URL != "" {
+			if !validResultURL(item.URL) {
+				return out, errors.New("上游返回的图片地址无效")
+			}
+			urls = append(urls, item.URL)
+			downloads = append(downloads, ResultDownload{URL: item.URL, ItemID: item.ItemID, OutputIndex: item.OutputIndex, RevisedPrompt: item.RevisedPrompt})
+		}
 	}
-	out, err := p.imageResult(ctx, media, j.Profile, mediaResult{URL: result.URL}, checkpoint)
-	out.RevisedPrompt = result.RevisedPrompt
-	return out, err
+	if len(urls) > 0 {
+		if err := checkpoint(Progress{ResultURLs: urls, ResultDownloads: downloads}); err != nil {
+			return out, &UncertainError{}
+		}
+	}
+	var downloadErr error
+	for _, item := range finals {
+		if item.Source == "partial" {
+			continue
+		}
+		var image Output
+		var imageErr error
+		if item.ImageB64 != "" {
+			image, imageErr = p.decodeBase64(item.ImageB64)
+		} else if item.URL != "" {
+			image, imageErr = p.fetchMedia(ctx, media, j.Profile, item.URL, 0)
+			imageErr = expiredLink(imageErr)
+		} else {
+			continue
+		}
+		if imageErr != nil {
+			if downloadErr == nil {
+				downloadErr = imageErr
+			}
+			continue
+		}
+		image.RevisedPrompt, image.ItemID, image.OutputIndex = item.RevisedPrompt, item.ItemID, item.OutputIndex
+		image.Width, image.Height = item.Width, item.Height
+		out.Images = append(out.Images, image)
+	}
+	if generationErr != nil {
+		return out, generationErr
+	}
+	if downloadErr != nil {
+		return out, downloadErr
+	}
+	if result.Status == "uncertain" {
+		return out, &UncertainError{}
+	}
+	if len(out.Images) == 0 {
+		return out, errors.New("上游未返回完整图片；未自动重试")
+	}
+	return out, nil
 }
 
 // generationError classifies a failed generation by what is known to have

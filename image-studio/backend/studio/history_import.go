@@ -70,7 +70,7 @@ func (e *Engine) ImportHistory(path string, r Request, createdAt, mode, revisedP
 			return errors.New("请先归档任务，再导入更多旧历史")
 		}
 		if _, ok := t.doc.Projects["classic"]; !ok {
-			t.putProject(Project{ID: "classic", Name: "经典编辑", Viewport: Viewport{Zoom: 1}, Revision: 1, UpdatedAt: now()})
+			t.putProject(Project{ID: "classic", Name: "经典编辑", Viewport: Viewport{Zoom: 1}, Nodes: []Node{}, Edges: []Edge{}, Revision: 1, UpdatedAt: now()})
 		}
 		if current, exists := t.doc.Assets[a.ID]; exists {
 			a.ClassicPinned = current.ClassicPinned

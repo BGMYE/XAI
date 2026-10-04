@@ -66,7 +66,8 @@ export function collectPromptCards(snapshot) {
   const saved = (snapshot.promptCards ?? []).map((p) => ({ ...p, key: p.id, origin: "saved" }));
   const overrides = new Set(saved.map((p) => p.sourceJobId).filter(Boolean));
   const history = snapshot.jobs.flatMap((j) => {
-    const asset = assets.get(j.resultAssetId);
+    const asset = [j.resultAssetId, ...(j.resultAssetIds ?? [])]
+      .map((id) => assets.get(id)).find((a) => a && !a.deletedAt);
     if (j.state !== "succeeded" || !asset || !j.request.prompt?.trim() || overrides.has(j.id)) return [];
     return [
       {
@@ -122,7 +123,8 @@ function assertReferences(snapshot, p) {
     throw Error("预览素材不存在，请先导入图片");
   if (p.sourceJobId) {
     const j = snapshot.jobs.find((j) => j.id === p.sourceJobId);
-    if (!j || j.state !== "succeeded" || j.resultAssetId !== p.previewAssetId || j.request.kind !== p.kind)
+    if (!j || j.state !== "succeeded" || !p.previewAssetId ||
+      ![j.resultAssetId, ...(j.resultAssetIds ?? [])].includes(p.previewAssetId) || j.request.kind !== p.kind)
       throw Error("来源不是匹配的已完成生成任务");
     if ((snapshot.promptCards ?? []).some((c) => c.sourceJobId === p.sourceJobId && c.id !== p.id))
       throw Error("prompt revision conflict：请刷新后重试");

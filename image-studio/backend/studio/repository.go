@@ -22,6 +22,9 @@ type document struct {
 	// RetiredProfileIDs lists recently deleted upstreams, so an import from
 	// the classic editor's own copy never brings one back.
 	RetiredProfileIDs []string `json:"retiredProfileIds,omitempty"`
+	// Opaque keychain slots awaiting safe retirement or a retry of deletion.
+	// No API key values are ever stored here.
+	PendingCredentialIDs []string `json:"pendingCredentialIds,omitempty"`
 }
 
 func emptyDocument() document {
@@ -72,6 +75,11 @@ func (r repository) read() (document, error) {
 	if d.Profiles == nil || d.Projects == nil || d.Assets == nil || d.Jobs == nil {
 		return document{}, errors.New("数据库结构不完整，拒绝覆盖")
 	}
+	for _, slot := range d.PendingCredentialIDs {
+		if checkID(slot) != nil {
+			return document{}, errors.New("凭据清理记录损坏")
+		}
+	}
 	// Schema 1 databases predating the prompt center have no promptCards field.
 	if d.PromptCards == nil {
 		d.PromptCards = map[string]PromptCard{}
@@ -102,10 +110,12 @@ func (r repository) read() (document, error) {
 			return document{}, errors.New("素材索引损坏，拒绝读取任意文件路径")
 		}
 	}
-	for _, p := range d.Projects {
+	for id, p := range d.Projects {
+		p = normalizeProjectCollections(p)
 		if _, err := p.Order(); err != nil {
 			return document{}, err
 		}
+		d.Projects[id] = p
 	}
 	if d.Version == 1 {
 		backup := filepath.Join(r.root, "studio.v1.json.bak")

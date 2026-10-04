@@ -369,6 +369,9 @@ export async function requestImagesOnce(
       const rawPath = response.rawPath || registerRawText("images", attempt, rawBody);
       const isStream = String(response.contentType || "").toLowerCase().includes("text/event-stream");
       if (response.resultImageB64) {
+        if (String(response.sourceEvent || "").includes("partial")) {
+          throw new RemoteKernelError("接口只返回了流式预览帧，没有返回最终图片。", response.rawPath || null);
+        }
         return {
           imageB64: response.resultImageB64,
           revisedPrompt: response.revisedPrompt || "",
@@ -410,6 +413,7 @@ export async function requestImagesOnce(
     }
     const response = await fetch(built.url, {
       method: "POST",
+      redirect: "manual",
       headers: {
         ...(built.protocol === "openai-images" ? { Authorization: `Bearer ${request.payload.apiKey}` } : {}),
         Accept: "text/event-stream, application/json",

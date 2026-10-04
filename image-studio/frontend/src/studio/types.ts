@@ -1,5 +1,8 @@
 export type Kind = "image" | "video";
 export interface Parameters {
+  promptMode?: "verbatim" | "assisted";
+  outputFormat?: string;
+  inputFidelity?: string;
   quality?: string;
   endpointPath?: string;
   size?: string;
@@ -9,8 +12,29 @@ export interface Parameters {
 }
 export type ImageAPI = "images" | "responses";
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
-/** An upstream shared by the Studio and the classic editor. */
+/** Omitted capability fields are unknown; model discovery does not confirm them. */
+export interface ImageModelCapabilities {
+  qualities?: string[];
+  sizes?: string[];
+  formats?: string[];
+  maxInputImages?: number;
+  supportsMask?: boolean;
+  supportsInputFidelity?: boolean;
+  inputFidelityValues?: string[];
+}
+export interface ImageProviderCapabilities {
+  schemaVersion: 1;
+  preferredApi?: ImageAPI;
+  images?: { generate?: boolean; edit?: boolean; stream?: boolean };
+  responses?: { imageTool?: boolean; sse?: boolean; websocket?: boolean };
+  promptModes?: Array<"verbatim" | "assisted">;
+  /** Exact model IDs, with independent rules for each wire protocol. */
+  modelRules?: Record<string, { images?: ImageModelCapabilities; responses?: ImageModelCapabilities }>;
+}
+/** An upstream configuration used by the Studio. */
 export interface Profile {
+  providerPreset?: "custom" | "sub2api";
+  capabilities?: ImageProviderCapabilities;
   credentialId?: string;
   id: string;
   name: string;
@@ -67,6 +91,10 @@ export interface Project {
   edges: Edge[];
 }
 export interface Asset {
+  width?: number;
+  height?: number;
+  originalWidth?: number;
+  originalHeight?: number;
   deletedAt?: string;
   id: string;
   kind: Kind;
@@ -83,8 +111,36 @@ export interface Generation {
   nodeId?: string;
   kind: Kind;
   prompt: string;
+  originalPrompt?: string;
+  confirmedPrompt?: string;
+  image?: ImageParameters;
   referenceAssetId?: string;
+  referenceAssetIds?: string[];
+  maskAssetId?: string;
   parameters: Parameters;
+}
+export interface ImageParameters {
+  quality?: string;
+  outputFormat?: string;
+  inputFidelity?: string;
+  background?: string;
+  outputCompression?: number;
+  negativePrompt?: string;
+  seed?: number;
+  imageStyle?: string;
+  moderation?: string;
+  userIdentifier?: string;
+  disablePreview?: boolean;
+  partialImages?: number;
+}
+export interface ResultImage {
+  assetId: string;
+  itemId?: string;
+  outputIndex?: number;
+  revisedPrompt?: string;
+  source: "final";
+  width?: number;
+  height?: number;
 }
 export type JobState = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled" | "uncertain";
 export interface Job {
@@ -96,8 +152,20 @@ export interface Job {
   remoteId?: string;
   error?: string;
   resultAssetId?: string;
+  resultAssetIds?: string[];
+  resultImages?: ResultImage[];
+  parentAssetIds?: string[];
+  originalPrompt?: string;
+  confirmedPrompt?: string;
+  sentPrompt?: string;
+  revisedPrompt?: string;
+  responseId?: string;
+  requestId?: string;
+  usage?: Record<string, unknown>;
+  outputStatus?: "completed" | "failed" | "incomplete" | "uncertain";
   /** Set while a generated image waits to be downloaded. */
   resultUrl?: string;
+  resultUrls?: string[];
   dependsOn?: string[];
   createdAt: string;
   updatedAt: string;

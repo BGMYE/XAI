@@ -79,7 +79,8 @@ loop:
 		case <-ctx.Done():
 			// Wait for goroutine to wind down so we don't leak.
 			<-done
-			return ImageResult{}, ctx.Err()
+			result, _ := collector.result()
+			return result, ctx.Err()
 		case err, ok := <-done:
 			if ok {
 				streamErr = err
@@ -104,13 +105,22 @@ loop:
 	}
 
 	if streamErr != nil {
-		// Stream errored mid-flight。但常见场景:上游已经把 final event(含完整
-		// base64 result)发完之后,Cloudflare/上游 nginx 在 idle 阶段才把连接 reset。
-		// 这时 collector 里其实已经提取到完整图;不该浪费一次重试。
-		if result, perr := collector.result(); perr == nil && result.ImageB64 != "" {
+		result, parseErr := collector.result()
+		var status *HTTPStatusError
+		if errors.As(streamErr, &status) {
+			if status.StatusCode < 500 {
+				result.Status = "failed"
+			} else {
+				result.Status = "uncertain"
+			}
+			return result, streamErr
+		}
+		// A complete image is useful even when a subsequent read fails. Keep
+		// Status uncertain unless the terminal event was actually observed.
+		if parseErr == nil && len(result.Images) > 0 {
 			return result, nil
 		}
-		return ImageResult{}, streamErr
+		return result, streamErr
 	}
 
 	return collector.result()
@@ -260,7 +270,7 @@ func responsesAPIWithRetries(
 			}
 			// 路径不再拼进 error message;调用方通过返回值里的 lastPath
 			// 单独拿,前端用「查看日志」按钮直接打开。
-			return ImageResult{}, lastPath, submissionError(fmt.Errorf("%s", reason))
+			return result, lastPath, submissionError(fmt.Errorf("%s", reason))
 		}
 
 		// Transport-level error (network / native HTTP failure). Retry up to MaxAttempts.
@@ -273,7 +283,7 @@ func responsesAPIWithRetries(
 			}
 			continue
 		}
-		return ImageResult{}, lastPath, submissionError(reqErr)
+		return result, lastPath, submissionError(reqErr)
 	}
 
 	if lastErr != nil {
@@ -343,7 +353,7 @@ func responsesAPIWithRetriesInMemory(
 				}
 				continue
 			}
-			return ImageResult{}, raw, submissionError(fmt.Errorf("%s", reason))
+			return result, raw, submissionError(fmt.Errorf("%s", reason))
 		}
 
 		lastErr = reqErr
@@ -355,7 +365,7 @@ func responsesAPIWithRetriesInMemory(
 			}
 			continue
 		}
-		return ImageResult{}, raw, submissionError(reqErr)
+		return result, raw, submissionError(reqErr)
 	}
 
 	if lastErr != nil {
@@ -375,8 +385,7 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// imagesAPIWithRetries runs the standard OpenAI Images API path with the same
-// 3-attempt retry policy. Raw response per attempt is dumped to
+// imagesAPIWithRetries retries only failures proven to occur before submission. Raw response per attempt is dumped to
 // images-response-{timestamp}-attempt{N}.json so users can inspect upstream
 // error messages.
 func imagesAPIWithRetries(
@@ -433,8 +442,7 @@ func imagesAPIWithRetries(
 		}
 
 		lastErr = reqErr
-		// Images API has no SSE / no partial — only retry on transport-level
-		// errors and Cloudflare 5xx HTML pages.
+		// Only a proven pre-submission failure is safe to retry automatically.
 		if autoRetryEnabled && !workerAlreadyRetried(raw) && attempt < maxAttempts && SafeToRetry(reqErr) {
 			onLog(fmt.Sprintf("%v", reqErr))
 			onLog(fmt.Sprintf("%d 秒后自动重试...", RetryBackoffSeconds))
@@ -444,7 +452,7 @@ func imagesAPIWithRetries(
 			continue
 		}
 		// 同上,raw 路径靠返回值带,不再嵌进 error message。
-		return ImageResult{}, lastPath, submissionError(reqErr)
+		return result, lastPath, submissionError(reqErr)
 	}
 
 	return ImageResult{}, lastPath, fmt.Errorf("多次请求后仍未成功:%w", lastErr)
@@ -500,13 +508,21 @@ func imagesAPIWithRetriesInMemory(
 			}
 			continue
 		}
-		return ImageResult{}, raw, submissionError(reqErr)
+		return result, raw, submissionError(reqErr)
 	}
 
 	return ImageResult{}, lastRaw, fmt.Errorf("多次请求后仍未成功:%w", lastErr)
 }
 
 func repairSizeRetryOptions(opts Options, raw string, reqErr error) (Options, bool, string) {
+	// Even a later 400 must not replay a generation that already emitted
+	// acceptance/progress/preview/final events.
+	for event := range IterEvents(raw) {
+		typ, _ := event["type"].(string)
+		if (strings.HasPrefix(typ, "response.") && typ != "response.failed") || strings.HasPrefix(typ, "image_generation.") || strings.HasPrefix(typ, "image_edit.") {
+			return opts, false, ""
+		}
+	}
 	var status *HTTPStatusError
 	if !errors.As(reqErr, &status) || status.StatusCode != http.StatusBadRequest {
 		return opts, false, ""

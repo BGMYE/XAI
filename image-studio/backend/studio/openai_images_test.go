@@ -104,6 +104,7 @@ func TestResponsesAPIProfileUsesTheImageTool(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: {\"type\":\"response.created\"}\n\n")
 		fmt.Fprintf(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"image_generation_call\",\"result\":%q}}\n\n", final)
+		fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n")
 	})
 	p := imageProfile(server.URL)
 	p.ImageAPI, p.TextModel = "responses", "text-model"

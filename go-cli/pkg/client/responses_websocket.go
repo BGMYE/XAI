@@ -17,7 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const websocketQuickReconnectAttempts = 0
+const responsesWebSocketProbeTimeout = 30 * time.Second
 
 type responsesWebSocketFallbackError struct {
 	err error
@@ -204,34 +204,13 @@ func requestResponsesOverWebSocket(
 	snapshot.LastActivityAt = snapshot.CreatedAt
 	snapshot.RequestPayload = append(snapshot.RequestPayload[:0], payload...)
 
-	var lastErr error
-	for reconnect := 0; reconnect <= websocketQuickReconnectAttempts; reconnect++ {
-		snapshot.SocketEpoch = reconnect + 1
-		if reconnect > 0 {
-			if rawSink != nil {
-				_, _ = io.WriteString(rawSink, fmt.Sprintf("--- websocket-reconnect-%d ---\n", reconnect))
-			}
-		}
-		result, err := requestResponsesOverWebSocketOnce(ctx, baseURL, apiKey, proxy, allowInsecureConnection, payload, rawSink, onPartial, snapshot, startedAt, onProgress)
-		if err == nil {
-			return result, nil
-		}
-		if rawSink != nil {
-			_, _ = io.WriteString(rawSink, fmt.Sprintf("--- websocket-error-%d: %v ---\n", snapshot.SocketEpoch, err))
-		}
-		var fallback *responsesWebSocketFallbackError
-		if errors.As(err, &fallback) {
-			return ImageResult{}, err
-		}
-		lastErr = err
-		if snapshot.HasFinalImage {
-			return result, nil
-		}
-		if reconnect < websocketQuickReconnectAttempts {
-			continue
-		}
+	// Never replay response.create after a connection has accepted a message.
+	snapshot.SocketEpoch = 1
+	result, err := requestResponsesOverWebSocketOnce(ctx, baseURL, apiKey, proxy, allowInsecureConnection, payload, rawSink, onPartial, snapshot, startedAt, onProgress)
+	if err != nil && rawSink != nil {
+		_, _ = io.WriteString(rawSink, fmt.Sprintf("--- websocket-error: %v ---\n", err))
 	}
-	return ImageResult{}, lastErr
+	return result, err
 }
 
 func requestResponsesOverWebSocketOnce(
@@ -267,9 +246,22 @@ func requestResponsesOverWebSocketOnce(
 
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
+		if contextErr := responsesWebSocketContextError(ctx, err); errors.Is(contextErr, context.Canceled) || errors.Is(contextErr, context.DeadlineExceeded) {
+			return ImageResult{}, contextErr
+		}
+		// Authentication, rate-limit and server failures are not evidence that
+		// a different transport is supported. An unsupported Upgrade can fall
+		// back because no response.create message has been sent yet.
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests || (resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented)) {
+			detail := describeWebSocketDialError(err, resp)
+			return ImageResult{Status: "failed", RequestID: requestIDFromHeaders(resp.Header, "")}, statusError(resp.StatusCode, "%s", detail)
+		}
 		return ImageResult{}, &responsesWebSocketFallbackError{err: describeWebSocketDialError(err, resp)}
 	}
 	defer conn.Close()
+	stopCancellation := closeResponsesWebSocketOnCancel(ctx, conn)
+	defer stopCancellation()
+	conn.SetReadLimit(maxSSEFrameBytes)
 
 	conn.SetPingHandler(func(appData string) error {
 		snapshot.LastActivityAt = time.Now()
@@ -277,35 +269,55 @@ func requestResponsesOverWebSocketOnce(
 	})
 	conn.SetPongHandler(func(string) error {
 		snapshot.LastActivityAt = time.Now()
-		return conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		return conn.SetReadDeadline(responsesWebSocketReadDeadline(ctx, 90*time.Second))
 	})
-	_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	_ = conn.SetReadDeadline(responsesWebSocketReadDeadline(ctx, 90*time.Second))
 
 	done := make(chan struct{})
-	defer close(done)
-	go responsesWebSocketKeepalive(ctx, conn, done)
+	keepaliveStopped := make(chan struct{})
+	go func() {
+		defer close(keepaliveStopped)
+		responsesWebSocketKeepalive(ctx, conn, done)
+	}()
+	defer func() {
+		close(done)
+		// Closing first also interrupts a keepalive control write before joining.
+		_ = conn.Close()
+		<-keepaliveStopped
+	}()
 
 	if rawSink != nil {
 		_, _ = io.WriteString(rawSink, fmt.Sprintf("--- websocket-session-%d ---\n", snapshot.SocketEpoch))
 	}
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-		return ImageResult{}, fmt.Errorf("websocket write: %w", err)
+		return ImageResult{}, fmt.Errorf("websocket write: %w", responsesWebSocketContextError(ctx, err))
 	}
 
 	collector := newResponseCollectorWithPartial(rawSink, onPartial)
+	if resp != nil {
+		collector.setResponseHeaders(resp.Header)
+	}
 	for {
 		if ctx.Err() != nil {
 			snapshot.Cancelled = true
-			return ImageResult{}, ctx.Err()
+			result, _ := collector.result()
+			return result, ctx.Err()
 		}
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
-			if res, rerr := collector.result(); rerr == nil && res.ImageB64 != "" {
+			res, rerr := collector.result()
+			readErr := responsesWebSocketContextError(ctx, err)
+			if errors.Is(readErr, context.Canceled) || errors.Is(readErr, context.DeadlineExceeded) {
+				snapshot.Cancelled = true
+				snapshot.HasFinalImage = len(res.Images) > 0
+				return res, readErr
+			}
+			if rerr == nil && len(res.Images) > 0 {
 				snapshot.HasFinalImage = true
-				snapshot.Completed = true
+				snapshot.Completed = res.Status == "completed"
 				return res, nil
 			}
-			return ImageResult{}, fmt.Errorf("websocket read: %w", err)
+			return res, fmt.Errorf("websocket read: %w", err)
 		}
 		if msgType != websocket.TextMessage && msgType != websocket.BinaryMessage {
 			continue
@@ -315,7 +327,16 @@ func requestResponsesOverWebSocketOnce(
 		if len(line) == 0 {
 			continue
 		}
-		_, _ = collector.Write(append([]byte("data: "), append(line, '\n')...))
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, line); err != nil {
+			continue
+		}
+		frame := append([]byte("data: "), compact.Bytes()...)
+		frame = append(frame, '\n', '\n')
+		if _, err := collector.Write(frame); err != nil {
+			result, _ := collector.result()
+			return result, err
+		}
 		snapshot.ReceivedBytes = collector.bytesReceived()
 		var ev Event
 		if err := decodeEvent(string(line), &ev); err == nil {
@@ -352,21 +373,51 @@ func requestResponsesOverWebSocketOnce(
 							}
 						}
 					}
-				case "response.completed":
-					snapshot.Completed = true
-					return collector.result()
-				case "error":
-					return ImageResult{}, fmt.Errorf("%s", DescribeProblem(string(line)))
+				case "response.completed", "response.failed", "response.incomplete", "error":
+					result, err := collector.result()
+					snapshot.HasFinalImage = len(result.Images) > 0
+					snapshot.Completed = result.Status == "completed"
+					return result, err
 				}
 			}
 		}
-		if snapshot.HasFinalImage {
-			if res, rerr := collector.result(); rerr == nil && res.ImageB64 != "" {
-				snapshot.Completed = true
-				return res, nil
-			}
+	}
+}
+
+// Gorilla's ReadMessage does not observe context cancellation. Closing the
+// connection is concurrency-safe and also interrupts a blocked WriteMessage.
+// Cleanup stops the callback, or joins it if cancellation already started it.
+func closeResponsesWebSocketOnCancel(ctx context.Context, conn *websocket.Conn) func() {
+	callbackDone := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(callbackDone)
+		_ = conn.Close()
+	})
+	return func() {
+		if !stop() {
+			<-callbackDone
 		}
 	}
+}
+
+func responsesWebSocketReadDeadline(ctx context.Context, timeout time.Duration) time.Time {
+	deadline := time.Now().Add(timeout)
+	if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
+		return parent
+	}
+	return deadline
+}
+
+func responsesWebSocketContextError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	// A socket deadline can fire just before the context timer is scheduled.
+	// Preserve the parent deadline classification in that boundary case too.
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return err
 }
 
 func responsesWebSocketKeepalive(ctx context.Context, conn *websocket.Conn, done <-chan struct{}) {
@@ -443,6 +494,9 @@ func probeResponsesWebSocketOnce(
 	allowInsecureConnection bool,
 	payload []byte,
 ) error {
+	// A health check must also finish when its caller supplied no deadline.
+	ctx, cancel := context.WithTimeout(ctx, responsesWebSocketProbeTimeout)
+	defer cancel()
 	wsURL, err := responsesWebSocketURL(baseURL, allowInsecureConnection)
 	if err != nil {
 		return err
@@ -457,11 +511,20 @@ func probeResponsesWebSocketOnce(
 	headers.Set("Accept", "application/json")
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
+		if contextErr := responsesWebSocketContextError(ctx, err); errors.Is(contextErr, context.Canceled) || errors.Is(contextErr, context.DeadlineExceeded) {
+			return contextErr
+		}
 		return describeWebSocketDialError(err, resp)
 	}
 	defer conn.Close()
+	stopCancellation := closeResponsesWebSocketOnCancel(ctx, conn)
+	defer stopCancellation()
+	conn.SetReadLimit(maxSSEFrameBytes)
+	deadline := responsesWebSocketReadDeadline(ctx, responsesWebSocketProbeTimeout)
+	_ = conn.SetReadDeadline(deadline)
+	_ = conn.SetWriteDeadline(deadline)
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-		return fmt.Errorf("websocket write: %w", err)
+		return fmt.Errorf("websocket write: %w", responsesWebSocketContextError(ctx, err))
 	}
 	for {
 		if ctx.Err() != nil {
@@ -469,7 +532,7 @@ func probeResponsesWebSocketOnce(
 		}
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("websocket read: %w", err)
+			return fmt.Errorf("websocket read: %w", responsesWebSocketContextError(ctx, err))
 		}
 		var ev Event
 		if err := decodeEvent(string(bytes.TrimSpace(data)), &ev); err != nil {

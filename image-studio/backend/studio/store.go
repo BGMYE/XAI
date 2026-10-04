@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -78,6 +79,7 @@ func (t *tx) jobs() map[string]Job {
 func (t *tx) putJob(j Job) { t.jobs()[j.ID] = j; t.touch(colJobs, j.ID, false) }
 
 func (t *tx) putProject(p Project) {
+	p = normalizeProjectCollections(p)
 	if !t.cloned[colProjects] {
 		t.doc.Projects = maps.Clone(t.doc.Projects)
 		t.cloned[colProjects] = true
@@ -151,11 +153,21 @@ type errFatal struct{ err error }
 // only after it has been written to disk; on any error nothing changes.
 // Callers must hold e.writeMu.
 func (e *Engine) updateLocked(fn func(*tx) error) (*state, error) {
+	st, err := e.commitLocked(fn)
+	if err != nil {
+		return st, err
+	}
+	e.cleanupCredentialsLocked()
+	return e.cur.Load(), nil
+}
+
+func (e *Engine) commitLocked(fn func(*tx) error) (*state, error) {
 	cur := e.cur.Load()
 	t := newTx(cur)
 	if err := fn(t); err != nil {
 		return cur, err
 	}
+	t.recordRetiredCredentials(cur.doc)
 	if len(t.changes) == 0 {
 		return cur, nil
 	}
@@ -389,16 +401,52 @@ func withProgress(jobs []Job, progress map[string]int) []Job {
 
 func cloneProfile(p Profile) Profile {
 	p.ModelIDs = slices.Clone(p.ModelIDs)
+	p.Capabilities = cloneCapabilities(p.Capabilities)
 	return p
 }
 
 func cloneProject(p Project) Project {
 	p.Nodes = slices.Clone(p.Nodes)
 	p.Edges = slices.Clone(p.Edges)
+	return normalizeProjectCollections(p)
+}
+
+// Nil slices from older databases must serialize as arrays at every boundary.
+// Replacing a nil slice is safe even when the Project belongs to a shared state.
+func normalizeProjectCollections(p Project) Project {
+	if p.Nodes == nil {
+		p.Nodes = []Node{}
+	}
+	if p.Edges == nil {
+		p.Edges = []Edge{}
+	}
 	return p
 }
 
 func cloneJob(j Job) Job {
+	j.Profile = cloneProfile(j.Profile)
+	j.ResultAssetIDs = slices.Clone(j.ResultAssetIDs)
+	j.ResultURLs = slices.Clone(j.ResultURLs)
+	j.ResultDownloads = slices.Clone(j.ResultDownloads)
+	for i := range j.ResultDownloads {
+		if index := j.ResultDownloads[i].OutputIndex; index != nil {
+			copy := *index
+			j.ResultDownloads[i].OutputIndex = &copy
+		}
+	}
+	j.ParentAssetIDs = slices.Clone(j.ParentAssetIDs)
+	j.ResultImages = slices.Clone(j.ResultImages)
+	for i := range j.ResultImages {
+		if index := j.ResultImages[i].OutputIndex; index != nil {
+			copy := *index
+			j.ResultImages[i].OutputIndex = &copy
+		}
+	}
+	if j.Usage != nil {
+		b, _ := json.Marshal(j.Usage)
+		j.Usage = nil
+		_ = json.Unmarshal(b, &j.Usage)
+	}
 	if j.FallbackProfile != nil {
 		copy := cloneProfile(*j.FallbackProfile)
 		j.FallbackProfile = &copy

@@ -169,45 +169,38 @@ function walkForImageCall(value: any): any | null {
 }
 
 function extractImageResult(raw: string): ExtractedImageResult | null {
+  let result: ExtractedImageResult | null = null;
   for (const line of raw.split(/\r?\n/)) {
-    if (!line.startsWith("data: ")) continue;
-    const payload = line.slice(6).trim();
+    if (!line.trimStart().startsWith("data:")) continue;
+    const payload = line.trimStart().slice(5).trim();
     if (!payload || payload === "[DONE]") continue;
     let event: any;
-    try {
-      event = JSON.parse(payload);
-    } catch {
-      continue;
+    try { event = JSON.parse(payload); } catch { continue; }
+    if (["response.failed", "response.incomplete", "error"].includes(event?.type)) {
+      throw new RemoteKernelError(event?.response?.error?.message || event?.error?.message || "图片生成未完整完成，请核对上游状态后再手动重试");
     }
-    if (event?.type === "response.image_generation_call.partial_image" && event.partial_image_b64) {
-      continue;
-    }
-    if (event?.type === "response.output_item.done" && event?.item?.type === "image_generation_call") {
-      if (event.item.result) {
-        return {
-          imageB64: event.item.result,
-          revisedPrompt: event.item.revised_prompt || "",
-          sourceEvent: "final",
-        };
-      }
-    }
+    if (event?.type === "response.image_generation_call.partial_image") continue;
+    const found = event?.type === "response.output_item.done"
+      ? walkForImageCall(event.item)
+      : event?.type === "response.completed" ? walkForImageCall(event.response?.output) : null;
+    if (found?.result) result = {
+      imageB64: found.result,
+      revisedPrompt: found.revised_prompt || "",
+      sourceEvent: "final",
+    };
   }
-
-  try {
-    const parsed = JSON.parse(raw);
-    const found = walkForImageCall(parsed);
-    if (found?.result) {
-      return {
-        imageB64: found.result,
-        revisedPrompt: found.revised_prompt || "",
-        sourceEvent: "json",
-      };
-    }
-  } catch {
-    // ignore
+  if (result) return result;
+  let parsed: any;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+  if (["failed", "incomplete"].includes(parsed?.status) || parsed?.error) {
+    throw new RemoteKernelError(parsed?.error?.message || "图片生成未完整完成");
   }
-
-  return null;
+  const found = walkForImageCall(parsed);
+  return found?.result ? {
+    imageB64: found.result,
+    revisedPrompt: found.revised_prompt || "",
+    sourceEvent: "json",
+  } : null;
 }
 
 function buildWebSocketCreatePayload(body: string): string {
@@ -220,10 +213,14 @@ function buildWebSocketCreatePayload(body: string): string {
 
 function isWebSocketHandshakeFailure(error: unknown): boolean {
   const message = String((error as any)?.message || error || "").toLowerCase();
-  return message.includes("bad handshake")
+  const handshake = message.includes("bad handshake")
     || message.includes("upgrade: websocket")
     || message.includes("websocket upgrade required")
     || message.includes("websocket handshake failed");
+  const status = /\b(?:http|status)\s*[:=]?\s*(\d{3})\b/.exec(message);
+  // Authentication, quotas, rate limiting, 5xx, or an unclassified transport
+  // failure do not prove a safe protocol downgrade.
+  return handshake && !!status && [400, 404, 405, 426].includes(Number(status[1]));
 }
 
 export async function requestResponsesOnce(
@@ -315,7 +312,7 @@ export async function requestResponsesOnce(
       try {
         response = await requestOnce(1);
       } catch (error) {
-        if (responsesTransport === "websocket" && isWebSocketHandshakeFailure(error)) {
+        if (responsesTransport === "websocket" && !receivedNativeStreamPayload && isWebSocketHandshakeFailure(error)) {
           callbacks.onLog?.("Responses WebSocket 握手失败，当前上游不兼容该 WS 路径，自动切回 HTTP SSE...");
           response = await nativeHttpRequestText(
             url,
@@ -335,20 +332,15 @@ export async function requestResponsesOnce(
               allowInsecureConnection: request.payload.allowInsecureConnection === true,
             },
           );
-        } else if (responsesTransport === "websocket" && !runState.hasFinalImage) {
-          callbacks.onLog?.("WebSocket 连接中断，正在重新连接并重放本次生成...");
-          try {
-            response = await requestOnce(2);
-          } catch (retryError) {
-            callbacks.onLog?.(`WebSocket 重连失败: ${String((retryError as any)?.message || retryError)}`);
-            throw retryError;
-          }
         } else {
           throw error;
         }
       }
       raw = response.body || "";
       if (response.resultImageB64) {
+        if (String(response.sourceEvent || "").includes("partial")) {
+          throw new RemoteKernelError("接口只返回了流式预览帧，没有返回最终图片。", response.rawPath || null);
+        }
         return {
           imageB64: response.resultImageB64,
           revisedPrompt: response.revisedPrompt || "",
@@ -377,6 +369,7 @@ export async function requestResponsesOnce(
 
     const response = await fetch(url, {
       method: "POST",
+      redirect: "manual",
       headers: {
         Authorization: `Bearer ${request.payload.apiKey}`,
         "Content-Type": "application/json",

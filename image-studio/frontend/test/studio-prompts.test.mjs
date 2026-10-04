@@ -74,6 +74,17 @@ test("prompts: generated favorite becomes one persistent override, not a duplica
   assert.equal(cards[0].origin, "saved");
   assert.throws(() => savePromptToSnapshot(out.snapshot, p), /revision conflict/);
 });
+test("prompts: any final image from a multi-result job can be saved as its preview", () => {
+  const s = snapshot();
+  s.assets.push({ id: "asset2", name: "第二张", kind: "image" });
+  s.jobs[0].resultAssetIds = ["asset1", "asset2"];
+  const out = savePromptToSnapshot(s, card({ sourceJobId: "job1", previewAssetId: "asset2" }));
+  assert.equal(out.saved.previewAssetId, "asset2");
+  s.assets[0].deletedAt = "2026-01-02";
+  assert.equal(collectPromptCards(s)[0].previewAssetId, "asset2");
+  s.jobs[0].state = "uncertain";
+  assert.throws(() => savePromptToSnapshot(s, card({ sourceJobId: "job1", previewAssetId: "asset2" })));
+});
 test("prompts: search covers tags, author and case-normalized text", () => {
   const cards = [
     { ...card({ author: "Jack", tags: ["风景"], prompt: "CINEMATIC 湖泊" }), key: "one", origin: "saved" },

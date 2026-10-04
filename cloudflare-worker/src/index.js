@@ -1,13 +1,8 @@
 import {
-  DEFAULT_AUTO_RETRY_COUNT,
   buildPromptOptimizePayload,
   buildResponsesPayload,
-  describeProblem,
-  isRetryableRaw,
-  normalizeAutoRetryCount,
   normalizeAPIMode,
-  normalizeBaseURL,
-  RETRY_BACKOFF_MS,
+  openAIAPIEndpoint,
 } from "../../shared/kernel/requestModel.js";
 
 function json(data, init = {}) {
@@ -26,19 +21,15 @@ function getBearer(request) {
   return raw.slice(7).trim();
 }
 
-async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function resolveUpstreamBaseURL(env, request) {
   const url = new URL(request.url);
   const headerOverride = request.headers.get("x-image-studio-upstream-base-url") || "";
-  return normalizeBaseURL(
+  return String(
     headerOverride
       || url.searchParams.get("baseURL")
       || env.IMAGE_STUDIO_UPSTREAM_BASE_URL
       || "",
-  );
+  ).trim().replace(/\/+$/, "");
 }
 
 function makeUpstreamHeaders(request, apiKey) {
@@ -48,6 +39,7 @@ function makeUpstreamHeaders(request, apiKey) {
     "accept",
     "user-agent",
     "openai-beta",
+    "x-client-request-id",
   ];
   for (const key of passThrough) {
     const value = request.headers.get(key);
@@ -57,53 +49,102 @@ function makeUpstreamHeaders(request, apiKey) {
   return headers;
 }
 
-async function forwardRawWithRetry({
-  upstreamURL,
-  method,
-  headers,
-  bodyBuffer,
-  maxAttempts,
-  shouldRetry,
-}) {
-  let lastRaw = "";
-  let lastStatus = 502;
-  let lastContentType = "application/json; charset=utf-8";
+const MAX_UPSTREAM_ERROR_BYTES = 64 * 1024;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const response = await fetch(upstreamURL, {
-      method,
-      headers,
-      body: bodyBuffer,
-    });
-    lastStatus = response.status;
-    lastContentType = response.headers.get("content-type") || lastContentType;
-    lastRaw = await response.text();
-    if (response.ok) {
-      return new Response(lastRaw, {
-        status: response.status,
-        headers: {
-          "content-type": lastContentType,
-        },
-      });
-    }
-    if (attempt < maxAttempts && shouldRetry(lastRaw, response.status)) {
-      await sleep(RETRY_BACKOFF_MS);
-      continue;
-    }
-    break;
-  }
-
-  return json({
-    error: {
-      message: describeProblem(lastRaw),
-      upstreamStatus: lastStatus,
-      raw: lastRaw.slice(0, 1500),
+// Preserve streaming backpressure. Cancelling the returned body also aborts
+// the fetch, including when the caller does not abort its Request signal.
+function relayBody(body, abortController, cleanup, byteLimit = Infinity) {
+  if (!body) { cleanup(); return null; }
+  const reader = body.getReader();
+  let finished = false;
+  let remaining = byteLimit;
+  let onAbort;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    abortController.signal.removeEventListener("abort", onAbort);
+    cleanup();
+  };
+  return new ReadableStream({
+    start(controller) {
+      onAbort = () => {
+        if (finished) return;
+        const reason = abortController.signal.reason || new DOMException("Aborted", "AbortError");
+        finish();
+        controller.error(reason);
+        void reader.cancel(reason).catch(() => {});
+      };
+      abortController.signal.addEventListener("abort", onAbort, { once: true });
+      if (abortController.signal.aborted) onAbort();
     },
-  }, { status: lastStatus || 502 });
+    async pull(controller) {
+      try {
+        const { value, done } = await reader.read();
+        if (finished) return;
+        if (done) { finish(); controller.close(); return; }
+        const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
+        if (chunk.byteLength) controller.enqueue(chunk);
+        remaining -= chunk.byteLength;
+        if (remaining <= 0) {
+          finish();
+          controller.close();
+          const reason = new Error("Upstream error body reached the 64 KiB limit");
+          abortController.abort(reason);
+          void reader.cancel(reason).catch(() => {});
+        }
+      } catch (error) {
+        if (finished) return;
+        finish();
+        controller.error(error);
+        abortController.abort(error);
+      }
+    },
+    cancel(reason) {
+      finish();
+      abortController.abort(reason);
+      return reader.cancel(reason);
+    },
+  }, { highWaterMark: 0 });
 }
 
-function resolveMaxAttempts(autoRetryCount) {
-  return normalizeAutoRetryCount(autoRetryCount ?? DEFAULT_AUTO_RETRY_COUNT) + 1;
+// Generation POSTs are submitted exactly once. A timeout or broken stream
+// cannot prove that the provider did not generate (and charge for) an image.
+async function forwardOnce({ upstreamURL, method, headers, bodyBuffer, signal, generation = true }) {
+  const upstreamAbort = new AbortController();
+  const onClientAbort = () => upstreamAbort.abort(signal.reason);
+  signal?.addEventListener("abort", onClientAbort, { once: true });
+  const cleanup = () => signal?.removeEventListener("abort", onClientAbort);
+  if (signal?.aborted) onClientAbort();
+  try {
+    if (upstreamAbort.signal.aborted) throw upstreamAbort.signal.reason;
+    const response = await fetch(upstreamURL, {
+      method, headers, body: bodyBuffer, signal: upstreamAbort.signal,
+      redirect: "manual",
+    });
+    const outgoingHeaders = new Headers();
+    for (const key of ["content-type", "cache-control", "x-request-id", "request-id", "openai-request-id", "retry-after"]) {
+      const value = response.headers.get(key);
+      if (value) outgoingHeaders.set(key, value);
+    }
+    if (generation && response.status >= 500) outgoingHeaders.set("x-image-studio-generation-status", "uncertain");
+    const errorLimit = response.status >= 400 ? MAX_UPSTREAM_ERROR_BYTES : Infinity;
+    if (Number.isFinite(errorLimit)) outgoingHeaders.set("x-image-studio-error-body-limit", String(errorLimit));
+    // Successful SSE is never buffered; only error bodies have a byte cap.
+    const body = relayBody(response.body, upstreamAbort, cleanup, errorLimit);
+    return new Response(body, { status: response.status, headers: outgoingHeaders });
+  } catch {
+    cleanup();
+    if (signal?.aborted) {
+      return json({ error: { type: "request_cancelled", message: "客户端已取消请求。", retryable: false } }, { status: 499 });
+    }
+    return json({ error: {
+      type: generation ? "generation_uncertain" : "upstream_unavailable",
+      message: generation
+        ? "上游连接中断，生成状态不确定；请求没有自动重发，请先核对上游任务与费用。"
+        : "上游连接中断，请检查连接后重试。",
+      retryable: false,
+    }, ...(generation ? { status: "uncertain" } : {}) }, { status: 502 });
+  }
 }
 
 function sanitizePayload(input) {
@@ -111,9 +152,18 @@ function sanitizePayload(input) {
     apiKey: String(input?.apiKey || ""),
     mode: input?.mode === "edit" ? "edit" : "generate",
     prompt: String(input?.prompt || ""),
+    promptMode: input?.promptMode === "assisted" ? "assisted" : "verbatim",
+    modelCapabilities: input?.modelCapabilities && typeof input.modelCapabilities === "object" ? input.modelCapabilities : undefined,
     size: String(input?.size || ""),
     quality: String(input?.quality || ""),
     outputFormat: String(input?.outputFormat || ""),
+    background: String(input?.background || ""),
+    outputCompression: input?.outputCompression,
+    inputFidelity: String(input?.inputFidelity || ""),
+    moderation: String(input?.moderation || ""),
+    reasoningEffort: String(input?.reasoningEffort || ""),
+    userIdentifier: String(input?.userIdentifier || ""),
+    disablePreview: input?.disablePreview === true,
     imagePaths: Array.isArray(input?.imagePaths) ? input.imagePaths.map((item) => String(item || "")) : [],
     imagePath: String(input?.imagePath || ""),
     imageDataURLs: Array.isArray(input?.imageDataURLs) ? input.imageDataURLs.map((item) => String(item || "")) : [],
@@ -126,7 +176,7 @@ function sanitizePayload(input) {
     apiMode: String(input?.apiMode || ""),
     requestPolicy: input?.requestPolicy === "compat" ? "compat" : "openai",
     noPromptRevision: !!input?.noPromptRevision,
-    partialImages: Number(input?.partialImages || 0),
+    partialImages: input?.partialImages,
     autoRetryCount: Number(input?.autoRetryCount || 0),
   };
 }
@@ -139,8 +189,8 @@ function collectSourceDataURLs(payload) {
   return merged;
 }
 
-async function forwardResponses(env, payload, apiKey) {
-  const upstreamBaseURL = normalizeBaseURL(payload.baseURL || env.IMAGE_STUDIO_UPSTREAM_BASE_URL || "");
+async function forwardResponses(env, payload, apiKey, signal) {
+  const upstreamBaseURL = String(payload.baseURL || env.IMAGE_STUDIO_UPSTREAM_BASE_URL || "").trim();
   if (!upstreamBaseURL) {
     return json({ error: { message: "Worker 未配置上游 BASE_URL" } }, { status: 400 });
   }
@@ -149,45 +199,23 @@ async function forwardResponses(env, payload, apiKey) {
   }
 
   const sourceDataURLs = collectSourceDataURLs(payload);
-  const requestBody = buildResponsesPayload(payload, sourceDataURLs);
-  let lastRaw = "";
-  let lastStatus = 502;
-  const maxAttempts = resolveMaxAttempts(payload.autoRetryCount);
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const response = await fetch(`${upstreamBaseURL}/v1/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-        accept: "text/event-stream, application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-    lastStatus = response.status;
-    lastRaw = await response.text();
-    if (response.ok) {
-      return new Response(lastRaw, {
-        status: response.status,
-        headers: {
-          "content-type": response.headers.get("content-type") || "text/event-stream; charset=utf-8",
-        },
-      });
-    }
-    if (attempt < maxAttempts && (isRetryableRaw(lastRaw) || [403, 502, 503, 504, 524].includes(response.status))) {
-      await sleep(RETRY_BACKOFF_MS);
-      continue;
-    }
-    break;
+  let requestBody;
+  try {
+    requestBody = buildResponsesPayload(payload, sourceDataURLs);
+  } catch (error) {
+    return json({ error: { message: error.message } }, { status: 400 });
   }
-
-  return json({
-    error: {
-      message: describeProblem(lastRaw),
-      upstreamStatus: lastStatus,
-      raw: lastRaw.slice(0, 1500),
+  return forwardOnce({
+    upstreamURL: openAIAPIEndpoint(upstreamBaseURL, "responses"),
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+      accept: "text/event-stream, application/json",
     },
-  }, { status: lastStatus || 502 });
+    bodyBuffer: JSON.stringify(requestBody),
+    signal,
+  });
 }
 
 async function forwardOpenAIPath(env, request, apiKey) {
@@ -199,30 +227,22 @@ async function forwardOpenAIPath(env, request, apiKey) {
     return json({ error: { message: "缺少 Bearer API Key" } }, { status: 401 });
   }
   const url = new URL(request.url);
-  const upstreamURL = `${upstreamBaseURL}${url.pathname}${url.search}`;
+  url.searchParams.delete("baseURL");
+  const upstreamURL = `${openAIAPIEndpoint(upstreamBaseURL, url.pathname.replace(/^\/v1\//, ""))}${url.search}`;
   const bodyBuffer = request.method === "GET" || request.method === "HEAD"
     ? null
     : await request.arrayBuffer();
-  let parsedBody = null;
-  if (bodyBuffer) {
-    try {
-      parsedBody = JSON.parse(new TextDecoder().decode(bodyBuffer));
-    } catch {
-      parsedBody = null;
-    }
-  }
-  return forwardRawWithRetry({
+  return forwardOnce({
     upstreamURL,
     method: request.method,
     headers: makeUpstreamHeaders(request, apiKey),
     bodyBuffer,
-    maxAttempts: resolveMaxAttempts(parsedBody?.autoRetryCount),
-    shouldRetry: (raw, status) => isRetryableRaw(raw) || [403, 502, 503, 504, 524].includes(status),
+    signal: request.signal,
   });
 }
 
-async function forwardPromptOptimize(env, body, apiKey) {
-  const upstreamBaseURL = normalizeBaseURL(body.baseURL || env.IMAGE_STUDIO_UPSTREAM_BASE_URL || "");
+async function forwardPromptOptimize(env, body, apiKey, signal) {
+  const upstreamBaseURL = String(body.baseURL || env.IMAGE_STUDIO_UPSTREAM_BASE_URL || "").trim();
   if (!upstreamBaseURL) {
     return json({ error: { message: "Worker 未配置上游 BASE_URL" } }, { status: 400 });
   }
@@ -233,21 +253,17 @@ async function forwardPromptOptimize(env, body, apiKey) {
     ? body.sourceDataURLs.filter((item) => typeof item === "string" && item.trim())
     : [];
   const requestBody = buildPromptOptimizePayload(body, sourceDataURLs);
-  const response = await fetch(`${upstreamBaseURL}/v1/responses`, {
+  return forwardOnce({
+    upstreamURL: openAIAPIEndpoint(upstreamBaseURL, "responses"),
     method: "POST",
     headers: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
       accept: "application/json",
     },
-    body: JSON.stringify(requestBody),
-  });
-  const raw = await response.text();
-  return new Response(raw, {
-    status: response.status,
-    headers: {
-      "content-type": response.headers.get("content-type") || "application/json; charset=utf-8",
-    },
+    bodyBuffer: JSON.stringify(requestBody),
+    signal,
+    generation: false,
   });
 }
 
@@ -259,18 +275,15 @@ async function forwardModels(env, request, apiKey) {
   if (!apiKey) {
     return json({ error: { message: "缺少 Bearer API Key" } }, { status: 401 });
   }
-  const response = await fetch(`${upstreamBaseURL}/v1/models`, {
+  return forwardOnce({
+    upstreamURL: openAIAPIEndpoint(upstreamBaseURL, "models"),
     method: "GET",
     headers: {
       authorization: `Bearer ${apiKey}`,
       accept: "application/json",
     },
-  });
-  return new Response(await response.text(), {
-    status: response.status,
-    headers: {
-      "content-type": response.headers.get("content-type") || "application/json; charset=utf-8",
-    },
+    signal: request.signal,
+    generation: false,
   });
 }
 
@@ -300,7 +313,7 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/kernel/prompt-optimize") {
       const body = await request.json().catch(() => ({}));
-      return forwardPromptOptimize(env, body, apiKey);
+      return forwardPromptOptimize(env, body, apiKey, request.signal);
     }
 
     if (request.method === "POST" && url.pathname === "/kernel/generate") {
@@ -308,7 +321,7 @@ export default {
       if (normalizeAPIMode(body.apiMode) !== "responses") {
         return json({ error: { message: "当前 Worker 入口只代理 Responses API 模式" } }, { status: 400 });
       }
-      return forwardResponses(env, body, apiKey);
+      return forwardResponses(env, body, apiKey, request.signal);
     }
 
     return json({ error: { message: "Not found" } }, { status: 404 });

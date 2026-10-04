@@ -1,36 +1,24 @@
-# 原始提示词传递说明
+# 提示词模式：精确执行与创作辅助
 
-Image Studio 现在默认要求 Responses API 文本模型不要改写用户输入的 prompt。
+工作室的 Responses 图像请求支持两种 `promptMode`，默认「精确执行」。两种模式都显式声明 `image_generation` 并强制选择图片工具，不通过删除 `tool_choice` 来换取创作自由。
 
-它用于 Responses API 模式。Image Studio 会在 `/v1/responses` 请求顶层加入一段 `instructions`，要求文本模型把用户 prompt 原样传给 `image_generation`，不要重写、扩写、润色或调整措辞。界面不再提供关闭或开启该行为的按钮；所有 Responses 生成请求都按这个策略发送。
+| 模式 | 行为 | 适用场景 |
+|---|---|---|
+| 精确执行 `verbatim` | 要求把用户提示词原样交给图像工具，不主动扩写 | 已有完整提示词、固定中文文案、品牌规范、局部编辑 |
+| 创作辅助 `assisted` | 允许补充视觉描述，同时保留主体、文字、数量和编辑限制 | 简短创意、复杂构图梳理 |
 
-## 适合什么场景
+模式改变的是 Responses 顶层 instructions，不是图像质量参数。「原样传递」是模型指令，无法保证上游逐字执行；创作辅助也不保证每次画质更好。
 
-- 你已经精修过 prompt，希望图像模型尽量逐字执行。
-- prompt 里有固定格式、专有名词、镜头参数、构图要求或中英文混排内容。
-- 你想减少 Responses API 文本模型二次发挥导致的风格漂移。
+Images API 直接发送输入提示词，不使用客户端的 Responses instructions。即使网关内部将 Images 转换为 Responses，客户端也不能通过此开关控制网关的内部指令。
 
-## 功能边界
+共享 Go 与 JavaScript 请求模型使用相同模式语义。历史以提交时的提示词和模式为准；上游返回 `revised_prompt` 时保留该值，未返回时不制造“优化后提示词”。创作辅助不会在生成前展示一个由客户端单独优化、已供用户确认的新提示词，不应混淆这两种流程。
 
-- 这是一个模型指令约束，不是上游 API 提供的强制参数。
-- 它能明显降低 prompt 被改写的概率，但不能保证所有上游、所有模型 100% 遵守。
-- 只对 Responses API 模式有意义；Images API 模式本来就是直接把 prompt 发给图像接口。
+比较效果时固定图像模型、尺寸、质量和参考图，覆盖文字、产品结构、人物一致性和蒙版编辑并多次采样。配套部署检查见 [sub2api 接入](../sub2api.md)。
 
-## 实现路径
+## 两步优化并确认
 
-请求 payload 会包含类似下面的顶层指令：
+Images 和 Responses 都可先打开「优化并确认提示词」，主动调用已配置的 Responses 文本模型。该操作只发送文字，可能产生文本模型费用，不上传参考图或蒙版，也不生成图片。
 
-```text
-Pass the user prompt to image_generation VERBATIM.
-DO NOT rewrite, expand, polish, or revise it in any way.
-Use the exact text the user gave.
-```
+建议返回后可编辑并确认；确认将原文、确认文字和精确执行模式带回创作表单。随后仍需单独点击生成。关闭面板保留原文，不应用未确认建议；已发出的文本请求不会因为关闭面板自动取消。
 
-桌面 Wails 后端、前端 remote kernel、Android/Web 路径和 Cloudflare Worker 共享同一套语义：Responses API payload 始终会带上这条 `VERBATIM` 指令。
-
-## 如何判断它是否生效
-
-生成完成后打开输出目录的 `log/sse-response-*.txt`，查看上游响应中的 `instructions` 和 `revised_prompt`：
-
-- 请求侧会带 `VERBATIM` 指令。
-- 如果上游遵守，`revised_prompt` 应尽量贴近原始 prompt。
+这是独立的文本优化流程，与 Responses 单次请求中的「创作辅助」不同。即使生图使用 Images，也必须另行配置有 Responses 文本权限的模型，且不会改变网关 Images 内部选择的驱动模型。

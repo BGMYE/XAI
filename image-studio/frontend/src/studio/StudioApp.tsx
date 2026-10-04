@@ -1,5 +1,10 @@
 import { EndpointPreview } from "../components/panel/EndpointPreview";
 import { LibraryMaintenance } from "./LibraryMaintenance";
+import { ProtocolTips } from "./ProtocolTips";
+import { CapabilitiesEditor } from "./CapabilitiesEditor";
+import { StudioNetworkSettings } from "./StudioNetworkSettings";
+import { StudioPromptImport } from "./StudioPromptImport";
+import { PromptAssistant } from "./PromptAssistant";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
@@ -39,6 +44,7 @@ import { addPromptToProject } from "./promptLibrary.mjs";
 import { client, downloadText, isDesktop, mediaURL } from "./client";
 import { exportTemplate, importTemplate, newProject, uid } from "./graph.mjs";
 import { useStudio } from "./useStudio";
+import { buildAssetPromptIndex, resultAssetIDs, reusableGenerationSettings } from "./jobResults.mjs";
 import type {
   Asset,
   Generation,
@@ -233,7 +239,11 @@ function ProviderForm({
     [key, setKey] = useState(""),
     [busy, setBusy] = useState(false),
     [models, setModels] = useState<string[]>([]);
-  const patch = (p: Partial<Profile>) => setDraft((x) => ({ ...x, ...p }));
+  const patch = (p: Partial<Profile>) => setDraft((x) => {
+    const identityFields: Array<keyof Profile> = ["baseUrl", "imageModel", "textModel", "protocol", "providerPreset", "imageApi", "responsesTransport", "requestPolicy", "allowLocal", "allowInsecure"];
+    const identityChanged = identityFields.some((field) => field in p && p[field] !== x[field]);
+    return { ...x, ...p, ...(identityChanged ? { capabilities: undefined, verifiedAt: undefined } : {}) };
+  });
   return (
     <form
       className="studio-provider-form"
@@ -257,6 +267,19 @@ function ProviderForm({
       <p className="studio-muted">
         密钥只写入系统凭据存储，不进入画布、模板或浏览器存储。图像与视频模型分别配置。
       </p>
+      <label>
+        提供商预设
+        <select value={draft.providerPreset || "custom"} onChange={(e) => {
+          const preset = e.target.value as "custom" | "sub2api";
+          patch(preset === "sub2api" ? {
+            providerPreset: preset, protocol: "openai", imageApi: "images",
+            responsesTransport: "sse", requestPolicy: "openai", imagesNewApiCompat: false,
+          } : { providerPreset: preset });
+        }}>
+          <option value="custom">通用配置 · 按上游文档选择</option>
+          <option value="sub2api">sub2api · OpenAI 兼容</option>
+        </select>
+      </label>
       <div className="studio-form-row">
         <label>
           配置名称
@@ -273,19 +296,14 @@ function ProviderForm({
           <select
             aria-describedby={protocolHelpID}
             value={draft.protocol}
-            onChange={(e) => patch({ protocol: e.target.value as Profile["protocol"] })}
+            onChange={(e) => patch({ protocol: e.target.value as Profile["protocol"], ...(e.target.value === "xai" ? { providerPreset: "custom" } : {}) })}
           >
             <option value="xai">xAI 协议</option>
             <option value="openai">OpenAI 兼容协议</option>
           </select>
         </label>
       </div>
-      <p id={protocolHelpID} className="studio-protocol-help">
-        {draft.protocol === "xai"
-          ? "适用于 xAI 原生接口：按画面比例配置，视频使用 duration / resolution 参数。"
-          : "适用于实现对应图像或视频端点的 OpenAI 兼容接口：按像素尺寸配置，视频使用 seconds 参数。"}
-        请按上游文档选择；相同模型名不代表协议相同。
-      </p>
+      <ProtocolTips profile={draft} id={protocolHelpID} />
       <label>
         Base URL（含 API 根路径）
         <input
@@ -298,6 +316,7 @@ function ProviderForm({
           spellCheck={false}
         />
       </label>
+      <p className="studio-field-tip">TIPS：填写完整 API 根路径，例如 https://你的域名/v1；有反向代理子路径时保留它。不要填写 /images/generations 或 /responses 端点，也不要重复添加 /v1。</p>
       <EndpointPreview baseURL={draft.baseUrl} protocol={draft.protocol} />
       <label>
         API Key
@@ -305,7 +324,10 @@ function ProviderForm({
           type="password"
           autoComplete="new-password"
           value={key}
-          onChange={(e) => setKey(e.target.value)}
+          onChange={(e) => {
+            setKey(e.target.value);
+            if (e.target.value) patch({ capabilities: undefined, verifiedAt: undefined });
+          }}
           placeholder={profile?.hasKey ? "留空保留已保存的密钥" : "输入你有权使用的 API Key"}
         />
       </label>
@@ -343,7 +365,7 @@ function ProviderForm({
                 value={draft.imageApi || "images"}
                 onChange={(e) => patch({ imageApi: e.target.value as ImageAPI })}
               >
-                <option value="images">Images API（流式，推荐）</option>
+                <option value="images">Images API（直接生成 / 编辑）</option>
                 <option value="responses">Responses API（图像工具）</option>
               </select>
             </label>
@@ -370,29 +392,48 @@ function ProviderForm({
               </label>
             )}
           </div>
+          {draft.imageApi !== "responses" && <label>
+            提示词优化文本模型 ID（可选）
+            <input list="studio-model-list" value={draft.textModel ?? ""}
+              onChange={(e) => patch({ textModel: e.target.value })}
+              placeholder="支持 Responses 文本调用的模型，用于优化并确认提示词" />
+            <span className="studio-field-tip">仅在主动点击提示词优化时使用，不会影响 Images 路径内部由网关选择的驱动模型。</span>
+          </label>}
           {draft.imageApi === "responses" ? (
-            <label>
-              推理强度
-              <select
-                value={draft.reasoningEffort || "xhigh"}
-                onChange={(e) => patch({ reasoningEffort: e.target.value as ReasoningEffort })}
-              >
-                <option value="xhigh">xhigh</option>
-                <option value="high">high</option>
-                <option value="medium">medium</option>
-                <option value="low">low</option>
-              </select>
-            </label>
+            <>
+              <div className="studio-form-row">
+                <label>
+                  传输方式
+                  <select value={draft.responsesTransport || "sse"}
+                    onChange={(e) => patch({ responsesTransport: e.target.value as "sse" | "websocket" })}>
+                    <option value="sse">HTTP SSE（优先使用）</option>
+                    <option value="websocket">WebSocket（验证后使用）</option>
+                  </select>
+                </label>
+                <label>
+                  推理强度
+                  <select value={draft.reasoningEffort || "xhigh"}
+                    onChange={(e) => patch({ reasoningEffort: e.target.value as ReasoningEffort })}>
+                    <option value="xhigh">xhigh</option>
+                    <option value="high">high</option>
+                    <option value="medium">medium</option>
+                    <option value="low">low</option>
+                  </select>
+                </label>
+              </div>
+              <p className="studio-field-tip">TIPS：文本模型负责调用图片工具，图像模型负责生图，请分别填写真实可用 ID。先用 HTTP SSE；只有网关、代理及完整生图 / 编辑均验证通过后再使用 WebSocket。更高推理强度不等于更高图像质量，须按文本模型支持范围选择。</p>
+            </>
           ) : (
-            <label className="studio-checkbox">
-              <input
-                type="checkbox"
-                checked={draft.imagesNewApiCompat === true}
-                onChange={(e) => patch({ imagesNewApiCompat: e.target.checked })}
-              />
-              兼容不支持流式的中转（长时间生成更容易被网关超时中断）
-            </label>
+            <>
+              <label className="studio-checkbox">
+                <input type="checkbox" checked={draft.imagesNewApiCompat === true}
+                  onChange={(e) => patch({ imagesNewApiCompat: e.target.checked })} />
+                使用非流式 JSON（仅用于不支持 SSE 的上游）
+              </label>
+              <p className="studio-field-tip">TIPS：Images 可使用 SSE，也可使用 JSON。流式预览不代表最终成品；长时间 JSON 请求可能受到网关超时限制。首次选择 OpenAI 标准字段，只有上游明确支持时才启用中转扩展。</p>
+            </>
           )}
+          <CapabilitiesEditor profile={draft} onChange={(capabilities) => patch({ capabilities })} />
         </>
       )}
       <label className="studio-checkbox">
@@ -413,7 +454,7 @@ function ProviderForm({
       </label>
       <div className="studio-callout">
         不会自动替换模型、猜测接口或反复重发收费请求。切换 Base URL
-        时需重新输入密钥。连接测试只读取模型列表，不发起生成。
+        时需重新输入密钥。地址、密钥、协议或模型变更后，旧能力记录会失效。连接测试只读取模型列表，不发起生成。
       </div>
       {disabled && (
         <div className="studio-callout warning">
@@ -453,13 +494,18 @@ function ProviderForm({
   );
 }
 
-export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): void }) {
+export function StudioApp({ isMac }: { isMac: boolean }) {
   const studio = useStudio();
   const [page, setPage] = useState<Page>("home"),
     [kind, setKind] = useState<Kind>("image"),
     [prompt, setPrompt] = useState(""),
     [parameters, setParameters] = useState<Parameters>({}),
     [referenceID, setReferenceID] = useState("");
+  const [promptAssistantOpen, setPromptAssistantOpen] = useState(false),
+    [promptTrace, setPromptTrace] = useState<{ originalPrompt: string; confirmedPrompt?: string }>();
+  const [imageParameters, setImageParameters] = useState<NonNullable<Generation["image"]>>({});
+  const [additionalReferences, setAdditionalReferences] = useState<string[]>([]),
+    [maskAssetID, setMaskAssetID] = useState("");
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [profileID, setProfileID] = useState(""),
     [query, setQuery] = useState(""),
@@ -472,11 +518,21 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
     searchRef = useRef<HTMLInputElement>(null),
     imageInput = useRef<HTMLInputElement>(null),
     templateInput = useRef<HTMLInputElement>(null),
-    importTarget = useRef<string | undefined>();
+    importTarget = useRef<string | undefined>(),
+    importPurpose = useRef<"reference" | "mask">("reference");
   const lastRequest = useRef<{ signature: string; id: string } | null>(null),
     lastRun = useRef<{ signature: string; id: string } | null>(null);
   const profile = studio.snapshot.profiles.find((p) => p.id === profileID) ?? studio.snapshot.profiles[0];
+  const imageAPI = profile?.imageApi === "responses" ? "responses" : "images";
+  const modelCapabilities = profile?.capabilities?.modelRules?.[profile.imageModel]?.[imageAPI];
+  const confirmedSizes = (modelCapabilities?.sizes ?? []).filter((size) => /^[1-9]\d*x[1-9]\d*$/.test(size));
+  const canApplyQualityPreset = Boolean(modelCapabilities?.qualities?.includes("high") && modelCapabilities?.formats?.includes("png") && confirmedSizes.length);
   const desktop = isDesktop();
+  useEffect(() => {
+    if (!studio.ready) return;
+    const warning = client.takeMigrationWarning();
+    if (warning) studio.report(warning);
+  }, [studio.ready, studio.report]);
   useEffect(() => {
     if (!profileID && studio.snapshot.profiles[0]) setProfileID(studio.snapshot.profiles[0].id);
   }, [profileID, studio.snapshot.profiles]);
@@ -519,16 +575,23 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
       await studio.create();
       setPage("canvas");
     });
-  const askImage = (target?: string) => {
+  const askImage = (target?: string, purpose: "reference" | "mask" = "reference") => {
     importTarget.current = target;
+    importPurpose.current = purpose;
     imageInput.current?.click();
   };
   const importedImage = async (file: File) => {
     const target = importTarget.current;
+    const purpose = importPurpose.current;
     await runAction(async () => {
+      if (purpose === "mask" && file.type !== "image/png") throw Error("蒙版必须是包含透明区域的 PNG 文件。");
       const a = await client.importImage(file);
       await studio.refresh();
-      setReferenceID(a.id);
+      if (purpose === "mask") setMaskAssetID(a.id);
+      else {
+        setReferenceID(a.id);
+        setMaskAssetID("");
+      }
       if (target) {
         const p = studio.getProject(target);
         if (p) {
@@ -546,7 +609,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
           await studio.flush(target);
         }
       }
-      setNotice("参考图已保存在本地");
+      setNotice(purpose === "mask" ? "蒙版已导入，主参考图保持不变" : "参考图已保存在本地");
     });
   };
   const submit = () =>
@@ -556,6 +619,8 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
         setPage("settings");
         throw Error("请先连接你的上游。");
       }
+      if (kind === "image" && imageParameters.negativePrompt && profile.requestPolicy !== "compat")
+        throw Error("反向提示词仅适用于已确认支持的中转扩展。请清空反向提示词，或在上游设置中启用兼容扩展。");
       const p = await ensureProject();
       await studio.flush(p.id);
       const request: Generation = {
@@ -564,8 +629,14 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
         projectId: p.id,
         kind,
         prompt,
+        ...promptTrace,
         referenceAssetId: referenceID || undefined,
+        ...(kind === "image" ? {
+          referenceAssetIds: [...new Set(additionalReferences.filter((id) => id && id !== referenceID))],
+          maskAssetId: maskAssetID || undefined,
+        } : {}),
         parameters,
+        ...(kind === "image" ? { image: imageParameters } : {}),
       };
       const signature = JSON.stringify(request);
       if (lastRequest.current?.signature !== signature) lastRequest.current = { signature, id: uid() };
@@ -621,16 +692,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
   );
   // Prompts of the jobs that produced each asset, for search. Built once per
   // job list instead of scanning every job for every asset on each keystroke.
-  const resultPrompts = useMemo(() => {
-    const prompts = new Map<string, string>();
-    for (const j of jobs)
-      if (j.resultAssetId)
-        prompts.set(
-          j.resultAssetId,
-          `${prompts.get(j.resultAssetId) ?? ""}\n${j.request.prompt.toLowerCase()}`,
-        );
-    return prompts;
-  }, [jobs]);
+  const resultPrompts = useMemo(() => buildAssetPromptIndex(jobs), [jobs]);
   const assets = useMemo(() => {
     const needle = query.toLowerCase();
     return allAssets.filter(
@@ -702,6 +764,25 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
             )}
             {j.error && <p className="studio-job-error">{j.error}</p>}
             {j.remoteId && <small>远端任务：{j.remoteId}</small>}
+            <details className="studio-job-prompts">
+              <summary>提示词与请求记录 · {j.request.parameters.promptMode === "assisted" ? "创作辅助" : "精确执行"}</summary>
+              <dl>
+                <dt>原始需求</dt><dd>{j.originalPrompt || j.request.originalPrompt || j.request.prompt}</dd>
+                {(j.confirmedPrompt || j.request.confirmedPrompt) && <><dt>确认后的提示词</dt><dd>{j.confirmedPrompt || j.request.confirmedPrompt}</dd></>}
+                <dt>实际发送的提示词</dt><dd>{j.sentPrompt || "旧任务未单独记录，请参考保存的请求；不推断上游实际执行文字。"}</dd>
+                {j.revisedPrompt && <><dt>上游返回的 revised_prompt</dt><dd>{j.revisedPrompt}</dd></>}
+                <dt>接口与模型</dt><dd>{j.profile.protocol} · {j.profile.imageApi || "images"} · {j.profile.imageModel}</dd>
+                {j.responseId && <><dt>Response ID</dt><dd>{j.responseId}</dd></>}
+                {j.requestId && <><dt>Request ID</dt><dd>{j.requestId}</dd></>}
+                {j.outputStatus && <><dt>上游终态</dt><dd>{j.outputStatus}</dd></>}
+                {j.usage && <><dt>上游返回的使用量</dt><dd>{JSON.stringify(j.usage, null, 2)}</dd></>}
+                {j.parentAssetIds?.length ? <><dt>父素材</dt><dd>{j.parentAssetIds.map((id) => studio.snapshot.assets.find((asset) => asset.id === id)?.name || id).join("、")}</dd></> : null}
+                {j.resultImages?.map((result, index) => <div key={`${result.assetId}:${index}`}>
+                  <dt>成品 {index + 1}{result.width && result.height ? ` · ${result.width} × ${result.height}` : ""}</dt>
+                  <dd>{result.itemId ? `Item ID: ${result.itemId}\n` : ""}{result.revisedPrompt || "上游未返回 revised_prompt"}</dd>
+                </div>)}
+              </dl>
+            </details>
             <div className="studio-job-actions">
               {["succeeded", "failed", "cancelled", "uncertain"].includes(j.state) && (
                 <button
@@ -739,22 +820,29 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                   恢复任务
                 </button>
               )}
-              {j.resultAssetId && (
-                <button
-                  onClick={() => {
-                    const a = studio.snapshot.assets.find((a) => a.id === j.resultAssetId);
-                    if (a) setViewAsset(a);
-                  }}
-                >
-                  查看作品
+              {resultAssetIDs(j).map((id, index, results) => (
+                <button key={id} onClick={() => {
+                  const a = studio.snapshot.assets.find((asset) => asset.id === id);
+                  if (a) setViewAsset(a);
+                }}>
+                  {results.length > 1 ? `查看作品 ${index + 1}/${results.length}` : "查看作品"}
                 </button>
-              )}
+              ))}
               <button
                 onClick={() => {
                   setPrompt(j.request.prompt);
+                  setPromptTrace(j.confirmedPrompt || j.request.confirmedPrompt ? {
+                    originalPrompt: j.originalPrompt || j.request.originalPrompt || j.request.prompt,
+                    confirmedPrompt: j.confirmedPrompt || j.request.confirmedPrompt || j.request.prompt,
+                  } : undefined);
                   setKind(j.request.kind);
-                  setParameters(j.request.parameters);
-                  setReferenceID(j.request.referenceAssetId ?? "");
+                  const reused = reusableGenerationSettings(j.request);
+                  setParameters(reused.parameters);
+                  setImageParameters(reused.image);
+                  if (studio.snapshot.profiles.some((p) => p.id === j.profile.id)) setProfileID(j.profile.id);
+                  setReferenceID(j.request.referenceAssetId ?? j.request.referenceAssetIds?.[0] ?? "");
+                  setAdditionalReferences((j.request.referenceAssetIds ?? []).filter((id) => id !== (j.request.referenceAssetId ?? j.request.referenceAssetIds?.[0])));
+                  setMaskAssetID(j.request.maskAssetId ?? "");
                   setPage("create");
                 }}
               >
@@ -769,6 +857,15 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
 
   return (
     <div className={`studio-app ${isMac ? "is-mac" : ""}`}>
+      <StudioPromptImport report={studio.report} onApply={({ prompt: imported, negativePrompt, size }) => {
+        setPrompt(imported);
+        setPromptTrace(undefined);
+        setKind("image");
+        setParameters({ size: size === "auto" ? undefined : size, promptMode: "verbatim" });
+        setImageParameters({ negativePrompt });
+        setPage("create");
+        setNotice("提示词已导入，请检查参数后生成");
+      }} />
       <div className="studio-ambient" aria-hidden="true">
         <i />
         <i />
@@ -866,18 +963,6 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
           ))}
         </div>
         <div className="studio-sidebar-bottom">
-          <button
-            onClick={() => {
-              void runAction(async () => {
-                for (const p of studio.snapshot.projects) await studio.flush(p.id);
-                onClassic();
-              });
-            }}
-            title="保留原有图像编辑与 Responses API 功能"
-          >
-            <Monitor size={20} />
-            <span>经典编辑</span>
-          </button>
           <button className={page === "settings" ? "active" : ""} onClick={() => setPage("settings")}>
             <Settings2 size={21} />
             <span>设置</span>
@@ -1151,6 +1236,9 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     onClick={() => {
                       setKind("image");
                       setParameters({});
+                      setImageParameters({});
+                      setMaskAssetID("");
+                      setAdditionalReferences([]);
                     }}
                   >
                     <ImagePlus size={18} />
@@ -1162,6 +1250,9 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     onClick={() => {
                       setKind("video");
                       setParameters({});
+                      setImageParameters({});
+                      setMaskAssetID("");
+                      setAdditionalReferences([]);
                     }}
                   >
                     <Video size={18} />
@@ -1175,7 +1266,10 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     maxLength={5000}
                     rows={7}
                     value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
+                    onChange={(e) => {
+                      setPrompt(e.target.value);
+                      setPromptTrace((trace) => e.target.value && trace ? { originalPrompt: trace.originalPrompt } : undefined);
+                    }}
                     placeholder={
                       kind === "video"
                         ? "描述场景、动作、镜头运动与光影变化…"
@@ -1183,6 +1277,16 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     }
                   />
                 </label>
+                {kind === "image" && <>
+                  <button type="button" className="studio-secondary"
+                    disabled={!desktop || profile?.protocol !== "openai" || !profile.hasKey || !profile.textModel?.trim() || !prompt.trim()}
+                    onClick={() => setPromptAssistantOpen(true)}>
+                    <Sparkles size={16} />优化并确认提示词
+                  </button>
+                  <p className="studio-field-tip">{profile?.protocol === "openai" && profile.textModel?.trim()
+                    ? "先用文本模型优化，查看并编辑建议后确认，再点击生成；优化可能产生文本调用费用。"
+                    : "Images 也可使用两步优化：先在 OpenAI 兼容上游中配置提示词优化文本模型。"}</p>
+                </>}
                 <label>
                   使用上游
                   <select
@@ -1190,6 +1294,9 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     onChange={(e) => {
                       setProfileID(e.target.value);
                       setParameters({});
+                      setImageParameters({});
+                      setMaskAssetID("");
+                      setAdditionalReferences([]);
                     }}
                   >
                     <option value="" disabled>
@@ -1202,10 +1309,31 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     ))}
                   </select>
                 </label>
+                {kind === "image" && (
+                  <label>
+                    提示词模式
+                    <select value={parameters.promptMode || "verbatim"}
+                      onChange={(e) => setParameters((p) => ({ ...p, promptMode: e.target.value as "verbatim" | "assisted" }))}>
+                      <option value="verbatim">精确执行 · 保留用户描述</option>
+                      {profile?.protocol === "openai" && imageAPI === "responses" &&
+                        (!profile.capabilities?.promptModes || profile.capabilities.promptModes.includes("assisted")) &&
+                        <option value="assisted">创作辅助 · 允许补充视觉描述</option>}
+                    </select>
+                    <span className="studio-field-tip">
+                      {parameters.promptMode === "assisted"
+                        ? "允许 Responses 文本模型补充构图与视觉细节，同时要求保留主体、文字、数量和编辑限制。上游未返回改写文字时，历史不会推断它。"
+                        : "适合成熟提示词、中文文案和精确编辑。原样执行是模型指令，并非逐字执行的协议保证。Images 请先自行优化并确认描述，再生成。"}
+                    </span>
+                  </label>
+                )}
                 <div className="studio-form-row studio-reference-row">
                   <label>
                     参考图片
-                    <select value={referenceID} onChange={(e) => setReferenceID(e.target.value)}>
+                    <select value={referenceID} onChange={(e) => {
+                      setReferenceID(e.target.value);
+                      setAdditionalReferences((ids) => ids.filter((id) => id !== e.target.value));
+                      setMaskAssetID("");
+                    }}>
                       <option value="">无参考图</option>
                       {studio.snapshot.assets
                         .filter((a) => a.kind === "image" && !a.deletedAt)
@@ -1221,6 +1349,36 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                     导入参考图
                   </button>
                 </div>
+                {kind === "image" && profile?.protocol === "openai" && (
+                  <details className="studio-capability-editor">
+                    <summary>更多参考图与蒙版</summary>
+                    <label>追加参考图（按下方选择顺序使用）
+                      <select value="" onChange={(e) => {
+                        if (e.target.value) setAdditionalReferences((ids) => [...ids, e.target.value]);
+                      }}>
+                        <option value="">选择要追加的图片</option>
+                        {studio.snapshot.assets.filter((a) => a.kind === "image" && !a.deletedAt && a.id !== referenceID && !additionalReferences.includes(a.id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </label>
+                    {additionalReferences.map((id, index) => (
+                      <div className="studio-reference-item" key={id}>
+                        <span>{index + (referenceID ? 2 : 1)}. {studio.snapshot.assets.find((a) => a.id === id)?.name || "素材已不可用"}</span>
+                        <button type="button" onClick={() => setAdditionalReferences((ids) => ids.filter((i) => i !== id))}>移除</button>
+                      </div>
+                    ))}
+                    <p className="studio-field-tip">主参考图在最前；所有参考图使用保存的原文件。{modelCapabilities?.maxInputImages !== undefined ? `已记录上限 ${modelCapabilities.maxInputImages} 张。` : "数量上限尚未确认，请按上游说明选择。"}</p>
+                    {modelCapabilities?.supportsMask === true ? (
+                      <label>PNG 蒙版
+                        <select value={maskAssetID} onChange={(e) => setMaskAssetID(e.target.value)}>
+                          <option value="">不使用蒙版</option>
+                          {studio.snapshot.assets.filter((a) => a.kind === "image" && a.mime === "image/png" && !a.deletedAt).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                        <button type="button" className="studio-secondary" onClick={() => askImage(undefined, "mask")}><Upload size={16} />导入 PNG 蒙版</button>
+                        <span className="studio-field-tip">先导入与主参考图尺寸一致的 PNG 蒙版。透明区域表示需要编辑的区域；请先用已知样例核对上游约定。工作室不会把不支持的蒙版请求改成整图重绘。</span>
+                      </label>
+                    ) : <p className="studio-field-tip">蒙版仅在设置中确认当前模型与接口支持后开放。{maskAssetID && <button type="button" onClick={() => setMaskAssetID("")}>清除当前不受支持的蒙版</button>}</p>}
+                  </details>
+                )}
                 {profile?.protocol === "openai" ? (
                   <label>
                     输出尺寸
@@ -1261,6 +1419,48 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                       </label>
                     )}
                   </div>
+                )}
+                {kind === "image" && profile?.protocol === "openai" && (
+                  <>
+                    <button type="button" className="studio-secondary" disabled={!canApplyQualityPreset}
+                      title={canApplyQualityPreset ? "应用已确认的 high、PNG 与最大已记录原生尺寸" : "请先在设置中确认当前模型支持 high、PNG 和至少一个明确原生尺寸"}
+                      onClick={() => {
+                        const sizes = [...confirmedSizes].sort((a, b) => {
+                          const area = (value: string) => value.split("x").map(Number).reduce((x, y) => x * y, 1);
+                          return area(b) - area(a);
+                        });
+                        setParameters((p) => ({ ...p, size: sizes[0] }));
+                        setImageParameters((p) => ({ ...p, quality: "high", outputFormat: "png" }));
+                      }}>
+                      <Sparkles size={16} />高质量成品预设
+                    </button>
+                    <p className="studio-field-tip">{canApplyQualityPreset ? "使用已确认的 high、PNG 与记录中最大的原生尺寸，不会更换模型。" : "先在设置中确认 high、PNG 和明确原生尺寸，才能应用此预设。"}</p>
+                    <div className="studio-form-row">
+                      <label>图像质量
+                        <select value={imageParameters.quality ?? ""} onChange={(e) => setImageParameters((p) => ({ ...p, quality: e.target.value || undefined }))}>
+                          <option value="">上游默认</option>
+                          {(modelCapabilities?.qualities ?? ["low", "medium", "high"]).map((quality) => <option key={quality} value={quality}>{quality}</option>)}
+                        </select>
+                      </label>
+                      <label>文件格式
+                        <select required value={imageParameters.outputFormat ?? (modelCapabilities?.formats?.length && !modelCapabilities.formats.includes("png") ? "" : "png")} onChange={(e) => setImageParameters((p) => ({ ...p, outputFormat: e.target.value }))}>
+                          <option value="" disabled>请选择已确认的格式</option>
+                          {(modelCapabilities?.formats?.length ? modelCapabilities.formats : ["png", "jpeg", "webp"]).map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="studio-field-tip">{modelCapabilities?.qualities?.length ? "质量选项来自你的能力记录。" : "这些是常用参数，实际支持范围需由上游确认。"}PNG 无损保存原件；尺寸是模型请求尺寸，不代表额外放大。high 需模型明确支持，auto 不代表固定最高质量。</p>
+                    {modelCapabilities?.supportsInputFidelity === true && modelCapabilities.inputFidelityValues?.length ? <label>输入保真
+                      <select value={imageParameters.inputFidelity ?? ""} onChange={(e) => setImageParameters((p) => ({ ...p, inputFidelity: e.target.value || undefined }))}>
+                        <option value="">不发送</option>
+                        {modelCapabilities.inputFidelityValues.map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </label> : null}
+                    {(imageParameters.negativePrompt || profile.requestPolicy === "compat") && <label>反向提示词
+                      <textarea rows={2} value={imageParameters.negativePrompt ?? ""} onChange={(e) => setImageParameters((p) => ({ ...p, negativePrompt: e.target.value }))} />
+                      <span className="studio-field-tip">仅在上游明确支持且设置为「兼容中转扩展字段」时发送；标准模式下请清空此字段。</span>
+                    </label>}
+                  </>
                 )}
                 {kind === "video" && (
                   <label>
@@ -1457,6 +1657,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
               </button>
             </div>
             <LibraryMaintenance snapshot={studio.snapshot} refresh={studio.refresh} report={studio.report} />
+            <StudioNetworkSettings disabled={!desktop} />
             <div className="studio-settings-grid">
               <section>
                 <div className="studio-section-title">
@@ -1470,8 +1671,8 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                       <h3>{p.name}</h3>
                       <p>{p.baseUrl}</p>
                       <small>
-                        {p.protocol === "xai" ? "xAI" : "OpenAI 兼容"} ·{" "}
-                        {p.hasKey ? "密钥已保存" : "缺少密钥"} · {p.verifiedAt ? "已验证模型列表" : "未测试"}
+                        {p.providerPreset === "sub2api" ? "sub2api · " : ""}{p.protocol === "xai" ? "xAI" : "OpenAI 兼容"} ·{" "}
+                        {p.hasKey ? "密钥已保存" : "缺少密钥"} · {p.verifiedAt ? "模型列表已连通" : "未测试连接"}
                       </small>
                       <div className="studio-job-actions">
                         <button onClick={() => setProviderEdit(p)}>编辑配置</button>
@@ -1480,7 +1681,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                             void runAction(async () => {
                               await client.testProfile(p.id);
                               await studio.refresh();
-                              setNotice("已验证模型列表连接，不代表所有生成参数可用");
+                              setNotice("模型列表连接成功；尚未验证图片权限、工具调用或生成参数");
                             })
                           }
                         >
@@ -1528,12 +1729,8 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                 </p>
                 <p>浏览器预览仅在 IndexedDB 保存画布和导入图片，不保存密钥、不生成虚假结果。</p>
                 <p>
-                  经典编辑与工作室共用上游、任务和素材库。旧输出目录保留为导入源；历史数据升级前会自动备份。
+                  工作室统一管理上游、任务和素材。旧版配置与历史会自动迁移；旧输出目录和原文件继续保留。
                 </p>
-                <button className="studio-secondary" onClick={onClassic}>
-                  <Monitor size={16} />
-                  打开经典编辑器
-                </button>
               </aside>
             </div>
           </>
@@ -1548,7 +1745,7 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
               </h3>
               <span className={`studio-connection ${profile?.verifiedAt ? "verified" : ""}`}>
                 <i />
-                {profile?.verifiedAt ? "已验证" : "未测试"}
+                {profile?.verifiedAt ? "列表可达" : "未测试"}
               </span>
             </div>
             <button className="studio-model-button" onClick={() => setPage("settings")}>
@@ -1560,9 +1757,9 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
               <ChevronDown size={14} />
             </button>
             <div className="studio-capabilities">
-              <span>文本生图</span>
-              <span>参考图生成</span>
-              <span>视频生成</span>
+              <span>{profile?.imageApi === "responses" ? "Responses 图片工具" : "Images 生图 / 编辑"}</span>
+              <span>{profile?.capabilities ? "人工能力规则" : "生成能力待确认"}</span>
+              {profile?.videoModel && <span>已配置视频模型 · 待实测</span>}
             </div>
             <div className="studio-stats">
               <div>
@@ -1726,6 +1923,9 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                 className="studio-secondary"
                 onClick={() => {
                   setReferenceID(viewAsset.id);
+                  setKind("image");
+                  setMaskAssetID("");
+                  setAdditionalReferences([]);
                   setViewAsset(null);
                   setPage("create");
                 }}
@@ -1736,6 +1936,16 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
           </div>
         </Modal>
       )}
+      {promptAssistantOpen && <PromptAssistant profile={profile} prompt={prompt}
+        hasReferenceImages={Boolean(referenceID || additionalReferences.length)}
+        onClose={() => setPromptAssistantOpen(false)}
+        onConfirm={({ prompt: confirmed, originalPrompt, confirmedPrompt, promptMode }) => {
+          setPrompt(confirmed);
+          setPromptTrace({ originalPrompt, confirmedPrompt });
+          setParameters((p) => ({ ...p, promptMode }));
+          setPromptAssistantOpen(false);
+          setNotice("提示词已确认；点击生成后才会提交图片请求");
+        }} />}
       {providerEdit !== undefined && (
         <Modal title={providerEdit ? "编辑上游" : "添加上游"} onClose={() => setProviderEdit(undefined)}>
           <ProviderForm

@@ -17,7 +17,7 @@ func (e *Engine) runWithPolicy(ctx context.Context, j Job, key string, ref *Outp
 		var unsent *NotSentError
 		current, ok := e.Job(j.ID)
 		if !errors.As(err, &unsent) || ctx.Err() != nil || !ok || current.State != "running" || current.RemoteID != "" || current.ResultURL != "" {
-			return Output{}, err
+			return out, err
 		}
 		if remaining > 0 {
 			remaining--

@@ -775,6 +775,35 @@ export namespace backend {
 
 }
 
+export namespace client {
+
+	export class ImageModelCapabilities {
+	    qualities?: string[];
+	    sizes?: string[];
+	    formats?: string[];
+	    maxInputImages?: number;
+	    supportsMask?: boolean;
+	    supportsInputFidelity?: boolean;
+	    inputFidelityValues?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ImageModelCapabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.qualities = source["qualities"];
+	        this.sizes = source["sizes"];
+	        this.formats = source["formats"];
+	        this.maxInputImages = source["maxInputImages"];
+	        this.supportsMask = source["supportsMask"];
+	        this.supportsInputFidelity = source["supportsInputFidelity"];
+	        this.inputFidelityValues = source["inputFidelityValues"];
+	    }
+	}
+
+}
+
 export namespace compat {
 	
 	export class AdvancedFloatingPanelPrefs {
@@ -1169,6 +1198,10 @@ export namespace compat {
 export namespace studio {
 	
 	export class Asset {
+	    width?: number;
+	    height?: number;
+	    originalWidth?: number;
+	    originalHeight?: number;
 	    classicPinned?: boolean;
 	    deletedAt?: string;
 	    id: string;
@@ -1185,6 +1218,10 @@ export namespace studio {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.originalWidth = source["originalWidth"];
+	        this.originalHeight = source["originalHeight"];
 	        this.classicPinned = source["classicPinned"];
 	        this.deletedAt = source["deletedAt"];
 	        this.id = source["id"];
@@ -1280,6 +1317,24 @@ export namespace studio {
 		    return a;
 		}
 	}
+	export class ResultDownload {
+	    url: string;
+	    itemId?: string;
+	    outputIndex?: number;
+	    revisedPrompt?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ResultDownload(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.itemId = source["itemId"];
+	        this.outputIndex = source["outputIndex"];
+	        this.revisedPrompt = source["revisedPrompt"];
+	    }
+	}
 	export class ImageParameters {
 	    quality?: string;
 	    outputFormat?: string;
@@ -1327,6 +1382,8 @@ export namespace studio {
 	    nodeId?: string;
 	    kind: string;
 	    prompt: string;
+	    originalPrompt?: string;
+	    confirmedPrompt?: string;
 	    referenceAssetId?: string;
 	    parameters: Parameters;
 	
@@ -1348,6 +1405,8 @@ export namespace studio {
 	        this.nodeId = source["nodeId"];
 	        this.kind = source["kind"];
 	        this.prompt = source["prompt"];
+	        this.originalPrompt = source["originalPrompt"];
+	        this.confirmedPrompt = source["confirmedPrompt"];
 	        this.referenceAssetId = source["referenceAssetId"];
 	        this.parameters = this.convertValues(source["parameters"], Parameters);
 	    }
@@ -1370,7 +1429,41 @@ export namespace studio {
 		    return a;
 		}
 	}
+	export class ResultImage {
+	    assetId: string;
+	    itemId?: string;
+	    outputIndex?: number;
+	    revisedPrompt?: string;
+	    source: string;
+	    width?: number;
+	    height?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ResultImage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.assetId = source["assetId"];
+	        this.itemId = source["itemId"];
+	        this.outputIndex = source["outputIndex"];
+	        this.revisedPrompt = source["revisedPrompt"];
+	        this.source = source["source"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
 	export class Job {
+	    originalPrompt?: string;
+	    confirmedPrompt?: string;
+	    sentPrompt?: string;
+	    responseId?: string;
+	    requestId?: string;
+	    usage?: Record<string, any>;
+	    outputStatus?: string;
+	    parentAssetIds?: string[];
+	    resultAssetIds?: string[];
+	    resultImages?: ResultImage[];
 	    historyMode?: string;
 	    fallbackProfile?: Profile;
 	    revisedPrompt?: string;
@@ -1384,6 +1477,8 @@ export namespace studio {
 	    error?: string;
 	    resultAssetId?: string;
 	    resultUrl?: string;
+	    resultUrls?: string[];
+	    resultDownloads?: ResultDownload[];
 	    dependsOn: string[];
 	    createdAt: string;
 	    updatedAt: string;
@@ -1394,6 +1489,16 @@ export namespace studio {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPrompt = source["originalPrompt"];
+	        this.confirmedPrompt = source["confirmedPrompt"];
+	        this.sentPrompt = source["sentPrompt"];
+	        this.responseId = source["responseId"];
+	        this.requestId = source["requestId"];
+	        this.usage = source["usage"];
+	        this.outputStatus = source["outputStatus"];
+	        this.parentAssetIds = source["parentAssetIds"];
+	        this.resultAssetIds = source["resultAssetIds"];
+	        this.resultImages = this.convertValues(source["resultImages"], ResultImage);
 	        this.historyMode = source["historyMode"];
 	        this.fallbackProfile = this.convertValues(source["fallbackProfile"], Profile);
 	        this.revisedPrompt = source["revisedPrompt"];
@@ -1407,6 +1512,8 @@ export namespace studio {
 	        this.error = source["error"];
 	        this.resultAssetId = source["resultAssetId"];
 	        this.resultUrl = source["resultUrl"];
+	        this.resultUrls = source["resultUrls"];
+	        this.resultDownloads = this.convertValues(source["resultDownloads"], ResultDownload);
 	        this.dependsOn = source["dependsOn"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
@@ -1447,6 +1554,9 @@ export namespace studio {
 	    }
 	}
 	export class Parameters {
+	    promptMode?: string;
+	    outputFormat?: string;
+	    inputFidelity?: string;
 	    quality?: string;
 	    endpointPath?: string;
 	    size?: string;
@@ -1460,6 +1570,9 @@ export namespace studio {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.promptMode = source["promptMode"];
+	        this.outputFormat = source["outputFormat"];
+	        this.inputFidelity = source["inputFidelity"];
 	        this.quality = source["quality"];
 	        this.endpointPath = source["endpointPath"];
 	        this.size = source["size"];
@@ -1572,7 +1685,113 @@ export namespace studio {
 		    return a;
 		}
 	}
+	export class ModelProtocolCapabilities {
+	    images?: client.ImageModelCapabilities;
+	    responses?: client.ImageModelCapabilities;
+
+	    static createFrom(source: any = {}) {
+	        return new ModelProtocolCapabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.images = this.convertValues(source["images"], client.ImageModelCapabilities);
+	        this.responses = this.convertValues(source["responses"], client.ImageModelCapabilities);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResponsesCapabilities {
+	    imageTool?: boolean;
+	    sse?: boolean;
+	    websocket?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ResponsesCapabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.imageTool = source["imageTool"];
+	        this.sse = source["sse"];
+	        this.websocket = source["websocket"];
+	    }
+	}
+	export class ImagesCapabilities {
+	    generate?: boolean;
+	    edit?: boolean;
+	    stream?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ImagesCapabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.generate = source["generate"];
+	        this.edit = source["edit"];
+	        this.stream = source["stream"];
+	    }
+	}
+	export class ImageProviderCapabilities {
+	    schemaVersion: number;
+	    preferredApi?: string;
+	    images?: ImagesCapabilities;
+	    responses?: ResponsesCapabilities;
+	    promptModes?: string[];
+	    modelRules?: Record<string, ModelProtocolCapabilities>;
+
+	    static createFrom(source: any = {}) {
+	        return new ImageProviderCapabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schemaVersion = source["schemaVersion"];
+	        this.preferredApi = source["preferredApi"];
+	        this.images = this.convertValues(source["images"], ImagesCapabilities);
+	        this.responses = this.convertValues(source["responses"], ResponsesCapabilities);
+	        this.promptModes = source["promptModes"];
+	        this.modelRules = this.convertValues(source["modelRules"], ModelProtocolCapabilities, true);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Profile {
+	    providerPreset?: string;
+	    capabilities?: ImageProviderCapabilities;
 	    id: string;
 	    name: string;
 	    baseUrl: string;
@@ -1602,6 +1821,8 @@ export namespace studio {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.providerPreset = source["providerPreset"];
+	        this.capabilities = this.convertValues(source["capabilities"], ImageProviderCapabilities);
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.baseUrl = source["baseUrl"];
@@ -1625,6 +1846,24 @@ export namespace studio {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ChangeSet {
 	    epoch: string;
@@ -1677,6 +1916,9 @@ export namespace studio {
 
 
 
+
+
+
 	export class NetworkSettings {
 	    proxyMode?: string;
 	    proxyUrl?: string;
@@ -1691,6 +1933,9 @@ export namespace studio {
 	        this.proxyUrl = source["proxyUrl"];
 	    }
 	}
+
+
+
 
 
 

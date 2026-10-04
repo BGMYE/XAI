@@ -28,6 +28,20 @@ export function useStudio() {
   const report = useCallback((e: unknown) => {
     if (alive.current) setError(String(e instanceof Error ? e.message : e));
   }, []);
+  // Save responses and the change feed can arrive in either order. Keep the
+  // same three-way merge rules when applying a remote version after a save.
+  const mergeRemote = useCallback((remote: Project | undefined) => {
+    if (!remote || remote.deletedAt || conflicts.current.has(remote.id)) return;
+    const draft = drafts.current.get(remote.id);
+    if (!draft || remote.revision <= draft.base.revision) return;
+    try {
+      draft.local = mergeProject(draft.base, draft.local, remote);
+      draft.base = remote;
+    } catch (e) {
+      conflicts.current.add(remote.id);
+      throw e;
+    }
+  }, []);
   // Merges remote projects into drafts; `changed` limits the work to projects
   // a delta reports.
   const accept = useCallback(
@@ -47,16 +61,10 @@ export function useStudio() {
         if (remote.deletedAt) continue;
         const d = drafts.current.get(remote.id);
         if (!d) drafts.current.set(remote.id, { base: remote, local: remote });
-        else if (
-          !pending.current.has(remote.id) &&
-          !conflicts.current.has(remote.id) &&
-          remote.revision > d.base.revision
-        ) {
+        else if (!pending.current.has(remote.id)) {
           try {
-            d.local = mergeProject(d.base, d.local, remote);
-            d.base = remote;
+            mergeRemote(remote);
           } catch (e) {
-            conflicts.current.add(remote.id);
             report(e);
           }
         }
@@ -68,7 +76,7 @@ export function useStudio() {
         bump((n) => n + 1);
       }
     },
-    [report],
+    [mergeRemote, report],
   );
   // Brings the snapshot up to date: a delta when the backend supports it, the
   // whole snapshot otherwise. Calls during a refresh join it and run one more
@@ -138,52 +146,73 @@ export function useStudio() {
   const flush = useCallback(
     (id: string): Promise<void> => {
       if (pending.current.has(id)) return pending.current.get(id)!;
-      const task = (async () => {
-        if (conflicts.current.has(id)) throw Error("当前画布存在冲突，请先导出草稿并重新载入。");
-        if (alive.current) setSaving(true);
-        let retries = 0;
-        for (;;) {
-          const d = drafts.current.get(id);
-          if (!d || same(d.base, d.local)) return;
-          const sent = structuredClone(d.local);
-          try {
-            const saved = await client.saveProject(sent);
-            // Edits made while saving remain dirty and are saved next.
-            d.local = mergeProject(sent, d.local, saved);
-            d.base = saved;
-            retries = 0;
-          } catch (e) {
-            if (String(e).includes("revision conflict") && retries++ < 3) {
-              const s = await client.snapshot(),
-                remote = s.projects.find((p) => p.id === id);
-              if (!remote) throw e;
+      // Defer the body until `pending` contains its promise, including a clean
+      // or missing draft that finishes without reaching a backend await.
+      const task = Promise.resolve().then(async () => {
+        let failure: unknown;
+        try {
+          if (conflicts.current.has(id)) throw Error("当前画布存在冲突，请先导出草稿并重新载入。");
+          if (alive.current) setSaving(true);
+          let retries = 0;
+          for (;;) {
+            const d = drafts.current.get(id);
+            if (!d || same(d.base, d.local)) break;
+            const sent = structuredClone(d.local);
+            try {
+              const saved = await client.saveProject(sent);
+              // A deletion or explicit replacement while awaiting must win.
+              if (drafts.current.get(id) !== d) break;
               try {
-                d.local = mergeProject(d.base, d.local, remote);
-                d.base = remote;
+                // Preserve edits made while this request was in flight. Only
+                // this acknowledged response may advance the sent baseline.
+                d.local = mergeProject(sent, d.local, saved);
+                d.base = saved;
               } catch (conflict) {
                 conflicts.current.add(id);
                 throw conflict;
               }
-            } else throw e;
+              // A newer feed revision may already be consumed while pending.
+              // Apply it before deciding the draft is clean or saving again.
+              mergeRemote(current.current.projects.find((p) => p.id === id));
+              retries = 0;
+            } catch (e) {
+              if (String(e).includes("revision conflict") && retries++ < 3) {
+                const s = await client.snapshot();
+                if (drafts.current.get(id) !== d) break;
+                const remote = s.projects.find((p) => p.id === id);
+                if (!remote || remote.deletedAt) throw e;
+                mergeRemote(remote);
+              } else throw e;
+            }
           }
-        }
-      })();
-      pending.current.set(id, task);
-      void task
-        .catch((e) => {
-          failedSaves.current.add(id);
-          report(e);
-        })
-        .finally(() => {
+        } catch (e) {
+          failure = e;
+        } finally {
           pending.current.delete(id);
+          // Also reconcile skipped changes after a failed write. Keep the
+          // failure gate so this does not start an automatic retry loop.
+          try {
+            mergeRemote(current.current.projects.find((p) => p.id === id));
+          } catch (e) {
+            failure ??= e;
+          }
+          if (failure !== undefined) {
+            failedSaves.current.add(id);
+            report(failure);
+          } else failedSaves.current.delete(id);
           if (alive.current) {
             setSaving(pending.current.size > 0);
             bump((n) => n + 1);
           }
-        });
+        }
+        // Callers await reconciliation too; a conflict must block navigation.
+        if (failure !== undefined) throw failure;
+      });
+      pending.current.set(id, task);
+      void task.catch(() => undefined);
       return task;
     },
-    [report],
+    [mergeRemote, report],
   );
   useEffect(() => {
     const timer = setTimeout(() => {

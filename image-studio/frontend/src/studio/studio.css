@@ -4,7 +4,6 @@
 }
 .studio-app,
 .studio-dialog,
-.studio-return,
 .studio-loading {
   font-family: var(--studio-font);
   font-size: 14px;
@@ -33,8 +32,7 @@
   box-sizing: border-box;
 }
 .studio-app button,
-.studio-dialog button,
-.studio-return {
+.studio-dialog button {
   font: inherit;
   border: 0;
   cursor: pointer;
@@ -83,8 +81,7 @@
 }
 .studio-app button:focus-visible,
 .studio-app [tabindex]:focus-visible,
-.studio-dialog button:focus-visible,
-.studio-return:focus-visible {
+.studio-dialog button:focus-visible {
   outline: 2px solid #397feb;
   outline-offset: 3px;
 }
@@ -1987,20 +1984,6 @@
   color: #967050;
   font-size: 11px;
   padding: 6px;
-}
-.studio-return {
-  position: fixed;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  background: #f3f9ff !important;
-  border: 1px solid #b9d3ff !important;
-  color: #3675c4 !important;
-  box-shadow: 0 4px 20px #21466d44;
-  border-radius: 20px;
-  padding: 9px 20px !important;
-  font-size: 12px !important;
 }
 .studio-loading {
   position: fixed;

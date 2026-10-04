@@ -38,13 +38,16 @@ func checkID(id string) error {
 // editor. Fields after AllowLocal mirror the classic editor's options; the
 // Studio uses those it can honor and ignores the rest.
 type Profile struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	BaseURL    string `json:"baseUrl"`
-	ImageModel string `json:"imageModel"`
-	VideoModel string `json:"videoModel"`
-	Protocol   string `json:"protocol"`
-	AllowLocal bool   `json:"allowLocal"`
+	// A preset supplies guidance, not an assertion about upstream permissions.
+	ProviderPreset string                     `json:"providerPreset,omitempty"`
+	Capabilities   *ImageProviderCapabilities `json:"capabilities,omitempty"`
+	ID             string                     `json:"id"`
+	Name           string                     `json:"name"`
+	BaseURL        string                     `json:"baseUrl"`
+	ImageModel     string                     `json:"imageModel"`
+	VideoModel     string                     `json:"videoModel"`
+	Protocol       string                     `json:"protocol"`
+	AllowLocal     bool                       `json:"allowLocal"`
 	// ImageAPI selects the OpenAI-compatible image contract: the streamed
 	// Images API ("images", the default) or the Responses API image tool
 	// ("responses"), which is driven by TextModel.
@@ -163,6 +166,9 @@ func (p *Profile) Validate() error {
 		return errors.New("备用上游无效")
 	}
 	p.ModelIDs = normalizeModelIDs(p.ModelIDs)
+	if err := p.validateCapabilities(); err != nil {
+		return err
+	}
 	if len(p.BaseURL) > 2048 || len(p.ImageModel) > 200 || len(p.VideoModel) > 200 || len(p.TextModel) > 200 {
 		return errors.New("上游配置过长")
 	}
@@ -228,12 +234,15 @@ type Viewport struct {
 	Zoom float64 `json:"zoom"`
 }
 type Parameters struct {
-	Quality      string `json:"quality,omitempty"`
-	EndpointPath string `json:"endpointPath,omitempty"`
-	Size         string `json:"size,omitempty"`
-	Seconds      int    `json:"seconds,omitempty"`
-	AspectRatio  string `json:"aspectRatio,omitempty"`
-	Resolution   string `json:"resolution,omitempty"`
+	PromptMode    string `json:"promptMode,omitempty"`
+	OutputFormat  string `json:"outputFormat,omitempty"`
+	InputFidelity string `json:"inputFidelity,omitempty"`
+	Quality       string `json:"quality,omitempty"`
+	EndpointPath  string `json:"endpointPath,omitempty"`
+	Size          string `json:"size,omitempty"`
+	Seconds       int    `json:"seconds,omitempty"`
+	AspectRatio   string `json:"aspectRatio,omitempty"`
+	Resolution    string `json:"resolution,omitempty"`
 }
 type Node struct {
 	ID         string     `json:"id"`
@@ -362,6 +371,8 @@ type Request struct {
 	NodeID            string          `json:"nodeId,omitempty"`
 	Kind              string          `json:"kind"`
 	Prompt            string          `json:"prompt"`
+	OriginalPrompt    string          `json:"originalPrompt,omitempty"`
+	ConfirmedPrompt   string          `json:"confirmedPrompt,omitempty"`
 	ReferenceAssetID  string          `json:"referenceAssetId,omitempty"`
 	Parameters        Parameters      `json:"parameters"`
 }
@@ -384,10 +395,26 @@ type ImageParameters struct {
 }
 
 func (r Request) Validate(p Profile) error {
+	if r.Parameters.PromptMode != "" && r.Parameters.PromptMode != "verbatim" && r.Parameters.PromptMode != "assisted" {
+		return errors.New("提示词模式只能是精确执行或创作辅助")
+	}
+	if r.Parameters.PromptMode == "assisted" && (r.Kind != "image" || p.Protocol != "openai" || p.ImageAPI != responsesImageAPI) {
+		return errors.New("创作辅助需要 Responses 图像接口；Images 请先优化并确认提示词，再使用精确执行")
+	}
+	if len(r.OriginalPrompt) > 16000 || len(r.ConfirmedPrompt) > 16000 {
+		return errors.New("提示词历史最多 16000 字节")
+	}
+	if r.ConfirmedPrompt != "" && r.ConfirmedPrompt != r.Prompt {
+		return errors.New("已确认提示词必须与实际发送的提示词一致")
+	}
 	if r.Source != "" && r.Source != "classic" {
 		return errors.New("未知任务来源")
 	}
-	if len(r.ReferenceAssetIDs) > 16 || len(r.Image.NegativePrompt) > 16000 || len(r.Image.UserIdentifier) > 512 {
+	referenceCount := len(r.ReferenceAssetIDs)
+	if r.ReferenceAssetID != "" {
+		referenceCount++
+	}
+	if referenceCount > 16 || len(r.Image.NegativePrompt) > 16000 || len(r.Image.UserIdentifier) > 512 {
 		return errors.New("图像参数过长")
 	}
 	if (len(r.ReferenceAssetIDs) > 0 || r.MaskAssetID != "") && (r.Kind != "image" || p.Protocol != "openai") {
@@ -412,6 +439,9 @@ func (r Request) Validate(p Profile) error {
 	if err := p.usableFor(r.Kind); err != nil {
 		return err
 	}
+	if err := validateImageCapabilities(p, r); err != nil {
+		return err
+	}
 	if r.Kind == "video" && r.Parameters.Seconds != 0 {
 		s := r.Parameters.Seconds
 		if p.Protocol == "xai" && (s < 1 || s > 15) {
@@ -434,39 +464,76 @@ func (r Request) Validate(p Profile) error {
 }
 
 type Asset struct {
-	ClassicPinned bool   `json:"classicPinned,omitempty"`
-	DeletedAt     string `json:"deletedAt,omitempty"`
-	ID            string `json:"id"`
-	Kind          string `json:"kind"`
-	Name          string `json:"name"`
-	MIME          string `json:"mime"`
-	Bytes         int64  `json:"bytes"`
-	CreatedAt     string `json:"createdAt"`
-	FileName      string `json:"fileName"`
+	Width          int    `json:"width,omitempty"`
+	Height         int    `json:"height,omitempty"`
+	OriginalWidth  int    `json:"originalWidth,omitempty"`
+	OriginalHeight int    `json:"originalHeight,omitempty"`
+	ClassicPinned  bool   `json:"classicPinned,omitempty"`
+	DeletedAt      string `json:"deletedAt,omitempty"`
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	Name           string `json:"name"`
+	MIME           string `json:"mime"`
+	Bytes          int64  `json:"bytes"`
+	CreatedAt      string `json:"createdAt"`
+	FileName       string `json:"fileName"`
 }
 
 func (a Asset) URL() string { return "/studio-media/" + a.ID }
 
 type Job struct {
-	HistoryMode     string   `json:"historyMode,omitempty"`
-	FallbackProfile *Profile `json:"fallbackProfile,omitempty"`
-	RevisedPrompt   string   `json:"revisedPrompt,omitempty"`
-	ID              string   `json:"id"`
-	Request         Request  `json:"request"`
-	Profile         Profile  `json:"profile"`
-	Fingerprint     string   `json:"fingerprint"`
-	State           string   `json:"state"`
-	RemoteID        string   `json:"remoteId,omitempty"`
-	Progress        int      `json:"progress"`
-	Error           string   `json:"error,omitempty"`
-	ResultAssetID   string   `json:"resultAssetId,omitempty"`
+	OriginalPrompt  string         `json:"originalPrompt,omitempty"`
+	ConfirmedPrompt string         `json:"confirmedPrompt,omitempty"`
+	SentPrompt      string         `json:"sentPrompt,omitempty"`
+	ResponseID      string         `json:"responseId,omitempty"`
+	RequestID       string         `json:"requestId,omitempty"`
+	Usage           map[string]any `json:"usage,omitempty"`
+	OutputStatus    string         `json:"outputStatus,omitempty"`
+	ParentAssetIDs  []string       `json:"parentAssetIds,omitempty"`
+	ResultAssetIDs  []string       `json:"resultAssetIds,omitempty"`
+	ResultImages    []ResultImage  `json:"resultImages,omitempty"`
+	HistoryMode     string         `json:"historyMode,omitempty"`
+	FallbackProfile *Profile       `json:"fallbackProfile,omitempty"`
+	RevisedPrompt   string         `json:"revisedPrompt,omitempty"`
+	ID              string         `json:"id"`
+	Request         Request        `json:"request"`
+	Profile         Profile        `json:"profile"`
+	Fingerprint     string         `json:"fingerprint"`
+	State           string         `json:"state"`
+	RemoteID        string         `json:"remoteId,omitempty"`
+	Progress        int            `json:"progress"`
+	Error           string         `json:"error,omitempty"`
+	ResultAssetID   string         `json:"resultAssetId,omitempty"`
 	// ResultURL is set once the upstream has produced an image but before it
 	// is downloaded. It lets an interrupted download resume without
 	// regenerating (and paying for) the image.
-	ResultURL string   `json:"resultUrl,omitempty"`
-	DependsOn []string `json:"dependsOn"`
-	CreatedAt string   `json:"createdAt"`
-	UpdatedAt string   `json:"updatedAt"`
+	ResultURL       string           `json:"resultUrl,omitempty"`
+	ResultURLs      []string         `json:"resultUrls,omitempty"`
+	ResultDownloads []ResultDownload `json:"resultDownloads,omitempty"`
+	DependsOn       []string         `json:"dependsOn"`
+	CreatedAt       string           `json:"createdAt"`
+	UpdatedAt       string           `json:"updatedAt"`
+}
+
+// ResultImage stores generation-specific provenance separately from immutable,
+// content-addressed assets, which may be reused by multiple jobs.
+type ResultImage struct {
+	AssetID       string `json:"assetId"`
+	ItemID        string `json:"itemId,omitempty"`
+	OutputIndex   *int   `json:"outputIndex,omitempty"`
+	RevisedPrompt string `json:"revisedPrompt,omitempty"`
+	Source        string `json:"source"`
+	Width         int    `json:"width,omitempty"`
+	Height        int    `json:"height,omitempty"`
+}
+
+// ResultDownload pins final-image metadata with its recovery URL before any
+// download, so a interrupted retrieval cannot lose upstream provenance.
+type ResultDownload struct {
+	URL           string `json:"url"`
+	ItemID        string `json:"itemId,omitempty"`
+	OutputIndex   *int   `json:"outputIndex,omitempty"`
+	RevisedPrompt string `json:"revisedPrompt,omitempty"`
 }
 
 func terminal(state string) bool {
