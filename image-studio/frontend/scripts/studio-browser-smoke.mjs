@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
-import {testDraftSaves} from './studio-save-regression.mjs';
+import {testChangeFeed, testDraftSaves} from './studio-save-regression.mjs';
 
 // Exercise the production build with no credentials or paid API requests.
 const out = new URL('../studio-evidence/', import.meta.url);
@@ -205,6 +205,7 @@ try {
     }
     pass('Responsive layout at 1100 and 760 pixels, including desktop window controls');
     for (const check of await testDraftSaves(context)) pass(check);
+    for (const check of await testChangeFeed(context)) pass(check);
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
     pass('No uncaught errors or external network calls');

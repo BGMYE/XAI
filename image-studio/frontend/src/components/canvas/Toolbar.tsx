@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Crop, FlipHorizontal, FlipVertical, RotateCcw, RotateCw } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioState } from "../../state/studioStore";
 import { usePlatform } from "../../platform/context";
 import { qualityLabel, sizeLabel } from "../history/historyLabels";
 import {
@@ -24,7 +24,13 @@ export function Toolbar() {
     undoStack, redoStack, undo, redo,
     rotateCurrent, flipCurrent, cropToRect,
     openResultDetail,
-  } = useStudioStore();
+  } = useStudioState(
+    "currentImage", "tool", "brushSize", "brushMode", "annotationKind", "annotationColor", "annotations",
+    "selectedAnnotationId", "fullscreen", "batchResults", "resultGridOpen", "openResultGrid",
+    "closeResultGrid", "setField", "clearCanvas", "toggleFullscreen", "saveCurrentImageAs", "importMaskImage",
+    "resetMask", "clearAnnotations", "undoStack", "redoStack", "undo", "redo", "rotateCurrent", "flipCurrent",
+    "cropToRect", "openResultDetail",
+  );
   const selRect = annotations.find((a) => a.id === selectedAnnotationId && a.kind === "rect");
   const { isAndroidPhone, isMac, usesFluentUI, usesAppleUI } = usePlatform();
   const [mobileAdjustOpen, setMobileAdjustOpen] = useState(false);

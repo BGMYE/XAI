@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ArrowDownToLine,
   FileText,
@@ -17,7 +26,7 @@ import {
 } from "lucide-react";
 import { connect, exportTemplate, fitNodes, mergeProject, removeNodes, uid, zoomAt } from "./graph.mjs";
 import { downloadText, mediaURL } from "./client";
-import type { Asset, Project, StudioNode } from "./types";
+import type { Asset, Project, StudioNode, Viewport } from "./types";
 const labels = { prompt: "提示词", image: "图像生成", video: "视频生成", asset: "素材", note: "便签" };
 const icons = { prompt: FileText, image: ImagePlus, video: Video, asset: ImagePlus, note: StickyNote };
 type Props = {
@@ -30,37 +39,167 @@ type Props = {
   running: boolean;
 };
 type Change = { before: Project; after: Project };
-export function Canvas({ project, assets, onChange, onRun, onImport, report, running }: Props) {
-  const board = useRef<HTMLDivElement>(null),
-    latest = useRef(project);
+// A gesture in progress. It is drawn on top of the project and written to it
+// once, when the gesture ends, so the app and its autosave see one change per
+// drag or zoom instead of one per pointer event.
+type Overlay = {
+  projectID: string;
+  viewport?: Viewport;
+  move?: { ids: string[]; dx: number; dy: number; originals: Map<string, StudioNode>; zoom: number };
+};
+function withOverlay(p: Project, o: Overlay | null): Project {
+  if (!o || o.projectID !== p.id) return p;
+  let nodes = p.nodes;
+  if (o.move) {
+    const { ids, dx, dy, originals, zoom } = o.move;
+    nodes = p.nodes.map((n) => {
+      const old = originals.get(n.id);
+      return old && ids.includes(n.id) ? { ...n, x: old.x + dx / zoom, y: old.y + dy / zoom } : n;
+    });
+  }
+  return { ...p, nodes, viewport: o.viewport ?? p.viewport };
+}
+type NodeActions = {
+  begin(e: ReactPointerEvent, node: StudioNode): void;
+  connectTo(id: string): void;
+  toggleLink(id: string): void;
+  pick(id: string): void;
+};
+// Nodes keep their identity while other nodes move or the view pans, so only
+// the nodes that actually change are rendered again.
+const NodeView = memo(function NodeView({
+  node: n,
+  asset,
+  selected,
+  linking,
+  linkSource,
+  actions,
+}: {
+  node: StudioNode;
+  asset?: Asset;
+  selected: boolean;
+  linking: boolean;
+  linkSource: boolean;
+  actions: NodeActions;
+}) {
+  const Icon = icons[n.kind];
+  return (
+    <article
+      className={`studio-node ${selected ? "selected" : ""} kind-${n.kind}`}
+      style={{ left: n.x, top: n.y }}
+      onPointerDown={(e) => actions.begin(e, n)}
+    >
+      <header>
+        <Icon size={16} />
+        <strong>{n.title}</strong>
+        <span>{labels[n.kind]}</span>
+      </header>
+      {(n.kind === "image" || n.kind === "video") && (
+        <button
+          className={`studio-port input ${linking ? "waiting" : ""}`}
+          aria-label={`连接到${n.title}`}
+          title="先点来源节点的右侧圆点，再点这里"
+          onClick={() => actions.connectTo(n.id)}
+        />
+      )}
+      <div className="studio-node-body">
+        {asset ? (
+          asset.kind === "image" ? (
+            <img src={mediaURL(asset.id)} alt={asset.name} loading="lazy" draggable={false} />
+          ) : (
+            <video src={mediaURL(asset.id)} controls preload="metadata" />
+          )
+        ) : n.kind === "asset" ? (
+          <button className="studio-node-missing" onClick={() => actions.pick(n.id)}>
+            选择本地素材
+            <br />
+            <small>模板不包含原始文件</small>
+          </button>
+        ) : (
+          <>
+            <p>
+              {n.text ||
+                (n.kind === "prompt"
+                  ? "在右侧写下你的灵感…"
+                  : n.kind === "note"
+                    ? "记录想法，不单独触发生成。"
+                    : "连接提示词或填写描述")}
+            </p>
+            {(n.kind === "image" || n.kind === "video") && (
+              <small className="studio-node-foot">
+                {n.kind === "image" ? "图片 API" : "视频 API"} ·{" "}
+                {n.parameters.size || n.parameters.aspectRatio || "上游默认"}
+              </small>
+            )}
+          </>
+        )}
+      </div>
+      <button
+        className={`studio-port output ${linkSource ? "active" : ""}`}
+        aria-label={`从${n.title}连线`}
+        title="点击后选择目标节点左侧圆点"
+        onClick={() => actions.toggleLink(n.id)}
+      />
+    </article>
+  );
+});
+export function Canvas({ project: source, assets, onChange, onRun, onImport, report, running }: Props) {
+  const board = useRef<HTMLDivElement>(null);
+  const overlay = useRef<Overlay | null>(null),
+    settleTimer = useRef<number>();
+  const [frame, redraw] = useReducer((n: number) => n + 1, 0);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  // The drawn project: the saved one plus the gesture in progress. `frame`
+  // advances whenever the overlay ref changes.
+  const project = useMemo(() => withOverlay(source, overlay.current), [source, frame]);
+  const latest = useRef(project);
   latest.current = project;
   const [selected, setSelected] = useState<string[]>([]),
     [link, setLink] = useState("");
-  const [, redraw] = useState(0);
+  const selectedRef = useRef(selected),
+    linkRef = useRef(link);
+  selectedRef.current = selected;
+  linkRef.current = link;
   const undo = useRef<Change[]>([]),
     redo = useRef<Change[]>([]),
     space = useRef(false);
   const drag = useRef<{
     start: { x: number; y: number };
     before: Project;
+    originals: Map<string, StudioNode>;
     ids: string[];
     pan: boolean;
   } | null>(null);
+  // Writes a pending gesture to the project; a gesture from another canvas is dropped.
+  const settle = useCallback(() => {
+    window.clearTimeout(settleTimer.current);
+    const o = overlay.current;
+    overlay.current = null;
+    if (!o || o.projectID !== sourceRef.current.id) return;
+    onChange(withOverlay(sourceRef.current, o));
+    redraw();
+  }, [onChange]);
+  useEffect(() => () => settle(), [settle]);
   useEffect(() => {
     setSelected([]);
     setLink("");
     undo.current = [];
     redo.current = [];
     drag.current = null;
-  }, [project.id]);
+  }, [source.id]);
   const apply = (next: Project, history = true) => {
+    // `next` was derived from the drawn project, so it already holds any
+    // pending gesture.
+    window.clearTimeout(settleTimer.current);
+    overlay.current = null;
     if (history) {
       undo.current = [...undo.current.slice(-49), { before: latest.current, after: next }];
       redo.current = [];
     }
     latest.current = next;
     onChange(next);
-    redraw((n) => n + 1);
+    redraw();
   };
   const travel = (back: boolean) => {
     const from = back ? undo.current : redo.current,
@@ -85,78 +224,88 @@ export function Canvas({ project, assets, onChange, onRun, onImport, report, run
     if (!el) return;
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      const r = el.getBoundingClientRect(),
-        p = latest.current;
-      onChange({
-        ...p,
+      if (drag.current) return;
+      const r = el.getBoundingClientRect();
+      // Several wheel events can arrive before a render; build on the newest view.
+      const pending = overlay.current?.projectID === sourceRef.current.id ? overlay.current : null;
+      const view = pending?.viewport ?? latest.current.viewport;
+      overlay.current = {
+        ...pending,
+        projectID: sourceRef.current.id,
         viewport: zoomAt(
-          p.viewport,
+          view,
           { x: e.clientX - r.left, y: e.clientY - r.top },
-          p.viewport.zoom * Math.exp(-e.deltaY * 0.0015),
+          view.zoom * Math.exp(-e.deltaY * 0.0015),
         ),
-      });
+      };
+      redraw();
+      window.clearTimeout(settleTimer.current);
+      settleTimer.current = window.setTimeout(settle, 250);
     };
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
-  }, [onChange]);
+  }, [settle]);
   const begin = (e: ReactPointerEvent, node?: StudioNode) => {
     if (e.button !== 0 && e.button !== 1) return;
     if ((e.target as HTMLElement).closest("button,input,textarea,select,video,a,.studio-edge-hit")) return;
     e.preventDefault();
     e.stopPropagation();
     board.current?.focus();
+    // The drawn project already includes a pending zoom; settle writes it.
+    const before = latest.current;
+    settle();
+    const current = selectedRef.current;
     const pan = !node || space.current || e.button === 1;
     const ids = pan
       ? []
       : e.shiftKey
-        ? selected.includes(node!.id)
-          ? selected
-          : [...selected, node!.id]
-        : selected.includes(node!.id)
-          ? selected
+        ? current.includes(node!.id)
+          ? current
+          : [...current, node!.id]
+        : current.includes(node!.id)
+          ? current
           : [node!.id];
     if (!pan) setSelected(ids);
     else if (!space.current && e.button === 0) setSelected([]);
-    drag.current = { start: { x: e.clientX, y: e.clientY }, before: latest.current, ids, pan };
+    const originals = new Map(
+      pan ? [] : before.nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, n]),
+    );
+    drag.current = { start: { x: e.clientX, y: e.clientY }, before, originals, ids, pan };
     board.current?.setPointerCapture(e.pointerId);
   };
   const move = (e: ReactPointerEvent) => {
     const d = drag.current;
     if (!d) return;
     const dx = e.clientX - d.start.x,
-      dy = e.clientY - d.start.y,
-      p = latest.current;
-    if (d.pan)
-      apply(
-        {
-          ...p,
-          viewport: { ...d.before.viewport, x: d.before.viewport.x + dx, y: d.before.viewport.y + dy },
-        },
-        false,
-      );
-    else {
-      const originals = new Map(d.before.nodes.map((n) => [n.id, n]));
-      apply(
-        {
-          ...p,
-          nodes: p.nodes.map((n) => {
-            const old = originals.get(n.id);
-            return d.ids.includes(n.id) && old
-              ? { ...n, x: old.x + dx / d.before.viewport.zoom, y: old.y + dy / d.before.viewport.zoom }
-              : n;
-          }),
-        },
-        false,
-      );
-    }
+      dy = e.clientY - d.start.y;
+    // Back at the start, nothing is pending and releasing records no step.
+    overlay.current =
+      !dx && !dy
+        ? null
+        : d.pan
+          ? {
+              projectID: d.before.id,
+              viewport: { ...d.before.viewport, x: d.before.viewport.x + dx, y: d.before.viewport.y + dy },
+            }
+          : {
+              projectID: d.before.id,
+              move: { ids: d.ids, dx, dy, originals: d.originals, zoom: d.before.viewport.zoom },
+            };
+    redraw();
   };
   const end = () => {
     const d = drag.current;
-    if (d && JSON.stringify(d.before) !== JSON.stringify(latest.current)) {
-      undo.current = [...undo.current.slice(-49), { before: d.before, after: latest.current }];
-      redo.current = [];
-    }
     drag.current = null;
+    const o = overlay.current;
+    if (!d || !o) return;
+    overlay.current = null;
+    if (o.projectID !== sourceRef.current.id) return;
+    const after = withOverlay(sourceRef.current, o);
+    undo.current = [...undo.current.slice(-49), { before: d.before, after }];
+    redo.current = [];
+    latest.current = after;
+    onChange(after);
+    redraw();
   };
   const add = (kind: StudioNode["kind"]) => {
     const p = latest.current,
@@ -188,8 +337,33 @@ export function Canvas({ project, assets, onChange, onRun, onImport, report, run
         board.current?.clientHeight ?? 600,
       ),
     });
-  const assetMap = new Map(assets.map((a) => [a.id, a])),
-    nodeMap = new Map(project.nodes.map((n) => [n.id, n]));
+  // Node handlers read current state through refs, so their identity is stable.
+  const handlers = useRef({ begin, connectTo: (_id: string) => {}, toggleLink: (_id: string) => {} });
+  handlers.current = {
+    begin,
+    connectTo: (id: string) => {
+      const from = linkRef.current;
+      if (!from) return;
+      try {
+        apply(connect(latest.current, from, id));
+        setLink("");
+      } catch (e) {
+        report(e);
+      }
+    },
+    toggleLink: (id: string) => setLink((value) => (value === id ? "" : id)),
+  };
+  const actions = useMemo<NodeActions>(
+    () => ({
+      begin: (e, node) => handlers.current.begin(e, node),
+      connectTo: (id) => handlers.current.connectTo(id),
+      toggleLink: (id) => handlers.current.toggleLink(id),
+      pick: (id) => setSelected([id]),
+    }),
+    [],
+  );
+  const assetMap = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]),
+    nodeMap = useMemo(() => new Map(project.nodes.map((n) => [n.id, n])), [project.nodes]);
   return (
     <div className="studio-canvas-layout">
       <div
@@ -279,78 +453,17 @@ export function Canvas({ project, assets, onChange, onRun, onImport, report, run
               );
             })}
           </svg>
-          {project.nodes.map((n) => {
-            const asset = n.assetId ? assetMap.get(n.assetId) : undefined,
-              Icon = icons[n.kind];
-            return (
-              <article
-                key={n.id}
-                className={`studio-node ${selected.includes(n.id) ? "selected" : ""} kind-${n.kind}`}
-                style={{ left: n.x, top: n.y }}
-                onPointerDown={(e) => begin(e, n)}
-              >
-                <header>
-                  <Icon size={16} />
-                  <strong>{n.title}</strong>
-                  <span>{labels[n.kind]}</span>
-                </header>
-                {(n.kind === "image" || n.kind === "video") && (
-                  <button
-                    className={`studio-port input ${link ? "waiting" : ""}`}
-                    aria-label={`连接到${n.title}`}
-                    title="先点来源节点的右侧圆点，再点这里"
-                    onClick={() => {
-                      if (!link) return;
-                      try {
-                        apply(connect(project, link, n.id));
-                        setLink("");
-                      } catch (e) {
-                        report(e);
-                      }
-                    }}
-                  />
-                )}
-                <div className="studio-node-body">
-                  {asset ? (
-                    asset.kind === "image" ? (
-                      <img src={mediaURL(asset.id)} alt={asset.name} loading="lazy" draggable={false} />
-                    ) : (
-                      <video src={mediaURL(asset.id)} controls preload="metadata" />
-                    )
-                  ) : n.kind === "asset" ? (
-                    <button className="studio-node-missing" onClick={() => setSelected([n.id])}>
-                      选择本地素材
-                      <br />
-                      <small>模板不包含原始文件</small>
-                    </button>
-                  ) : (
-                    <>
-                      <p>
-                        {n.text ||
-                          (n.kind === "prompt"
-                            ? "在右侧写下你的灵感…"
-                            : n.kind === "note"
-                              ? "记录想法，不单独触发生成。"
-                              : "连接提示词或填写描述")}
-                      </p>
-                      {(n.kind === "image" || n.kind === "video") && (
-                        <small className="studio-node-foot">
-                          {n.kind === "image" ? "图片 API" : "视频 API"} ·{" "}
-                          {n.parameters.size || n.parameters.aspectRatio || "上游默认"}
-                        </small>
-                      )}
-                    </>
-                  )}
-                </div>
-                <button
-                  className={`studio-port output ${link === n.id ? "active" : ""}`}
-                  aria-label={`从${n.title}连线`}
-                  title="点击后选择目标节点左侧圆点"
-                  onClick={() => setLink(link === n.id ? "" : n.id)}
-                />
-              </article>
-            );
-          })}
+          {project.nodes.map((n) => (
+            <NodeView
+              key={n.id}
+              node={n}
+              asset={n.assetId ? assetMap.get(n.assetId) : undefined}
+              selected={selected.includes(n.id)}
+              linking={Boolean(link)}
+              linkSource={link === n.id}
+              actions={actions}
+            />
+          ))}
         </div>
         {!project.nodes.length && (
           <div className="studio-canvas-empty">

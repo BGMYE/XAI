@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -52,6 +52,8 @@ import type {
 } from "./types";
 
 type Page = "home" | "create" | "works" | "assets" | "canvas" | "projects" | "history" | "settings";
+// Works, assets and history render this many entries at a time.
+const pageSize = 60;
 const stateNames: Record<string, string> = {
   queued: "排队中",
   running: "生成中",
@@ -609,24 +611,61 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
     const runtime = (window as unknown as { runtime?: Record<string, () => void> }).runtime;
     runtime?.[method]?.();
   };
-  const generatedIDs = new Set(studio.snapshot.jobs.map((j) => j.resultAssetId).filter(Boolean));
-  const relevantAssets = studio.snapshot.assets.filter((a) => page === "assets" || generatedIDs.has(a.id));
-  const matches = (a: Asset) =>
-    a.name.toLowerCase().includes(query.toLowerCase()) ||
-    studio.snapshot.jobs.some(
-      (j) => j.resultAssetId === a.id && j.request.prompt.toLowerCase().includes(query.toLowerCase()),
+  const { jobs, assets: allAssets, projects } = studio.snapshot;
+  // Prompts of the jobs that produced each asset, for search. Built once per
+  // job list instead of scanning every job for every asset on each keystroke.
+  const resultPrompts = useMemo(() => {
+    const prompts = new Map<string, string>();
+    for (const j of jobs)
+      if (j.resultAssetId)
+        prompts.set(
+          j.resultAssetId,
+          `${prompts.get(j.resultAssetId) ?? ""}\n${j.request.prompt.toLowerCase()}`,
+        );
+    return prompts;
+  }, [jobs]);
+  const assets = useMemo(() => {
+    const needle = query.toLowerCase();
+    return allAssets.filter(
+      (a) =>
+        (page === "assets" || resultPrompts.has(a.id)) &&
+        (filter === "all" || a.kind === filter) &&
+        (a.name.toLowerCase().includes(needle) || (resultPrompts.get(a.id)?.includes(needle) ?? false)),
     );
-  const assets = relevantAssets.filter((a) => (filter === "all" || a.kind === filter) && matches(a));
-  const finished = studio.snapshot.jobs.filter((j) => j.state === "succeeded"),
-    today = finished.filter((j) => new Date(j.updatedAt).toDateString() === new Date().toDateString()).length;
-  const activeJobs = studio.snapshot.jobs.filter((j) => j.state === "running" || j.state === "queued");
+  }, [allAssets, resultPrompts, page, filter, query]);
+  const { finished, today, activeJobs } = useMemo(() => {
+    const finished = jobs.filter((j) => j.state === "succeeded"),
+      day = new Date().toDateString();
+    return {
+      finished,
+      today: finished.filter((j) => new Date(j.updatedAt).toDateString() === day).length,
+      activeJobs: jobs.filter((j) => j.state === "running" || j.state === "queued"),
+    };
+  }, [jobs]);
+  const usesGenerators = useMemo(
+    () => projects.some((p) => p.nodes.some((n) => n.kind === "image" || n.kind === "video")),
+    [projects],
+  );
   const completed = [
     Boolean(profile?.hasKey),
     finished.some((j) => j.request.kind === "image"),
     finished.some((j) => j.request.kind === "video"),
-    studio.snapshot.projects.some((p) => p.nodes.some((n) => n.kind === "image" || n.kind === "video")),
+    usesGenerators,
   ];
   const completeCount = completed.filter(Boolean).length;
+  // Long lists render in pages; more appear on request.
+  const [shownAssets, setShownAssets] = useState(pageSize),
+    [shownJobs, setShownJobs] = useState(pageSize);
+  useEffect(() => {
+    setShownAssets(pageSize);
+    setShownJobs(pageSize);
+  }, [page, filter, query]);
+  const more = (shown: number, total: number, grow: () => void) =>
+    total > shown && (
+      <button className="studio-secondary studio-more" onClick={grow}>
+        显示更多（还有 {total - shown} 项）
+      </button>
+    );
   const gallery = (items: Asset[], limit?: number) => (
     <div className="studio-gallery">
       {items.slice(0, limit ?? items.length).map((a) => (
@@ -1293,7 +1332,10 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
               </span>
             </div>
             {assets.length ? (
-              gallery(assets)
+              <>
+                {gallery(assets, shownAssets)}
+                {more(shownAssets, assets.length, () => setShownAssets((n) => n + pageSize))}
+              </>
             ) : (
               <div className="studio-empty-panel">
                 <Folder size={46} />
@@ -1368,8 +1410,11 @@ export function StudioApp({ isMac, onClassic }: { isMac: boolean; onClassic(): v
                 刷新
               </button>
             </div>
-            {studio.snapshot.jobs.length ? (
-              jobsPanel(studio.snapshot.jobs)
+            {jobs.length ? (
+              <>
+                {jobsPanel(jobs.slice(0, shownJobs))}
+                {more(shownJobs, jobs.length, () => setShownJobs((n) => n + pageSize))}
+              </>
             ) : (
               <div className="studio-empty-panel">
                 <Clock3 size={45} />

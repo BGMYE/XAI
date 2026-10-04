@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import {
   DEFAULT_AUTO_RETRY_COUNT,
   normalizeAutoRetryCount,
@@ -2508,6 +2509,21 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   importImageFile: async (file) => imageActions.importImageFile(file),
 }));
+
+/**
+ * Subscribes a component to the named fields only. It re-renders when one of
+ * them changes, not on every store update; generation progress updates the
+ * store many times per second.
+ */
+export function useStudioState<K extends keyof StudioState>(...keys: K[]): Pick<StudioState, K> {
+  return useStudioStore(
+    useShallow((state: StudioState) => {
+      const picked = {} as Pick<StudioState, K>;
+      for (const key of keys) picked[key] = state[key];
+      return picked;
+    }),
+  );
+}
 
 // Fire one job (concurrent member of a batch). Registers its own EventsOn
 // callbacks; updates store.runningJobs / jobsCompleted as the run progresses.

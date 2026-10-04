@@ -3,7 +3,7 @@ import {
   Bell, Download, Folder, FolderEdit, Github, Info, KeyRound,
   MessageSquare, Monitor, Moon, Network, Plug, RotateCw, Save, Sun, Trash2, Upload,
 } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import {
   GetOutputDir, OpenOutputDir, OpenExternalURL, ChooseOutputDir, SetOutputDir,
 } from "../../platform/runtime/host";
@@ -105,7 +105,18 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     previewCompletionSound,
     setCompletionNotificationEnabled,
     requestCompletionNotificationPermission,
-  } = useStudioStore();
+  } = useStudioState(
+    "kernelRuntimeMode", "proxyMode", "proxyURL", "autoRetryEnabled", "autoRetryCount",
+    "protectStreamPreview", "theme", "fontScale", "setField", "setAPIKey", "setProxyConfig", "history",
+    "clearHistory", "exportHistory", "importHistory", "pruneHistoryOlderThanDays", "setTheme", "setFontScale",
+    "pushToast", "apiKey", "baseURL", "apiMode", "profiles", "activeProfileId", "setActiveProfile",
+    "createProfile", "updateProfile", "openUpstreamConfig", "testAPIKey", "isTestingKey",
+    "savePromptSuppressed", "setSavePromptSuppressed", "keepLogs", "setKeepLogs", "cleanupPreviewCacheOnExit",
+    "setCleanupPreviewCacheOnExit", "completionSound", "completionNotification",
+    "completionNotificationPermission", "setCompletionSoundEnabled", "setCompletionSoundMode",
+    "setCompletionSoundCustom", "resetCompletionSoundCustom", "previewCompletionSound",
+    "setCompletionNotificationEnabled", "requestCompletionNotificationPermission",
+  );
 
   const [outputDir, setOutputDir] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);

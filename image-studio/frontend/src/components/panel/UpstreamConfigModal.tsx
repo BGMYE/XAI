@@ -3,7 +3,7 @@ import "./upstream-config.css";
 import "../../styles/_xai-typography.css";
 import { ClipboardPaste, Eye, EyeOff, HelpCircle, Info, Plug, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import {
   ExportUpstreamConfigToFile,
   ImportUpstreamConfigFromFile,
@@ -38,7 +38,10 @@ export function UpstreamConfigModal({
     profiles, activeProfileId, aiProfileId,
     createProfile, updateProfile, deleteProfile, duplicateProfile, setActiveProfile, setAIProfile,
     testAPIKey, isTestingKey, pushToast,
-  } = useStudioStore();
+  } = useStudioState(
+    "profiles", "activeProfileId", "aiProfileId", "createProfile", "updateProfile", "deleteProfile",
+    "duplicateProfile", "setActiveProfile", "setAIProfile", "testAPIKey", "isTestingKey", "pushToast",
+  );
   const canSyncCodexConfig = canLoadCodexAPIConfig();
 
   // selected = 当前编辑的 profile id(可以跟 active 不同 —— 用户在浏览/编辑

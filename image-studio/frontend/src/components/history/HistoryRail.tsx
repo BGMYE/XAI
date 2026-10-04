@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Clock3, CopyPlus, Filter, GalleryVerticalEnd,
   Image as ImageIcon, ListFilter, Loader2, RotateCcw, Search, Settings2, Split, Trash2,
 } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import type { HistoryItem, Mode } from "../../types/domain";
 import { ContextMenu } from "../common/ContextMenu";
 import { RawResponseModal } from "./RawResponseModal";
@@ -37,7 +37,13 @@ export function HistoryRail() {
     profiles, activeProfileId, setActiveProfile,
     openUpstreamConfig, openHistoryTimeline, testAPIKey, isTestingKey,
     historyRailCollapsed, historyHasMore, historyLoading, loadMoreHistory, setHistoryRailCollapsed,
-  } = useStudioStore();
+  } = useStudioState(
+    "history", "currentImage", "reuseAsSource", "deleteHistoryItem", "clearHistory", "setField", "compareB",
+    "setCompareB", "pushToast", "fullscreen", "applyHistoryParams", "regenerateFromHistory",
+    "openResultDetail", "apiKey", "baseURL", "apiMode", "profiles", "activeProfileId", "setActiveProfile",
+    "openUpstreamConfig", "openHistoryTimeline", "testAPIKey", "isTestingKey", "historyRailCollapsed",
+    "historyHasMore", "historyLoading", "loadMoreHistory", "setHistoryRailCollapsed",
+  );
 
   const [q, setQ] = useState("");
   const deferredQ = useDeferredValue(q);

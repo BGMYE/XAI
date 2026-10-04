@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Stage, Layer, Group, Image as KonvaImage, Line, Rect, Arrow } from "react-konva";
 import Konva from "konva";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import { HistoryItem } from "../../types/domain";
 import { usePlatform } from "../../platform/context";
 import { ContextMenu, MenuItem } from "../common/ContextMenu";
@@ -42,15 +42,26 @@ export function CanvasStage() {
     canvasViewResetTick,
     stepBatchResult,
     canvasNodes, selectedNodeId, addCanvasNode, moveCanvasNode, removeCanvasNode, selectCanvasNode, canvasViewport, setCanvasViewport, clearCanvas,
-  } = useStudioStore();
+    activeWorkspaceId, mode, prompt, size, quality, outputFormat,
+  } = useStudioState(
+    "currentImage", "tool", "brushSize", "brushMode", "annotationKind", "annotationColor",
+    "selectedAnnotationId", "annotations", "addAnnotation", "removeAnnotation", "clearAnnotations",
+    "setMaskDataURL", "maskDataURL", "strokes", "pushStroke", "undoStack", "redoStack", "undo", "redo",
+    "compareB", "compareSplit", "setCompareSplit", "setCompareB", "isRunning", "cancel", "errorMessage",
+    "setField", "streamPreview", "streamPreviews", "runningJobs", "jobsTotal", "jobsCompleted",
+    "toggleFullscreen", "history", "batchResults", "resultGridOpen", "selectBatchResult", "closeResultGrid",
+    "canvasViewResetTick", "stepBatchResult", "canvasNodes", "selectedNodeId", "addCanvasNode",
+    "moveCanvasNode", "removeCanvasNode", "selectCanvasNode", "canvasViewport", "setCanvasViewport",
+    "clearCanvas", "activeWorkspaceId", "mode", "prompt", "size", "quality", "outputFormat",
+  );
   const { isMac } = usePlatform();
   const streamPreviewItems = streamPreviewItemsFromPreviews(streamPreviews, {
-    workspaceId: useStudioStore.getState().activeWorkspaceId,
-    mode: useStudioStore.getState().mode,
-    prompt: useStudioStore.getState().prompt,
-    size: useStudioStore.getState().size,
-    quality: useStudioStore.getState().quality,
-    outputFormat: useStudioStore.getState().outputFormat,
+    workspaceId: activeWorkspaceId,
+    mode,
+    prompt,
+    size,
+    quality,
+    outputFormat,
     currentImage,
   });
   const orderedBatchResults = sortHistoryItemsByCreatedAtAsc(batchResults);

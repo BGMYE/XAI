@@ -2,7 +2,7 @@ import { ExternalLink, Film, LoaderCircle, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CreateVideo, PollVideo } from "../../platform/runtime/host";
 import { createCanvasNode } from "../../state/canvasNodes";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioStore, useStudioState } from "../../state/studioStore";
 import type { VideoResultLike } from "../../platform/runtime/hostTypes";
 import { requireExplicitVideoModelID, videoPollingDecision, videoResultError, videoResultSource, cancellableDelay } from "../../lib/videoGeneration";
 
@@ -14,7 +14,7 @@ function errorText(error: unknown): string {
 }
 
 export function VideoGenerationPanel() {
-  const { activeProfileId, profiles, apiKey, addCanvasNodeToWorkspace, canvasNodes } = useStudioStore();
+  const { activeProfileId, profiles, apiKey, addCanvasNodeToWorkspace, canvasNodes } = useStudioState("activeProfileId", "profiles", "apiKey", "addCanvasNodeToWorkspace", "canvasNodes");
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? null;
   const [prompt, setPrompt] = useState("");
   const [seconds, setSeconds] = useState(5);

@@ -132,6 +132,20 @@ export interface Snapshot {
   assets: Asset[];
   jobs: Job[];
 }
+/** What changed after a revision; `full` replaces every collection. */
+export interface ChangeSet {
+  epoch: string;
+  revision: number;
+  full: boolean;
+  profiles: Profile[];
+  projects: Project[];
+  assets: Asset[];
+  jobs: Job[];
+  promptCards: PromptCard[];
+  removed: { profiles: string[]; promptCards: string[] };
+  /** Volatile progress of running jobs. */
+  progress: Record<string, number>;
+}
 export const emptySnapshot = (): Snapshot => ({
   profiles: [],
   projects: [],

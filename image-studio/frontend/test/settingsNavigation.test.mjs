@@ -20,7 +20,8 @@ globalThis[bridgeKey] = {
 };
 const bridge = `globalThis.${bridgeKey}`;
 const mocks = new Map(Object.entries({
-  "../../state/studioStore": `export const useStudioStore = ${bridge}.useStudioStore;`,
+  "../../state/studioStore": `export const useStudioStore = ${bridge}.useStudioStore;
+    export const useStudioState = () => ${bridge}.useStudioStore();`,
   "../../state/studioStore.profiles": 'export const readAPIKey = async () => "configured-key";',
   "../../platform/context": "export const usePlatform = () => ({ isMac: false, usesFluentUI: true, isAndroid: false, isAndroidPad: false });",
   "../../platform/runtime/host": `export const GetOutputDir = async () => "C:/test-output";

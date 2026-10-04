@@ -2,12 +2,17 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { client } from "./client";
 import { DraftSaveContext } from "./DraftSaveContext";
 import { mergeProject, newProject, orderGraph } from "./graph.mjs";
+import { applyChanges, setJobProgress } from "./sync.mjs";
 import { emptySnapshot, type Project, type Snapshot } from "./types";
 type Draft = { base: Project; local: Project };
-const same = (a: Project, b: Project) => JSON.stringify(a) === JSON.stringify(b);
+const same = (a: Project, b: Project) => a === b || JSON.stringify(a) === JSON.stringify(b);
+// With backend notifications, polling only covers a missed event.
+const pollWithEvents = 30_000,
+  pollWithoutEvents = 2500;
 export function useStudio() {
   const registerSaver = useContext(DraftSaveContext);
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
+  const current = useRef<Snapshot>(snapshot);
   const [activeID, setActiveID] = useState("");
   const [version, bump] = useState(0);
   const [error, setError] = useState("");
@@ -17,14 +22,18 @@ export function useStudio() {
   const pending = useRef(new Map<string, Promise<void>>());
   const conflicts = useRef(new Set<string>());
   const failedSaves = useRef(new Set<string>());
-  const fetching = useRef(false);
+  const inflight = useRef<Promise<void> | null>(null),
+    again = useRef(false);
   const alive = useRef(true);
   const report = useCallback((e: unknown) => {
     if (alive.current) setError(String(e instanceof Error ? e.message : e));
   }, []);
+  // Merges remote projects into drafts; `changed` limits the work to projects
+  // a delta reports.
   const accept = useCallback(
-    (s: Snapshot) => {
-      for (const remote of s.projects) {
+    (s: Snapshot, changed: Project[] = s.projects) => {
+      current.current = s;
+      for (const remote of changed) {
         const d = drafts.current.get(remote.id);
         if (!d) drafts.current.set(remote.id, { base: remote, local: remote });
         else if (
@@ -50,23 +59,56 @@ export function useStudio() {
     },
     [report],
   );
-  const refresh = useCallback(async () => {
-    if (fetching.current) return;
-    fetching.current = true;
-    try {
-      accept(await client.snapshot());
-    } catch (e) {
-      report(e);
-    } finally {
-      fetching.current = false;
+  // Brings the snapshot up to date: a delta when the backend supports it, the
+  // whole snapshot otherwise. Calls during a refresh join it and run one more
+  // round, so a caller's own change is always included when its await returns.
+  const refresh = useCallback((): Promise<void> => {
+    if (inflight.current) {
+      again.current = true;
+      return inflight.current;
     }
+    const run = (async () => {
+      try {
+        do {
+          again.current = false;
+          const base = current.current;
+          const changes = base.epoch ? await client.changes(base.epoch, base.revision ?? 0) : null;
+          if (changes) {
+            const next = applyChanges(current.current, changes);
+            if (next !== current.current) accept(next, changes.full ? next.projects : changes.projects);
+          } else accept(await client.snapshot());
+        } while (again.current && alive.current);
+      } catch (e) {
+        report(e);
+      } finally {
+        inflight.current = null;
+      }
+    })();
+    inflight.current = run;
+    return run;
   }, [accept, report]);
   useEffect(() => {
     alive.current = true;
     void refresh();
-    const timer = window.setInterval(() => {
+    const live = client.subscribe({
+      changed: () => void refresh(),
+      progress: (id, percent) => {
+        const next = setJobProgress(current.current, id, percent);
+        if (next === current.current) return;
+        current.current = next;
+        if (alive.current) setSnapshot(next);
+      },
+    });
+    const timer = window.setInterval(
+      () => {
+        if (!document.hidden) void refresh();
+      },
+      live ? pollWithEvents : pollWithoutEvents,
+    );
+    const visible = () => {
       if (!document.hidden) void refresh();
-    }, 2500);
+    };
+    document.addEventListener("visibilitychange", visible);
     const unload = (e: BeforeUnloadEvent) => {
       if ([...drafts.current.values()].some((d) => !same(d.base, d.local))) {
         e.preventDefault();
@@ -76,7 +118,9 @@ export function useStudio() {
     window.addEventListener("beforeunload", unload);
     return () => {
       alive.current = false;
+      live?.();
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("beforeunload", unload);
     };
   }, [refresh]);

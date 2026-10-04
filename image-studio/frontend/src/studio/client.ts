@@ -1,5 +1,5 @@
 import { get, set } from "idb-keyval";
-import type { Asset, Generation, Job, Profile, Project, Snapshot, PromptCard } from "./types";
+import type { Asset, ChangeSet, Generation, Job, Profile, Project, Snapshot, PromptCard } from "./types";
 import { emptySnapshot } from "./types";
 import { catalogURL } from "./publicCatalog.mjs";
 import { orderGraph, uid } from "./graph.mjs";
@@ -8,6 +8,7 @@ import { prepareSharedUpstreams } from "../lib/upstreamRegistry";
 interface Host {
   GetPublicPromptCatalog?(sourceID: string): Promise<string>;
   GetSnapshot(): Promise<Snapshot>;
+  GetChanges?(epoch: string, since: number): Promise<ChangeSet>;
   SavePromptCard?(p: PromptCard): Promise<PromptCard>;
   DeletePromptCard?(id: string, revision: number): Promise<void>;
   ImportPromptCards?(cards: PromptCard[]): Promise<PromptCard[]>;
@@ -24,6 +25,15 @@ interface Host {
 }
 const host = () => (window as unknown as { go?: { backend?: { StudioV2?: Host } } }).go?.backend?.StudioV2;
 export const isDesktop = () => Boolean(host());
+type Runtime = {
+  EventsOnMultiple?(name: string, callback: (...data: unknown[]) => void, maxCallbacks: number): () => void;
+};
+export interface StudioEvents {
+  /** Something durable changed; ask for the delta. */
+  changed(): void;
+  /** A running job reported progress; nothing was written. */
+  progress(jobID: string, percent: number): void;
+}
 const previewKey = "xai-studio-v2-browser-preview";
 const urls = new Map<string, string>();
 let serial = Promise.resolve<unknown>(undefined);
@@ -121,6 +131,35 @@ export const client = {
     a.download = "xai-asset";
     a.click();
     return true;
+  },
+  /** Changes after a revision, or null when the backend cannot report them. */
+  async changes(epoch: string, since: number): Promise<ChangeSet | null> {
+    const desktop = host();
+    if (!desktop?.GetChanges) return null;
+    await prepareSharedUpstreams().catch(() => undefined);
+    return desktop.GetChanges(epoch, since);
+  },
+  /**
+   * Subscribes to backend notifications. Returns the unsubscribe function, or
+   * null when there are none (browser preview, older backend) and callers poll.
+   */
+  subscribe(events: StudioEvents): (() => void) | null {
+    const runtime = (window as unknown as { runtime?: Runtime }).runtime;
+    if (!host()?.GetChanges || typeof runtime?.EventsOnMultiple !== "function") return null;
+    const offChanged = runtime.EventsOnMultiple("studio:changed", () => events.changed(), -1);
+    const offProgress = runtime.EventsOnMultiple(
+      "studio:progress",
+      (data) => {
+        const p = data as { jobId?: unknown; percent?: unknown } | undefined;
+        if (typeof p?.jobId === "string" && typeof p.percent === "number")
+          events.progress(p.jobId, p.percent);
+      },
+      -1,
+    );
+    return () => {
+      offChanged();
+      offProgress();
+    };
   },
   async snapshot(): Promise<Snapshot> {
     if (host()) {
