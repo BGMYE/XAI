@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BookOpen,
   Check,
@@ -55,12 +55,17 @@ function LibraryDialog({
   title,
   onClose,
   children,
+  formContent = false,
+  footer,
 }: {
   title: string;
   onClose(): void;
   children: ReactNode;
+  formContent?: boolean;
+  footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleID = useId();
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
@@ -69,22 +74,27 @@ function LibraryDialog({
   return (
     <dialog
       ref={ref}
-      className="studio-dialog pc-dialog"
+      className="studio-dialog pc-dialog studio-dialog--structured studio-dialog--wide"
+      aria-labelledby={titleID}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        const bounds = e.currentTarget.getBoundingClientRect();
+        if (e.clientX < bounds.left || e.clientX > bounds.right ||
+          e.clientY < bounds.top || e.clientY > bounds.bottom) onClose();
       }}
     >
-      <header>
-        <h2>{title}</h2>
-        <button aria-label="关闭提示词对话框" onClick={onClose}>
+      <header className="studio-dialog-header">
+        <h2 id={titleID}>{title}</h2>
+        <button type="button" className="studio-dialog-close" aria-label="关闭提示词对话框" onClick={onClose}>
           <X size={20} />
         </button>
       </header>
-      {children}
+      {formContent ? children : <div className="studio-dialog-body">{children}</div>}
+      {footer && <footer className="studio-dialog-footer">{footer}</footer>}
     </dialog>
   );
 }
@@ -162,12 +172,14 @@ function PromptEditor({
   };
   return (
     <LibraryDialog
+      formContent
       title={initial.id || initial.sourceJobId ? "编辑提示词卡片" : "添加图片与提示词"}
       onClose={() => {
         if (!busy) onClose();
       }}
     >
       <form
+        className="pc-editor-form studio-provider-form--dialog"
         onSubmit={(e) => {
           e.preventDefault();
           void action(async () => {
@@ -179,170 +191,172 @@ function PromptEditor({
           });
         }}
       >
-        <div className="pc-editor-grid">
-          <div>
-            <div className="pc-editor-preview">
-              <Preview asset={asset} remoteURL={draft.previewURL} />
-            </div>
-            <label>
-              预览素材
-              <select
-                aria-label="提示词预览素材"
-                disabled={busy || Boolean(draft.sourceJobId)}
-                value={draft.previewAssetId ?? ""}
-                onChange={(e) => patch({ previewAssetId: e.target.value })}
-              >
-                <option value="">稍后绑定图片</option>
-                {visibleAssets.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="studio-secondary"
-              type="button"
-              disabled={busy || Boolean(draft.sourceJobId)}
-              onClick={() => fileInput.current?.click()}
-            >
-              <Upload size={15} />
-              上传预览图
-            </button>
-            <input
-              ref={fileInput}
-              hidden
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file)
-                  void action(async () => {
-                    const a = await client.importImage(file);
-                    setAddedAsset(a);
-                    setDraft((p) => ({ ...p, previewAssetId: a.id, title: p.title || a.name.slice(0, 60) }));
-                    await refresh();
-                  });
-              }}
-            />
-            <p className="pc-help">
-              仅保存本地图片，不上传到第三方。普通图片不一定包含原始提示词，需要你手动填写。
-            </p>
-          </div>
-          <div>
-            <label>
-              标题
-              <input
-                required
-                maxLength={60}
-                value={draft.title}
-                onChange={(e) => patch({ title: e.target.value })}
-                placeholder="例如：晨光雪山 · 写实风景"
-              />
-            </label>
-            <div className="studio-form-row">
+        <div className="studio-dialog-body">
+          <div className="pc-editor-grid">
+            <div>
+              <div className="pc-editor-preview">
+                <Preview asset={asset} remoteURL={draft.previewURL} />
+              </div>
               <label>
-                用途
+                预览素材
                 <select
-                  aria-label="用途"
-                  disabled={Boolean(draft.sourceJobId)}
-                  value={draft.kind}
-                  onChange={(e) => patch({ kind: e.target.value as Kind })}
+                  aria-label="提示词预览素材"
+                  disabled={busy || Boolean(draft.sourceJobId)}
+                  value={draft.previewAssetId ?? ""}
+                  onChange={(e) => patch({ previewAssetId: e.target.value })}
                 >
-                  <option value="image">图片</option>
-                  <option value="video">视频</option>
+                  <option value="">稍后绑定图片</option>
+                  {visibleAssets.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
                 </select>
               </label>
+              <button
+                className="studio-secondary"
+                type="button"
+                disabled={busy || Boolean(draft.sourceJobId)}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload size={15} />
+                上传预览图
+              </button>
+              <input
+                ref={fileInput}
+                hidden
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file)
+                    void action(async () => {
+                      const a = await client.importImage(file);
+                      setAddedAsset(a);
+                      setDraft((p) => ({ ...p, previewAssetId: a.id, title: p.title || a.name.slice(0, 60) }));
+                      await refresh();
+                    });
+                }}
+              />
+              <p className="pc-help">
+                仅保存本地图片，不上传到第三方。普通图片不一定包含原始提示词，需要你手动填写。
+              </p>
+            </div>
+            <div>
               <label>
-                分类
+                标题
                 <input
-                  maxLength={30}
-                  value={draft.category}
-                  onChange={(e) => patch({ category: e.target.value })}
-                  placeholder="摄影、设计、建筑…"
+                  required
+                  maxLength={60}
+                  value={draft.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                  placeholder="例如：晨光雪山 · 写实风景"
+                />
+              </label>
+              <div className="studio-form-row">
+                <label>
+                  用途
+                  <select
+                    aria-label="用途"
+                    disabled={Boolean(draft.sourceJobId)}
+                    value={draft.kind}
+                    onChange={(e) => patch({ kind: e.target.value as Kind })}
+                  >
+                    <option value="image">图片</option>
+                    <option value="video">视频</option>
+                  </select>
+                </label>
+                <label>
+                  分类
+                  <input
+                    maxLength={30}
+                    value={draft.category}
+                    onChange={(e) => patch({ category: e.target.value })}
+                    placeholder="例如：摄影、设计、建筑"
+                  />
+                </label>
+              </div>
+              <label>
+                标签（最多 12 个）
+                <input
+                  maxLength={240}
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="例如：自然光，风景，电影感"
+                />
+              </label>
+              <label>
+                作者／来源说明（可选）
+                <input
+                  maxLength={50}
+                  value={draft.author ?? ""}
+                  onChange={(e) => patch({ author: e.target.value })}
+                  placeholder="例如：我的原创"
                 />
               </label>
             </div>
-            <label>
-              标签
-              <input
-                maxLength={240}
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="自然光，风景，电影感（最多 12 个）"
-              />
-            </label>
-            <label>
-              作者／来源说明
-              <input
-                maxLength={50}
-                value={draft.author ?? ""}
-                onChange={(e) => patch({ author: e.target.value })}
-                placeholder="可选，例如：我的原创"
-              />
-            </label>
           </div>
-        </div>
-        <label>
-          完整提示词
-          <textarea
-            aria-label="完整提示词"
-            required
-            rows={7}
-            value={draft.prompt}
-            onChange={(e) => patch({ prompt: e.target.value })}
-            placeholder="粘贴原始提示词，保留换行和细节。图片不会自动还原提示词。"
-          />
-        </label>
-        <details className="pc-parameters">
-          <summary>可选生成参数（不包含模型或 API Key）</summary>
-          <div className="studio-form-row">
-            <label>
-              尺寸
-              <input
-                maxLength={30}
-                value={draft.parameters.size ?? ""}
-                onChange={(e) => patch({ parameters: { ...draft.parameters, size: e.target.value } })}
-                placeholder="1024x1024"
-              />
-            </label>
-            <label>
-              比例
-              <input
-                maxLength={10}
-                value={draft.parameters.aspectRatio ?? ""}
-                onChange={(e) => patch({ parameters: { ...draft.parameters, aspectRatio: e.target.value } })}
-                placeholder="16:9"
-              />
-            </label>
-            {draft.kind === "video" && (
+          <label>
+            完整提示词
+            <textarea
+              aria-label="完整提示词"
+              required
+              rows={7}
+              value={draft.prompt}
+              onChange={(e) => patch({ prompt: e.target.value })}
+              placeholder="粘贴原始提示词，保留换行和细节。图片不会自动还原提示词。"
+            />
+          </label>
+          <details className="pc-parameters">
+            <summary>可选生成参数（不包含模型或 API Key）</summary>
+            <div className="studio-form-row">
               <label>
-                时长（秒）
+                尺寸
                 <input
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={draft.parameters.seconds ?? ""}
-                  onChange={(e) =>
-                    patch({
-                      parameters: {
-                        ...draft.parameters,
-                        seconds: e.target.value ? Number(e.target.value) : undefined,
-                      },
-                    })
-                  }
+                  maxLength={30}
+                  value={draft.parameters.size ?? ""}
+                  onChange={(e) => patch({ parameters: { ...draft.parameters, size: e.target.value } })}
+                  placeholder="例如：1024x1024"
                 />
               </label>
-            )}
-          </div>
-        </details>
-        {error && (
-          <p role="alert" className="pc-error">
-            {error}
-          </p>
-        )}
-        <div className="pc-dialog-actions">
+              <label>
+                比例
+                <input
+                  maxLength={10}
+                  value={draft.parameters.aspectRatio ?? ""}
+                  onChange={(e) => patch({ parameters: { ...draft.parameters, aspectRatio: e.target.value } })}
+                  placeholder="例如：16:9"
+                />
+              </label>
+              {draft.kind === "video" && (
+                <label>
+                  时长（秒）
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={draft.parameters.seconds ?? ""}
+                    onChange={(e) =>
+                      patch({
+                        parameters: {
+                          ...draft.parameters,
+                          seconds: e.target.value ? Number(e.target.value) : undefined,
+                        },
+                      })
+                    }
+                  />
+                </label>
+              )}
+            </div>
+          </details>
+          {error && (
+            <p role="alert" className="pc-error">
+              {error}
+            </p>
+          )}
+        </div>
+        <footer className="studio-dialog-footer">
           <button type="button" className="studio-secondary" disabled={busy} onClick={onClose}>
             取消
           </button>
@@ -350,7 +364,7 @@ function PromptEditor({
             <Check size={16} />
             {busy ? "正在保存…" : "保存提示词"}
           </button>
-        </div>
+        </footer>
       </form>
     </LibraryDialog>
   );
@@ -753,7 +767,68 @@ export function PromptCenter({ snapshot, refresh, onUse, onClose }: Props) {
         />
       )}
       {activeDetail && (
-        <LibraryDialog title={activeDetail.title} onClose={() => setDetail(null)}>
+        <LibraryDialog
+          title={activeDetail.title}
+          onClose={() => setDetail(null)}
+          footer={
+            <>
+              <button className="studio-primary" disabled={busy} onClick={() => copy(activeDetail)}>
+                <Copy size={16} />
+                复制完整提示词
+              </button>
+              <button className="studio-secondary" disabled={busy} onClick={() => use(activeDetail)}>
+                <Plus size={16} />
+                加入当前画布
+              </button>
+              <button
+                className="studio-secondary"
+                disabled={busy}
+                onClick={() => {
+                  setEditing(normalizePromptCard(activeDetail));
+                  setDetail(null);
+                }}
+              >
+                <Pencil size={15} />
+                编辑
+              </button>
+              {activeDetail.sourceURL && (
+                <a
+                  className="pc-source-link"
+                  href={activeDetail.sourceURL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  原始来源
+                </a>
+              )}
+              {activeDetail.id && (
+                <button
+                  className="pc-delete"
+                  disabled={busy}
+                  onClick={() =>
+                    void action(async () => {
+                      if (
+                        !window.confirm(
+                          activeDetail.sourceJobId
+                            ? "删除保存的卡片设置？原始生成历史仍会显示，作品文件不会删除。"
+                            : "删除此提示词卡片？关联图片和画布不会删除。",
+                        )
+                      )
+                        return;
+                      await client.deletePromptCard(activeDetail.id, activeDetail.revision);
+                      await refresh();
+                      setDetail(null);
+                      setNotice("卡片已删除，素材与画布保持不变");
+                    })
+                  }
+                >
+                  <Trash2 size={15} />
+                  {activeDetail.sourceJobId ? "还原历史卡片" : "删除卡片"}
+                </button>
+              )}
+            </>
+          }
+        >
           <div className="pc-detail-preview">
             <Preview
               asset={assets.get(activeDetail.previewAssetId ?? "")}
@@ -790,62 +865,6 @@ export function PromptCenter({ snapshot, refresh, onUse, onClose }: Props) {
               {notice}
             </p>
           )}
-          <div className="pc-detail-actions">
-            <button className="studio-primary" disabled={busy} onClick={() => copy(activeDetail)}>
-              <Copy size={16} />
-              复制完整提示词
-            </button>
-            <button className="studio-secondary" disabled={busy} onClick={() => use(activeDetail)}>
-              <Plus size={16} />
-              加入当前画布
-            </button>
-            <button
-              className="studio-secondary"
-              disabled={busy}
-              onClick={() => {
-                setEditing(normalizePromptCard(activeDetail));
-                setDetail(null);
-              }}
-            >
-              <Pencil size={15} />
-              编辑
-            </button>
-            {activeDetail.sourceURL && (
-              <a
-                className="pc-source-link"
-                href={activeDetail.sourceURL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                原始来源
-              </a>
-            )}
-            {activeDetail.id && (
-              <button
-                className="pc-delete"
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    if (
-                      !window.confirm(
-                        activeDetail.sourceJobId
-                          ? "删除保存的卡片设置？原始生成历史仍会显示，作品文件不会删除。"
-                          : "删除此提示词卡片？关联图片和画布不会删除。",
-                      )
-                    )
-                      return;
-                    await client.deletePromptCard(activeDetail.id, activeDetail.revision);
-                    await refresh();
-                    setDetail(null);
-                    setNotice("卡片已删除，素材与画布保持不变");
-                  })
-                }
-              >
-                <Trash2 size={15} />
-                {activeDetail.sourceJobId ? "还原历史卡片" : "删除卡片"}
-              </button>
-            )}
-          </div>
         </LibraryDialog>
       )}
     </section>

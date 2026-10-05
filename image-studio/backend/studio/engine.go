@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yuanhua/image-gptcodex/pkg/client"
+	"image-studio/backend/dlss5"
 	"os"
 	"path/filepath"
 	"sort"
@@ -64,6 +65,7 @@ type Runner interface {
 }
 
 type Options struct {
+	DLSS5Runner  dlss5.Runner
 	OnDiagnostic func(jobID, text string)
 	// Workers bounds concurrent submissions. A job holds its slot until the
 	// upstream has accepted it (a remote ID or result URL is recorded) or it
@@ -89,6 +91,7 @@ type jobRun struct {
 }
 
 type Engine struct {
+	dlss *dlss5Runtime
 	// writeMu serializes state transitions and their disk writes. Readers never
 	// take it: they load the published state from cur.
 	writeMu sync.Mutex
@@ -140,6 +143,14 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 	// A crash must NEVER cause an automatic replay of a possibly charged POST.
 	recovered := false
 	for id, j := range d.Jobs {
+		if activeDLSS5(j) {
+			j.DLSS5 = cloneDLSS5(j.DLSS5)
+			j.DLSS5.State = "failed"
+			j.DLSS5.Error = "应用中断；原始视频保留，可仅重试本地增强"
+			j.UpdatedAt = now()
+			d.Jobs[id] = j
+			recovered = true
+		}
 		switch j.State {
 		case "running":
 			switch {
@@ -176,6 +187,10 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 		runs: map[string]*jobRun{}, onChange: opts.OnChange, onProgress: opts.OnProgress,
 		notify: make(chan struct{}, 1), updates: make(chan struct{}), failed: make(chan struct{}),
 	}
+	e.dlss = &dlss5Runtime{runner: opts.DLSS5Runner, slot: make(chan struct{}, 1), wake: make(chan struct{}, 1), runs: map[string]context.CancelFunc{}, previews: map[string]*dlss5Preview{}}
+	if e.dlss.runner == nil {
+		e.dlss.runner = &dlss5.ProcessRunner{}
+	}
 	e.provider = &HTTPProvider{PollInterval: opts.PollInterval, MediaDir: repo.mediaDir(), Network: e.Network, ReadReference: e.ReadReference, OnPreview: opts.OnPreview, OnDiagnostic: opts.OnDiagnostic}
 	if e.runner == nil {
 		e.runner = e.provider
@@ -195,6 +210,10 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 	go e.retryCredentialCleanup()
 	e.wg.Add(1)
 	go e.dispatch()
+	e.wg.Add(1)
+	go e.dispatchDLSS5()
+	e.wg.Add(1)
+	go e.collectDLSS5Previews()
 	if e.onChange != nil {
 		e.wg.Add(1)
 		go e.deliverChanges()
@@ -205,17 +224,21 @@ func Open(root string, secrets SecretStore, opts Options) (*Engine, error) {
 // Close stops dispatching, cancels running jobs and waits until each has
 // recorded its final state. It is safe to call more than once.
 func (e *Engine) Close() {
+	e.writeMu.Lock()
 	if !e.closed.Swap(true) {
 		e.stop()
 		e.wakeDispatcher()
 	}
+	e.writeMu.Unlock()
 	e.wg.Wait()
+	e.cleanDLSS5PreviewFiles()
 }
 
 // Epoch identifies this process's revision sequence for change feeds.
 func (e *Engine) Epoch() string { return e.epoch }
 
 func (e *Engine) changed(rev uint64) {
+	e.wakeDLSS5()
 	e.wakeDispatcher()
 	if e.onChange != nil {
 		e.pendingRev.Store(rev)
@@ -389,6 +412,9 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 		j.OriginalPrompt = r.Prompt
 	}
 	j.ParentAssetIDs = requestParents(r)
+	if r.Parameters.DLSS5 != nil && r.Parameters.DLSS5.Enabled {
+		j.DLSS5 = &DLSS5Job{State: "idle", Options: *r.Parameters.DLSS5}
+	}
 	if r.AutoFallback && p.FallbackProfileID != "" {
 		if backup, ok := t.doc.Profiles[p.FallbackProfileID]; ok && r.Validate(backup) == nil {
 			copy := backup.forJob()
@@ -400,6 +426,15 @@ func buildJob(t *tx, r Request, deps []string) (Job, error) {
 }
 
 func (e *Engine) Submit(r Request) (Job, error) {
+	r.Parameters = cloneParameters(r.Parameters)
+	if r.Parameters.DLSS5 != nil {
+		if err := r.Parameters.DLSS5.Validate(); err != nil {
+			return Job{}, err
+		}
+	}
+	if err := e.preflightGeneration(r); err != nil {
+		return Job{}, err
+	}
 	r.ReferenceAssetIDs = append([]string(nil), r.ReferenceAssetIDs...)
 	var j Job
 	err := e.update(func(t *tx) error {
@@ -416,6 +451,15 @@ func (e *Engine) Submit(r Request) (Job, error) {
 func (e *Engine) RunWorkflow(projectID, profileID, runID string) ([]Job, error) {
 	if err := checkID(runID); err != nil {
 		return nil, err
+	}
+	if project, ok := e.cur.Load().doc.Projects[projectID]; ok {
+		for _, node := range project.Nodes {
+			if node.Kind == "video" && node.Parameters.DLSS5 != nil && node.Parameters.DLSS5.Enabled {
+				if err := e.preflightDLSS5(*node.Parameters.DLSS5); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	var jobs []Job
 	err := e.update(func(t *tx) error {
@@ -859,6 +903,11 @@ func (e *Engine) complete(job Job, output Output, runErr error) {
 			current.Progress = 100
 		}
 		attachResults(t, current, assets, results)
+		if state == "succeeded" && current.Request.Kind == "video" && current.Request.Parameters.DLSS5 != nil && current.Request.Parameters.DLSS5.Enabled {
+			generated := t.doc.Jobs[current.ID]
+			generated.DLSS5 = &DLSS5Job{State: "queued", Stage: "queued", SourceAssetID: generated.ResultAssetID, Options: *current.Request.Parameters.DLSS5}
+			t.putJob(generated)
+		}
 		return nil
 	})
 	if err != nil {

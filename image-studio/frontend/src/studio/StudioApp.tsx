@@ -5,17 +5,19 @@ import { CapabilitiesEditor } from "./CapabilitiesEditor";
 import { StudioNetworkSettings } from "./StudioNetworkSettings";
 import { StudioPromptImport } from "./StudioPromptImport";
 import { PromptAssistant } from "./PromptAssistant";
+import { JobResultThumbnails } from "./JobResultThumbnails";
+import { DLSS5Panel } from "./DLSS5Panel";
+import { DLSS5JobStatus } from "./DLSS5JobStatus";
+import { generationParameters, validateDLSS5Options } from "./DLSS5Options.mjs";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
   Bell,
   Box,
-  Check,
   CheckCircle2,
   ChevronDown,
   Clock3,
-  ExternalLink,
   FileImage,
   Folder,
   Home,
@@ -25,7 +27,6 @@ import {
   Loader2,
   Maximize2,
   Minus,
-  Monitor,
   Play,
   Plus,
   RefreshCw,
@@ -97,28 +98,42 @@ const dateLabel = (s: string) => {
     : d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose(): void }) {
+function Modal({ title, children, onClose, size = "standard", footer, formContent = false }: {
+  title: string;
+  children: ReactNode;
+  onClose(): void;
+  size?: "standard" | "wide" | "media";
+  footer?: ReactNode;
+  formContent?: boolean;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleID = useId();
   useEffect(() => {
-    ref.current?.showModal();
-    return () => ref.current?.close();
+    const dialog = ref.current;
+    dialog?.showModal();
+    return () => dialog?.close();
   }, []);
   return (
     <dialog
       ref={ref}
-      className="studio-dialog"
-      onCancel={onClose}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      className={`studio-dialog studio-dialog--structured studio-dialog--${size}`}
+      aria-labelledby={titleID}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
       }}
     >
-      <header>
-        <h2>{title}</h2>
-        <button aria-label="关闭对话框" onClick={onClose}>
+      <header className="studio-dialog-header">
+        <h2 id={titleID}>{title}</h2>
+        <button type="button" className="studio-dialog-close" aria-label="关闭对话框" onClick={onClose}>
           <X size={20} />
         </button>
       </header>
-      {children}
+      {formContent ? children : <div className="studio-dialog-body">{children}</div>}
+      {footer && <footer className="studio-dialog-footer">{footer}</footer>}
     </dialog>
   );
 }
@@ -227,14 +242,17 @@ function ProviderForm({
   onTest,
   report,
   disabled,
+  inDialog = false,
 }: {
   profile?: Profile;
   onSave(p: Profile, k: string): Promise<void>;
   onTest(id: string): Promise<string[]>;
   report(e: unknown): void;
   disabled: boolean;
+  inDialog?: boolean;
 }) {
   const protocolHelpID = useId();
+  const modelListID = useId();
   const [draft, setDraft] = useState<Profile>(profile ?? blankProfile()),
     [key, setKey] = useState(""),
     [busy, setBusy] = useState(false),
@@ -246,7 +264,7 @@ function ProviderForm({
   });
   return (
     <form
-      className="studio-provider-form"
+      className={`studio-provider-form${inDialog ? " studio-provider-form--dialog" : ""}`}
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
@@ -260,211 +278,215 @@ function ProviderForm({
         }
       }}
     >
-      <div className="studio-section-title">
-        <h2>{profile ? "编辑上游" : "连接你的 AI 上游"}</h2>
-        <ShieldCheck size={23} />
-      </div>
-      <p className="studio-muted">
-        密钥只写入系统凭据存储，不进入画布、模板或浏览器存储。图像与视频模型分别配置。
-      </p>
-      <label>
-        提供商预设
-        <select value={draft.providerPreset || "custom"} onChange={(e) => {
-          const preset = e.target.value as "custom" | "sub2api";
-          patch(preset === "sub2api" ? {
-            providerPreset: preset, protocol: "openai", imageApi: "images",
-            responsesTransport: "sse", requestPolicy: "openai", imagesNewApiCompat: false,
-          } : { providerPreset: preset });
-        }}>
-          <option value="custom">通用配置 · 按上游文档选择</option>
-          <option value="sub2api">sub2api · OpenAI 兼容</option>
-        </select>
-      </label>
-      <div className="studio-form-row">
+      <div className={inDialog ? "studio-dialog-body studio-provider-fields" : "studio-provider-fields"}>
+        {!inDialog && <div className="studio-section-title">
+          <h2>{profile ? "编辑上游" : "连接你的 AI 上游"}</h2>
+          <ShieldCheck size={23} />
+        </div>}
+        <p className="studio-muted">
+          密钥只写入系统凭据存储，不进入画布、模板或浏览器存储。图像与视频模型分别配置。
+        </p>
         <label>
-          配置名称
-          <input
-            required
-            maxLength={50}
-            value={draft.name}
-            onChange={(e) => patch({ name: e.target.value })}
-            placeholder="例如：我的创作上游"
-          />
-        </label>
-        <label>
-          接口协议
-          <select
-            aria-describedby={protocolHelpID}
-            value={draft.protocol}
-            onChange={(e) => patch({ protocol: e.target.value as Profile["protocol"], ...(e.target.value === "xai" ? { providerPreset: "custom" } : {}) })}
-          >
-            <option value="xai">xAI 协议</option>
-            <option value="openai">OpenAI 兼容协议</option>
+          提供商预设
+          <select value={draft.providerPreset || "custom"} onChange={(e) => {
+            const preset = e.target.value as "custom" | "sub2api";
+            patch(preset === "sub2api" ? {
+              providerPreset: preset, protocol: "openai", imageApi: "images",
+              responsesTransport: "sse", requestPolicy: "openai", imagesNewApiCompat: false,
+            } : { providerPreset: preset });
+          }}>
+            <option value="custom">通用配置 · 按上游文档选择</option>
+            <option value="sub2api">sub2api · OpenAI 兼容</option>
           </select>
         </label>
-      </div>
-      <ProtocolTips profile={draft} id={protocolHelpID} />
-      <label>
-        Base URL（含 API 根路径）
-        <input
-          required
-          type="url"
-          value={draft.baseUrl}
-          onChange={(e) => patch({ baseUrl: e.target.value })}
-          placeholder={draft.protocol === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1"}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </label>
-      <p className="studio-field-tip">TIPS：填写完整 API 根路径，例如 https://你的域名/v1；有反向代理子路径时保留它。不要填写 /images/generations 或 /responses 端点，也不要重复添加 /v1。</p>
-      <EndpointPreview baseURL={draft.baseUrl} protocol={draft.protocol} />
-      <label>
-        API Key
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={key}
-          onChange={(e) => {
-            setKey(e.target.value);
-            if (e.target.value) patch({ capabilities: undefined, verifiedAt: undefined });
-          }}
-          placeholder={profile?.hasKey ? "留空保留已保存的密钥" : "输入你有权使用的 API Key"}
-        />
-      </label>
-      <div className="studio-form-row">
+        <div className="studio-form-row">
+          <label>
+            配置名称
+            <input
+              required
+              maxLength={50}
+              value={draft.name}
+              onChange={(e) => patch({ name: e.target.value })}
+              placeholder="例如：我的创作上游"
+            />
+          </label>
+          <label>
+            接口协议
+            <select
+              aria-describedby={protocolHelpID}
+              value={draft.protocol}
+              onChange={(e) => patch({ protocol: e.target.value as Profile["protocol"], ...(e.target.value === "xai" ? { providerPreset: "custom" } : {}) })}
+            >
+              <option value="xai">xAI 协议</option>
+              <option value="openai">OpenAI 兼容协议</option>
+            </select>
+          </label>
+        </div>
+        <ProtocolTips profile={draft} id={protocolHelpID} />
         <label>
-          图像模型 ID
+          Base URL（含 API 根路径）
           <input
-            list="studio-model-list"
-            value={draft.imageModel}
-            onChange={(e) => patch({ imageModel: e.target.value })}
-            placeholder="填写上游提供的图像模型 ID"
+            required
+            type="url"
+            value={draft.baseUrl}
+            onChange={(e) => patch({ baseUrl: e.target.value })}
+            placeholder={draft.providerPreset === "sub2api" ? "例如：https://api.example.com/v1" : draft.protocol === "xai" ? "例如：https://api.x.ai/v1" : "例如：https://api.openai.com/v1"}
+            autoComplete="off"
+            spellCheck={false}
           />
         </label>
+        <p className="studio-field-tip">TIPS：填写完整 API 根路径，例如：https://api.example.com/v1；有反向代理子路径时保留它。不要填写 /images/generations 或 /responses 端点，也不要重复添加 /v1。</p>
+        <EndpointPreview baseURL={draft.baseUrl} protocol={draft.protocol} />
         <label>
-          视频模型 ID
+          API Key
           <input
-            list="studio-model-list"
-            value={draft.videoModel}
-            onChange={(e) => patch({ videoModel: e.target.value })}
-            placeholder="填写上游提供的视频模型 ID"
+            type="password"
+            autoComplete="new-password"
+            value={key}
+            onChange={(e) => {
+              setKey(e.target.value);
+              if (e.target.value) patch({ capabilities: undefined, verifiedAt: undefined });
+            }}
+            placeholder={profile?.hasKey ? "留空保留已保存的密钥" : "输入你有权使用的 API Key"}
           />
         </label>
-      </div>
-      <datalist id="studio-model-list">
-        {models.map((m) => (
-          <option key={m} value={m} />
-        ))}
-      </datalist>
-      {draft.protocol === "openai" && (
-        <>
-          <div className="studio-form-row">
-            <label>
-              图像接口
-              <select
-                value={draft.imageApi || "images"}
-                onChange={(e) => patch({ imageApi: e.target.value as ImageAPI })}
-              >
-                <option value="images">Images API（直接生成 / 编辑）</option>
-                <option value="responses">Responses API（图像工具）</option>
-              </select>
-            </label>
-            {draft.imageApi === "responses" ? (
+        <div className="studio-form-row">
+          <label>
+            图像模型 ID
+            <input
+              list={modelListID}
+              value={draft.imageModel}
+              onChange={(e) => patch({ imageModel: e.target.value })}
+              placeholder="填写上游提供的精确图像模型 ID"
+            />
+          </label>
+          <label>
+            视频模型 ID
+            <input
+              list={modelListID}
+              value={draft.videoModel}
+              onChange={(e) => patch({ videoModel: e.target.value })}
+              placeholder="填写上游提供的精确视频模型 ID"
+            />
+          </label>
+        </div>
+        <datalist id={modelListID}>
+          {models.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        {draft.protocol === "openai" && (
+          <>
+            <div className="studio-form-row">
               <label>
-                文本模型 ID
-                <input
-                  list="studio-model-list"
-                  value={draft.textModel ?? ""}
-                  onChange={(e) => patch({ textModel: e.target.value })}
-                  placeholder="驱动图像工具的文本模型"
-                />
-              </label>
-            ) : (
-              <label>
-                请求策略
+                图像接口
                 <select
-                  value={draft.requestPolicy || "openai"}
-                  onChange={(e) => patch({ requestPolicy: e.target.value as "openai" | "compat" })}
+                  value={draft.imageApi || "images"}
+                  onChange={(e) => patch({ imageApi: e.target.value as ImageAPI })}
                 >
-                  <option value="openai">OpenAI 标准字段</option>
-                  <option value="compat">兼容中转扩展字段</option>
+                  <option value="images">Images API（直接生成 / 编辑）</option>
+                  <option value="responses">Responses API（图像工具）</option>
                 </select>
               </label>
+              {draft.imageApi === "responses" ? (
+                <label>
+                  文本模型 ID
+                  <input
+                    list={modelListID}
+                    value={draft.textModel ?? ""}
+                    onChange={(e) => patch({ textModel: e.target.value })}
+                    placeholder="填写支持图片工具的文本模型 ID"
+                  />
+                </label>
+              ) : (
+                <label>
+                  请求策略
+                  <select
+                    value={draft.requestPolicy || "openai"}
+                    onChange={(e) => patch({ requestPolicy: e.target.value as "openai" | "compat" })}
+                  >
+                    <option value="openai">OpenAI 标准字段</option>
+                    <option value="compat">兼容中转扩展字段</option>
+                  </select>
+                </label>
+              )}
+            </div>
+            {draft.imageApi !== "responses" && <label>
+              提示词优化文本模型 ID（可选）
+              <input list={modelListID} value={draft.textModel ?? ""}
+                onChange={(e) => patch({ textModel: e.target.value })}
+                placeholder="填写支持 Responses 的文本模型 ID" />
+              <span className="studio-field-tip">仅在主动点击提示词优化时使用，不会影响 Images 路径内部由网关选择的驱动模型。</span>
+            </label>}
+            {draft.imageApi === "responses" ? (
+              <>
+                <div className="studio-form-row">
+                  <label>
+                    传输方式
+                    <select value={draft.responsesTransport || "sse"}
+                      onChange={(e) => patch({ responsesTransport: e.target.value as "sse" | "websocket" })}>
+                      <option value="sse">HTTP SSE（优先使用）</option>
+                      <option value="websocket">WebSocket（验证后使用）</option>
+                    </select>
+                  </label>
+                  <label>
+                    推理强度
+                    <select value={draft.reasoningEffort || "xhigh"}
+                      onChange={(e) => patch({ reasoningEffort: e.target.value as ReasoningEffort })}>
+                      <option value="xhigh">xhigh</option>
+                      <option value="high">high</option>
+                      <option value="medium">medium</option>
+                      <option value="low">low</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="studio-field-tip">TIPS：文本模型负责调用图片工具，图像模型负责生图，请分别填写真实可用 ID。先用 HTTP SSE；只有网关、代理及完整生图 / 编辑均验证通过后再使用 WebSocket。更高推理强度不等于更高图像质量，须按文本模型支持范围选择。</p>
+              </>
+            ) : (
+              <>
+                <label className="studio-checkbox">
+                  <input type="checkbox" checked={draft.imagesNewApiCompat === true}
+                    onChange={(e) => patch({ imagesNewApiCompat: e.target.checked })} />
+                  使用非流式 JSON（仅用于不支持 SSE 的上游）
+                </label>
+                <p className="studio-field-tip">TIPS：Images 可使用 SSE，也可使用 JSON。流式预览不代表最终成品；长时间 JSON 请求可能受到网关超时限制。首次选择 OpenAI 标准字段，只有上游明确支持时才启用中转扩展。</p>
+              </>
             )}
-          </div>
-          {draft.imageApi !== "responses" && <label>
-            提示词优化文本模型 ID（可选）
-            <input list="studio-model-list" value={draft.textModel ?? ""}
-              onChange={(e) => patch({ textModel: e.target.value })}
-              placeholder="支持 Responses 文本调用的模型，用于优化并确认提示词" />
-            <span className="studio-field-tip">仅在主动点击提示词优化时使用，不会影响 Images 路径内部由网关选择的驱动模型。</span>
-          </label>}
-          {draft.imageApi === "responses" ? (
-            <>
-              <div className="studio-form-row">
-                <label>
-                  传输方式
-                  <select value={draft.responsesTransport || "sse"}
-                    onChange={(e) => patch({ responsesTransport: e.target.value as "sse" | "websocket" })}>
-                    <option value="sse">HTTP SSE（优先使用）</option>
-                    <option value="websocket">WebSocket（验证后使用）</option>
-                  </select>
-                </label>
-                <label>
-                  推理强度
-                  <select value={draft.reasoningEffort || "xhigh"}
-                    onChange={(e) => patch({ reasoningEffort: e.target.value as ReasoningEffort })}>
-                    <option value="xhigh">xhigh</option>
-                    <option value="high">high</option>
-                    <option value="medium">medium</option>
-                    <option value="low">low</option>
-                  </select>
-                </label>
-              </div>
-              <p className="studio-field-tip">TIPS：文本模型负责调用图片工具，图像模型负责生图，请分别填写真实可用 ID。先用 HTTP SSE；只有网关、代理及完整生图 / 编辑均验证通过后再使用 WebSocket。更高推理强度不等于更高图像质量，须按文本模型支持范围选择。</p>
-            </>
-          ) : (
-            <>
-              <label className="studio-checkbox">
-                <input type="checkbox" checked={draft.imagesNewApiCompat === true}
-                  onChange={(e) => patch({ imagesNewApiCompat: e.target.checked })} />
-                使用非流式 JSON（仅用于不支持 SSE 的上游）
-              </label>
-              <p className="studio-field-tip">TIPS：Images 可使用 SSE，也可使用 JSON。流式预览不代表最终成品；长时间 JSON 请求可能受到网关超时限制。首次选择 OpenAI 标准字段，只有上游明确支持时才启用中转扩展。</p>
-            </>
-          )}
-          <CapabilitiesEditor profile={draft} onChange={(capabilities) => patch({ capabilities })} />
-        </>
-      )}
-      <label className="studio-checkbox">
-        <input
-          type="checkbox"
-          checked={draft.allowLocal}
-          onChange={(e) => patch({ allowLocal: e.target.checked })}
-        />
-        允许本机回环地址（localhost / 127.0.0.1）
-      </label>
-      <label className="studio-checkbox">
-        <input
-          type="checkbox"
-          checked={draft.allowInsecure === true}
-          onChange={(e) => patch({ allowInsecure: e.target.checked })}
-        />
-        允许不安全连接（远程 HTTP、跳过证书校验；密钥可能被截获）
-      </label>
-      <div className="studio-callout">
-        不会自动替换模型、猜测接口或反复重发收费请求。切换 Base URL
-        时需重新输入密钥。地址、密钥、协议或模型变更后，旧能力记录会失效。连接测试只读取模型列表，不发起生成。
-      </div>
-      {disabled && (
-        <div className="studio-callout warning">
-          浏览器为本地预览模式，不保存 API Key，也不代理上游生成。请使用桌面构建。
+            <CapabilitiesEditor profile={draft} onChange={(capabilities) => patch({ capabilities })} />
+          </>
+        )}
+        <label className="studio-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.allowLocal}
+            onChange={(e) => patch({ allowLocal: e.target.checked })}
+          />
+          允许本机回环地址（localhost / 127.0.0.1）
+        </label>
+        <label className="studio-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.allowInsecure === true}
+            onChange={(e) => patch({ allowInsecure: e.target.checked })}
+          />
+          允许不安全连接（远程 HTTP、跳过证书校验；密钥可能被截获）
+        </label>
+        <div className="studio-callout">
+          不会自动替换模型、猜测接口或反复重发收费请求。切换 Base URL
+          时需重新输入密钥。地址、密钥、协议或模型变更后，旧能力记录会失效。连接测试只读取模型列表，不发起生成。
         </div>
-      )}
-      <div className="studio-form-actions">
-        <button className="studio-primary" type="submit" disabled={busy || disabled}>
-          {busy ? <Loader2 size={16} className="spin" /> : <KeyRound size={16} />}保存配置
-        </button>
+        {disabled && (
+          <div className="studio-callout warning">
+            浏览器为本地预览模式，不保存 API Key，也不代理上游生成。请使用桌面构建。
+          </div>
+        )}
+        {!!models.length && (
+          <p className="studio-muted">
+            已读取 {models.length} 个模型。可在模型输入框中选择；列表可见不代表每个模型都支持图像或视频。
+          </p>
+        )}
+      </div>
+      <footer className={inDialog ? "studio-dialog-footer" : "studio-form-actions studio-provider-actions"}>
         <button
           className="studio-secondary"
           type="button"
@@ -484,12 +506,10 @@ function ProviderForm({
           <RefreshCw size={16} />
           测试已保存配置
         </button>
-      </div>
-      {!!models.length && (
-        <p className="studio-muted">
-          已读取 {models.length} 个模型。可在模型输入框中选择；列表可见不代表每个模型都支持图像或视频。
-        </p>
-      )}
+        <button className="studio-primary" type="submit" disabled={busy || disabled}>
+          {busy ? <Loader2 size={16} className="spin" /> : <KeyRound size={16} />}保存配置
+        </button>
+      </footer>
     </form>
   );
 }
@@ -507,6 +527,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
   const [additionalReferences, setAdditionalReferences] = useState<string[]>([]),
     [maskAssetID, setMaskAssetID] = useState("");
   const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [dlss5BlockedReason, setDLSS5BlockedReason] = useState("请先检测本地引擎。");
   const [profileID, setProfileID] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState<"all" | Kind>("all"),
@@ -621,6 +642,11 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
       }
       if (kind === "image" && imageParameters.negativePrompt && profile.requestPolicy !== "compat")
         throw Error("反向提示词仅适用于已确认支持的中转扩展。请清空反向提示词，或在上游设置中启用兼容扩展。");
+      if (kind === "video" && parameters.dlss5?.enabled) {
+        const invalid = validateDLSS5Options(parameters.dlss5);
+        if (invalid) throw Error(invalid);
+        if (dlss5BlockedReason) throw Error(dlss5BlockedReason);
+      }
       const p = await ensureProject();
       await studio.flush(p.id);
       const request: Generation = {
@@ -635,7 +661,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
           referenceAssetIds: [...new Set(additionalReferences.filter((id) => id && id !== referenceID))],
           maskAssetId: maskAssetID || undefined,
         } : {}),
-        parameters,
+        parameters: generationParameters(kind, parameters),
         ...(kind === "image" ? { image: imageParameters } : {}),
       };
       const signature = JSON.stringify(request);
@@ -703,26 +729,10 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
         (a.name.toLowerCase().includes(needle) || (resultPrompts.get(a.id)?.includes(needle) ?? false)),
     );
   }, [allAssets, resultPrompts, page, filter, query]);
-  const { finished, today, activeJobs } = useMemo(() => {
-    const finished = jobs.filter((j) => j.state === "succeeded"),
-      day = new Date().toDateString();
-    return {
-      finished,
-      today: finished.filter((j) => new Date(j.updatedAt).toDateString() === day).length,
-      activeJobs: jobs.filter((j) => j.state === "running" || j.state === "queued"),
-    };
-  }, [jobs]);
-  const usesGenerators = useMemo(
-    () => projects.some((p) => p.nodes.some((n) => n.kind === "image" || n.kind === "video")),
-    [projects],
+  const activeJobs = useMemo(
+    () => jobs.filter((j) => j.state === "running" || j.state === "queued"),
+    [jobs],
   );
-  const completed = [
-    Boolean(profile?.hasKey),
-    finished.some((j) => j.request.kind === "image"),
-    finished.some((j) => j.request.kind === "video"),
-    usesGenerators,
-  ];
-  const completeCount = completed.filter(Boolean).length;
   // Long lists render in pages; more appear on request.
   const [shownAssets, setShownAssets] = useState(pageSize),
     [shownJobs, setShownJobs] = useState(pageSize);
@@ -759,6 +769,8 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
             <small>
               {j.profile.name || "上游"} · {dateLabel(j.createdAt)}
             </small>
+            <JobResultThumbnails job={j} assets={studio.snapshot.assets} onOpen={setViewAsset} />
+            <DLSS5JobStatus job={j} onRefresh={studio.refresh} report={studio.report} />
             {j.state === "running" && (
               <progress max={100} value={j.progress} aria-label="上游报告的生成进度" />
             )}
@@ -784,7 +796,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
               </dl>
             </details>
             <div className="studio-job-actions">
-              {["succeeded", "failed", "cancelled", "uncertain"].includes(j.state) && (
+              {["succeeded", "failed", "cancelled", "uncertain"].includes(j.state) && !["queued", "running"].includes(j.dlss5?.state || "") && (
                 <button
                   onClick={() =>
                     void runAction(async () => {
@@ -825,7 +837,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                   const a = studio.snapshot.assets.find((asset) => asset.id === id);
                   if (a) setViewAsset(a);
                 }}>
-                  {results.length > 1 ? `查看作品 ${index + 1}/${results.length}` : "查看作品"}
+                  {j.dlss5 && j.request.kind === "video" ? (id === j.dlss5.resultAssetId ? "查看增强成片" : "查看原视频") : results.length > 1 ? `查看作品 ${index + 1}/${results.length}` : "查看作品"}
                 </button>
               ))}
               <button
@@ -941,6 +953,8 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
           {nav.map((n) => (
             <button
               key={n.id}
+              aria-label={n.label}
+              title={n.label}
               className={
                 (n.id === "assets" && page === "canvas" && resourcesOpen) ||
                 page === n.id ||
@@ -963,7 +977,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
           ))}
         </div>
         <div className="studio-sidebar-bottom">
-          <button className={page === "settings" ? "active" : ""} onClick={() => setPage("settings")}>
+          <button className={page === "settings" ? "active" : ""} aria-label="设置" title="设置" onClick={() => setPage("settings")}>
             <Settings2 size={21} />
             <span>设置</span>
           </button>
@@ -1030,17 +1044,10 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                 更多工具 <ArrowRight size={12} />
               </button>
             </div>
-            <section className="studio-quick-grid">
+            <section className="studio-quick-grid" aria-label="快捷操作">
               {[
                 {
-                  title: "生成图片",
-                  detail: (
-                    <>
-                      从文字或参考图
-                      <br />
-                      生成精美图片
-                    </>
-                  ),
+                  title: "图片",
                   Icon: ImagePlus,
                   action: () => {
                     setKind("image");
@@ -1048,14 +1055,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                   },
                 },
                 {
-                  title: "生成视频",
-                  detail: (
-                    <>
-                      让创意动起来
-                      <br />
-                      使用视频 API 生成
-                    </>
-                  ),
+                  title: "视频",
                   Icon: Play,
                   action: () => {
                     setKind("video");
@@ -1063,50 +1063,21 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                   },
                 },
                 {
-                  title: "最近项目",
-                  detail: (
-                    <>
-                      继续创作
-                      <br />
-                      打开最近的画布
-                    </>
-                  ),
+                  title: "最近",
                   Icon: Folder,
                   action: () => setPage("projects"),
                 },
                 {
                   title: "新建工作流",
-                  detail: (
-                    <>
-                      从空白画布开始
-                      <br />
-                      搭建专属工作流
-                    </>
-                  ),
                   Icon: Workflow,
                   action: newCanvas,
                 },
-                {
-                  title: "导入参考图",
-                  detail: (
-                    <>
-                      上传本地图片
-                      <br />
-                      作为创作参考
-                    </>
-                  ),
-                  Icon: Upload,
-                  action: () => askImage(),
-                },
               ].map((q) => (
                 <button key={q.title} onClick={q.action}>
-                  <span className="studio-quick-icon">
-                    <q.Icon size={24} />
+                  <span className="studio-quick-icon" aria-hidden="true">
+                    <q.Icon size={26} />
                   </span>
-                  <span>
-                    <strong>{q.title}</strong>
-                    <small>{q.detail}</small>
-                  </span>
+                  <strong>{q.title}</strong>
                 </button>
               ))}
             </section>
@@ -1235,7 +1206,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                     className={kind === "image" ? "active" : ""}
                     onClick={() => {
                       setKind("image");
-                      setParameters({});
+                      setParameters(current => current.dlss5 ? { dlss5: current.dlss5 } : {});
                       setImageParameters({});
                       setMaskAssetID("");
                       setAdditionalReferences([]);
@@ -1249,7 +1220,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                     className={kind === "video" ? "active" : ""}
                     onClick={() => {
                       setKind("video");
-                      setParameters({});
+                      setParameters(current => current.dlss5 ? { dlss5: current.dlss5 } : {});
                       setImageParameters({});
                       setMaskAssetID("");
                       setAdditionalReferences([]);
@@ -1293,7 +1264,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                     value={profile?.id ?? ""}
                     onChange={(e) => {
                       setProfileID(e.target.value);
-                      setParameters({});
+                      setParameters(current => current.dlss5 ? { dlss5: current.dlss5 } : {});
                       setImageParameters({});
                       setMaskAssetID("");
                       setAdditionalReferences([]);
@@ -1486,6 +1457,8 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                     </select>
                   </label>
                 )}
+                {kind === "video" && <DLSS5Panel value={parameters.dlss5} onChange={dlss5 => setParameters(current => ({ ...current, dlss5 }))}
+                  jobs={studio.snapshot.jobs} assets={studio.snapshot.assets} onBlockedReason={setDLSS5BlockedReason} onRefresh={studio.refresh} report={studio.report} />}
                 <label>
                   结果画布
                   <select value={studio.activeID} onChange={(e) => studio.setActiveID(e.target.value)}>
@@ -1736,106 +1709,6 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
           </>
         )}
       </main>
-      {page !== "canvas" && (
-        <aside className="studio-right-rail">
-          <section className="studio-model-panel">
-            <div className="studio-section-title">
-              <h3>
-                当前模型 <span>/ 连接状态</span>
-              </h3>
-              <span className={`studio-connection ${profile?.verifiedAt ? "verified" : ""}`}>
-                <i />
-                {profile?.verifiedAt ? "列表可达" : "未测试"}
-              </span>
-            </div>
-            <button className="studio-model-button" onClick={() => setPage("settings")}>
-              <span className="studio-model-logo">Λ</span>
-              <div>
-                <strong>{profile?.imageModel || "连接你的 AI 模型"}</strong>
-                <small>{profile?.name || "使用自己的 API Key"}</small>
-              </div>
-              <ChevronDown size={14} />
-            </button>
-            <div className="studio-capabilities">
-              <span>{profile?.imageApi === "responses" ? "Responses 图片工具" : "Images 生图 / 编辑"}</span>
-              <span>{profile?.capabilities ? "人工能力规则" : "生成能力待确认"}</span>
-              {profile?.videoModel && <span>已配置视频模型 · 待实测</span>}
-            </div>
-            <div className="studio-stats">
-              <div>
-                <small>已完成任务</small>
-                <strong>{finished.length.toLocaleString()}</strong>
-              </div>
-              <div>
-                <small>今日完成</small>
-                <strong>{today}</strong>
-              </div>
-              <div>
-                <small>工作空间</small>
-                <strong>本地</strong>
-              </div>
-            </div>
-          </section>
-          <section className="studio-guide">
-            <div className="studio-section-title">
-              <h3>新手引导</h3>
-              <span>{completeCount}/4</span>
-            </div>
-            <progress max={4} value={completeCount} aria-label="新手引导完成进度" />
-            <p>完成以下步骤，快速开启你的创作之旅</p>
-            <div className="studio-guide-steps">
-              {[
-                {
-                  title: "连接上游模型",
-                  detail: "选择并配置你喜欢的 AI 模型",
-                  action: () => setPage("settings"),
-                },
-                {
-                  title: "生成你的第一张图片",
-                  detail: "尝试用简单的文字描述创作",
-                  action: () => {
-                    setKind("image");
-                    setPage("create");
-                  },
-                },
-                {
-                  title: "尝试生成一段视频",
-                  detail: "体验视频生成的能力",
-                  action: () => {
-                    setKind("video");
-                    setPage("create");
-                  },
-                },
-                { title: "探索专业模式", detail: "了解工作流与更多高级功能", action: goCanvas },
-              ].map((s, i) => (
-                <button key={s.title} className={completed[i] ? "complete" : ""} onClick={s.action}>
-                  <span className="studio-guide-check">{completed[i] && <Check size={13} />}</span>
-                  <span>
-                    <strong>{s.title}</strong>
-                    <small>{s.detail}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button className="studio-primary full" onClick={() => setPage("create")}>
-              开始创作 <ArrowRight size={18} />
-            </button>
-            <button className="studio-text-button" onClick={() => setPage("projects")}>
-              探索工作流 <ExternalLink size={12} />
-            </button>
-          </section>
-          {!desktop && (
-            <div className="studio-preview-note">
-              <Monitor size={15} />
-              <span>
-                本地交互预览
-                <br />
-                <small>生成服务需桌面应用</small>
-              </span>
-            </div>
-          )}
-        </aside>
-      )}
       <input
         hidden
         ref={imageInput}
@@ -1898,40 +1771,48 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
         </div>
       )}
       {viewAsset && (
-        <Modal title={viewAsset.name} onClose={() => setViewAsset(null)}>
+        <Modal
+          title={viewAsset.name}
+          size="media"
+          onClose={() => setViewAsset(null)}
+          footer={
+            <>
+              {viewAsset.kind === "image" && (
+                <button
+                  type="button"
+                  className="studio-secondary"
+                  onClick={() => {
+                    setReferenceID(viewAsset.id);
+                    setKind("image");
+                    setMaskAssetID("");
+                    setAdditionalReferences([]);
+                    setViewAsset(null);
+                    setPage("create");
+                  }}
+                >
+                  用作参考图
+                </button>
+              )}
+              <button
+                type="button"
+                className="studio-primary"
+                onClick={() =>
+                  void runAction(async () => {
+                    if (await client.saveAsset(viewAsset.id)) setNotice("作品已保存");
+                  })
+                }
+              >
+                <ArrowDownToLine size={17} />
+                保存作品
+              </button>
+            </>
+          }
+        >
           <div className="studio-media-viewer">
             {viewAsset.kind === "video" ? (
               <video src={mediaURL(viewAsset.id)} controls autoPlay />
             ) : (
               <img src={mediaURL(viewAsset.id)} alt={viewAsset.name} />
-            )}
-          </div>
-          <div className="studio-form-actions">
-            <button
-              className="studio-primary"
-              onClick={() =>
-                void runAction(async () => {
-                  if (await client.saveAsset(viewAsset.id)) setNotice("作品已保存");
-                })
-              }
-            >
-              <ArrowDownToLine size={17} />
-              保存作品
-            </button>
-            {viewAsset.kind === "image" && (
-              <button
-                className="studio-secondary"
-                onClick={() => {
-                  setReferenceID(viewAsset.id);
-                  setKind("image");
-                  setMaskAssetID("");
-                  setAdditionalReferences([]);
-                  setViewAsset(null);
-                  setPage("create");
-                }}
-              >
-                用作参考图
-              </button>
             )}
           </div>
         </Modal>
@@ -1947,8 +1828,9 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
           setNotice("提示词已确认；点击生成后才会提交图片请求");
         }} />}
       {providerEdit !== undefined && (
-        <Modal title={providerEdit ? "编辑上游" : "添加上游"} onClose={() => setProviderEdit(undefined)}>
+        <Modal title={providerEdit ? "编辑上游" : "添加上游"} size="wide" formContent onClose={() => setProviderEdit(undefined)}>
           <ProviderForm
+            inDialog
             key={providerEdit?.id ?? "new"}
             profile={providerEdit ?? undefined}
             disabled={!desktop}

@@ -1195,6 +1195,165 @@ export namespace compat {
 
 }
 
+export namespace dlss5 {
+
+	export class Capabilities {
+	    status: string;
+	    bundleVersion?: string;
+	    available: boolean;
+	    reason?: string;
+	    engineVersion?: string;
+	    gpu?: string;
+	    supportsFlow?: string[];
+	    limits?: Record<string, any>;
+
+	    static createFrom(source: any = {}) {
+	        return new Capabilities(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.bundleVersion = source["bundleVersion"];
+	        this.available = source["available"];
+	        this.reason = source["reason"];
+	        this.engineVersion = source["engineVersion"];
+	        this.gpu = source["gpu"];
+	        this.supportsFlow = source["supportsFlow"];
+	        this.limits = source["limits"];
+	    }
+	}
+	export class Resolution {
+	    mode: string;
+	    width?: number;
+	    height?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Resolution(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
+	export class Options {
+	    enabled: boolean;
+	    style: number;
+	    intensity: number;
+	    localTone: number;
+	    localStructure: number;
+	    skinStructure: number;
+	    autoMask: boolean;
+	    outputMix: number;
+	    flowBackend: string;
+	    flowWidth: number;
+	    flowIterations: number;
+	    previewResolution: Resolution;
+	    exportResolution: Resolution;
+
+	    static createFrom(source: any = {}) {
+	        return new Options(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.style = source["style"];
+	        this.intensity = source["intensity"];
+	        this.localTone = source["localTone"];
+	        this.localStructure = source["localStructure"];
+	        this.skinStructure = source["skinStructure"];
+	        this.autoMask = source["autoMask"];
+	        this.outputMix = source["outputMix"];
+	        this.flowBackend = source["flowBackend"];
+	        this.flowWidth = source["flowWidth"];
+	        this.flowIterations = source["flowIterations"];
+	        this.previewResolution = this.convertValues(source["previewResolution"], Resolution);
+	        this.exportResolution = this.convertValues(source["exportResolution"], Resolution);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PreviewRequest {
+	    id: string;
+	    sourceAssetId: string;
+	    options: Options;
+	    positionSeconds: number;
+	    durationSeconds: number;
+
+	    static createFrom(source: any = {}) {
+	        return new PreviewRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sourceAssetId = source["sourceAssetId"];
+	        this.options = this.convertValues(source["options"], Options);
+	        this.positionSeconds = source["positionSeconds"];
+	        this.durationSeconds = source["durationSeconds"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PreviewResult {
+	    id: string;
+	    url: string;
+	    sourceUrl: string;
+	    width: number;
+	    height: number;
+
+	    static createFrom(source: any = {}) {
+	        return new PreviewResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.url = source["url"];
+	        this.sourceUrl = source["sourceUrl"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
+
+}
+
 export namespace studio {
 	
 	export class Asset {
@@ -1453,7 +1612,54 @@ export namespace studio {
 	        this.height = source["height"];
 	    }
 	}
+	export class DLSS5Job {
+	    state: string;
+	    progress: number;
+	    stage?: string;
+	    error?: string;
+	    sourceAssetId?: string;
+	    resultAssetId?: string;
+	    resultAssetIds?: string[];
+	    options: dlss5.Options;
+	    engineVersion?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DLSS5Job(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.progress = source["progress"];
+	        this.stage = source["stage"];
+	        this.error = source["error"];
+	        this.sourceAssetId = source["sourceAssetId"];
+	        this.resultAssetId = source["resultAssetId"];
+	        this.resultAssetIds = source["resultAssetIds"];
+	        this.options = this.convertValues(source["options"], dlss5.Options);
+	        this.engineVersion = source["engineVersion"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Job {
+	    dlss5?: DLSS5Job;
 	    originalPrompt?: string;
 	    confirmedPrompt?: string;
 	    sentPrompt?: string;
@@ -1489,6 +1695,7 @@ export namespace studio {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dlss5 = this.convertValues(source["dlss5"], DLSS5Job);
 	        this.originalPrompt = source["originalPrompt"];
 	        this.confirmedPrompt = source["confirmedPrompt"];
 	        this.sentPrompt = source["sentPrompt"];
@@ -1554,6 +1761,7 @@ export namespace studio {
 	    }
 	}
 	export class Parameters {
+	    dlss5?: dlss5.Options;
 	    promptMode?: string;
 	    outputFormat?: string;
 	    inputFidelity?: string;
@@ -1570,6 +1778,7 @@ export namespace studio {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dlss5 = this.convertValues(source["dlss5"], dlss5.Options);
 	        this.promptMode = source["promptMode"];
 	        this.outputFormat = source["outputFormat"];
 	        this.inputFidelity = source["inputFidelity"];
@@ -1580,6 +1789,24 @@ export namespace studio {
 	        this.aspectRatio = source["aspectRatio"];
 	        this.resolution = source["resolution"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Node {
 	    id: string;
@@ -1913,6 +2140,7 @@ export namespace studio {
 		    return a;
 		}
 	}
+
 
 
 

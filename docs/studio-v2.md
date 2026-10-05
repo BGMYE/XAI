@@ -45,6 +45,8 @@ OpenAI 兼容图像任务复用 `go-cli/pkg/client`，支持流式 Images API（
 
 xAI 请求使用 `duration`、`aspect_ratio`、`resolution` 和可选 `image.url`；OpenAI 兼容请求使用 `seconds`、`size`、可选 `input_reference` 文件。空时长省略，由上游决定。当前适配器支持 xAI 1–15 秒、OpenAI 兼容 4/8/12 秒；实际可用模型与参数仍以上游权限和文档为准。
 
+「生成视频」表单内可开启 **DLSS5 视频增强**，展开 XAI 画面预设、高级参数和独立的预览／导出自定义分辨率。完整 Windows x64 发行包携带私有引擎，用户无需安装 Python 或配置 DLSS5Tool 路径。生成后的原视频先保存，再交给本地引擎增强；可以针对同一原片预览、调整参数并重新导出，无需再次付费生成。发行条件、参数范围和验证边界见 [DLSS5 视频增强](./dlss5-video-enhancement.md)。
+
 协议依据：[xAI 视频生成文档](https://docs.x.ai/developers/model-capabilities/video/generation)、[OpenAI 视频创建文档](https://developers.openai.com/api/reference/resources/videos/methods/create)。兼容网关不一定实现相同字段，不承诺所有供应商通用；其他供应商应增加单独的 `Runner` 实现。
 
 简洁模式可直接提交图片或视频任务。专业模式可以连接：

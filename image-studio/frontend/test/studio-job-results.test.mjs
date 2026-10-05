@@ -32,3 +32,12 @@ test("reusing legacy image settings hydrates current controls and removes hidden
   const video = reusableGenerationSettings({ kind: "video", parameters: { quality: "high", seconds: 4 } });
   assert.equal(video.parameters.quality, "high");
 });
+
+test("DLSS5 final result is first while the generated original remains visible and searchable", () => {
+  const job = { dlss5: { resultAssetId: "enhanced", sourceAssetId: "original" }, resultAssetId: "original", resultAssetIds: ["original"], request: { prompt: "Slow Waves" } };
+  assert.deepEqual(resultAssetIDs(job), ["enhanced", "original"]);
+  const index = buildAssetPromptIndex([job]);
+  assert.match(index.get("enhanced"), /slow waves/);
+  assert.match(index.get("original"), /slow waves/);
+  assert.deepEqual(resultAssetIDs({ ...job, dlss5: { state: "failed", sourceAssetId: "original" } }), ["original"]);
+});

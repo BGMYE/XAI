@@ -76,10 +76,10 @@ func (t *tx) jobs() map[string]Job {
 	return t.doc.Jobs
 }
 
-func (t *tx) putJob(j Job) { t.jobs()[j.ID] = j; t.touch(colJobs, j.ID, false) }
+func (t *tx) putJob(j Job) { t.jobs()[j.ID] = cloneJob(j); t.touch(colJobs, j.ID, false) }
 
 func (t *tx) putProject(p Project) {
-	p = normalizeProjectCollections(p)
+	p = cloneProject(p)
 	if !t.cloned[colProjects] {
 		t.doc.Projects = maps.Clone(t.doc.Projects)
 		t.cloned[colProjects] = true
@@ -407,6 +407,9 @@ func cloneProfile(p Profile) Profile {
 
 func cloneProject(p Project) Project {
 	p.Nodes = slices.Clone(p.Nodes)
+	for i := range p.Nodes {
+		p.Nodes[i].Parameters = cloneParameters(p.Nodes[i].Parameters)
+	}
 	p.Edges = slices.Clone(p.Edges)
 	return normalizeProjectCollections(p)
 }
@@ -424,6 +427,8 @@ func normalizeProjectCollections(p Project) Project {
 }
 
 func cloneJob(j Job) Job {
+	j.DLSS5 = cloneDLSS5(j.DLSS5)
+	j.Request.Parameters = cloneParameters(j.Request.Parameters)
 	j.Profile = cloneProfile(j.Profile)
 	j.ResultAssetIDs = slices.Clone(j.ResultAssetIDs)
 	j.ResultURLs = slices.Clone(j.ResultURLs)
@@ -457,7 +462,16 @@ func cloneJob(j Job) Job {
 }
 
 func clonePromptCard(c PromptCard) PromptCard {
+	c.Parameters = cloneParameters(c.Parameters)
 	c.Tags = slices.Clone(c.Tags)
 	c.ReferenceImageURLs = slices.Clone(c.ReferenceImageURLs)
 	return c
+}
+
+func cloneParameters(p Parameters) Parameters {
+	if p.DLSS5 != nil {
+		copy := *p.DLSS5
+		p.DLSS5 = &copy
+	}
+	return p
 }

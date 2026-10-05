@@ -26,10 +26,10 @@ func main() {
 	}
 	appOptions := &options.App{
 		Title:     "XAI · Image Studio",
-		Width:     1440,
-		Height:    980,
-		MinWidth:  1100,
-		MinHeight: 780,
+		Width:     1280,
+		Height:    720,
+		MinWidth:  900,
+		MinHeight: 640,
 		AssetServer: &assetserver.Options{
 			Assets:     assets,
 			Handler:    media(http.NotFoundHandler()),

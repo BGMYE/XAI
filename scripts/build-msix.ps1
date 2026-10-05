@@ -19,7 +19,9 @@ param(
     [string]$SourceExe,
 
     [Parameter(Mandatory = $true)]
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [string]$Dlss5BundlePath = $env:XAI_DLSS5_BUNDLE
 )
 
 Set-StrictMode -Version Latest
@@ -74,11 +76,23 @@ function Test-MsixManifest([string]$manifest) {
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$bundleVerifier = Join-Path $root "image-studio/scripts/dlss5/bundle.py"
+if ($Architecture -eq "x64") {
+    if ([string]::IsNullOrWhiteSpace($Dlss5BundlePath)) {
+        throw "Windows x64 packages require the complete DLSS5 bundle. Set -Dlss5BundlePath or XAI_DLSS5_BUNDLE."
+    }
+    $Dlss5BundlePath = (Resolve-Path -LiteralPath $Dlss5BundlePath).Path
+    & python $bundleVerifier verify $Dlss5BundlePath
+    if ($LASTEXITCODE -ne 0) { throw "DLSS5 bundle verification failed; refusing to build the enhanced MSIX." }
+} elseif (-not [string]::IsNullOrWhiteSpace($Dlss5BundlePath)) {
+    throw "The DLSS5 bundle supports Windows x64 only. ARM64 packages must not include this runtime."
+}
 $packageVersion = Expand-Version $Version
 $makeAppx = Get-WindowsSdkTool "makeappx.exe"
 $sourceExePath = (Resolve-Path -LiteralPath $SourceExe).Path
 $outputFile = [IO.Path]::GetFullPath($OutputPath)
-$tempRoot = Join-Path $env:RUNNER_TEMP ("msix-" + $Architecture + "-" + [guid]::NewGuid().ToString("N"))
+$tempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+$tempRoot = Join-Path $tempBase ("msix-" + $Architecture + "-" + [guid]::NewGuid().ToString("N"))
 $packageRoot = Join-Path $tempRoot "package"
 $assetsDir = Join-Path $packageRoot "Assets"
 $manifestTemplate = Join-Path $root "image-studio/build/windows/msix/AppxManifest.xml.tmpl"
@@ -89,10 +103,18 @@ try {
     New-Item -ItemType Directory -Force -Path $assetsDir | Out-Null
 
     Copy-Item -LiteralPath $sourceExePath -Destination (Join-Path $packageRoot "image-studio.exe")
+    if ($Architecture -eq "x64") {
+        $bundleStage = Join-Path $packageRoot "runtimes/dlss5"
+        New-Item -ItemType Directory -Force -Path $bundleStage | Out-Null
+        Get-ChildItem -LiteralPath $Dlss5BundlePath -Force | Copy-Item -Destination $bundleStage -Recurse -Force
+        & python $bundleVerifier verify $bundleStage
+        if ($LASTEXITCODE -ne 0) { throw "Staged DLSS5 bundle is incomplete; refusing to build the enhanced MSIX." }
+    }
 
-    python3 (Join-Path $root "scripts/generate-msix-assets.py") `
+    python (Join-Path $root "scripts/generate-msix-assets.py") `
         (Join-Path $root "image-studio/build/appicon.png") `
         $assetsDir
+    if ($LASTEXITCODE -ne 0) { throw "MSIX asset generation failed." }
 
     $manifest = Get-Content -LiteralPath $manifestTemplate -Raw
     $manifest = $manifest.Replace("{{PACKAGE_IDENTITY_NAME}}", $IdentityName)

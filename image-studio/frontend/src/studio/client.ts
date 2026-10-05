@@ -1,5 +1,5 @@
 import { get, set } from "idb-keyval";
-import type { Asset, ChangeSet, Generation, Job, Profile, Project, Snapshot, PromptCard } from "./types";
+import type { DLSS5Options, DLSS5Probe, DLSS5PreviewRequest, DLSS5PreviewResult, Asset, ChangeSet, Generation, Job, Profile, Project, Snapshot, PromptCard } from "./types";
 import { emptySnapshot } from "./types";
 import { catalogURL } from "./publicCatalog.mjs";
 import { orderGraph, uid } from "./graph.mjs";
@@ -8,6 +8,12 @@ import { prepareLegacyStudioData, takeMigrationWarning } from "./legacyMigration
 import { normalizeChangeSetCollections, normalizeProjectCollections, normalizeSnapshotCollections } from "./snapshotCollections.mjs";
 type LibraryAction = "TrashProject" | "RestoreProject" | "TrashAsset" | "RestoreAsset" | "DeleteJob";
 interface Host extends Record<LibraryAction, (id: string) => Promise<void>> {
+  ProbeDLSS5?(): Promise<DLSS5Probe>;
+  PreviewDLSS5?(request: DLSS5PreviewRequest): Promise<DLSS5PreviewResult>;
+  CancelDLSS5Preview?(id: string): Promise<void>;
+  RetryDLSS5?(id: string): Promise<void>;
+  ApplyDLSS5?(id: string, options: DLSS5Options): Promise<void>;
+  CancelDLSS5?(id: string): Promise<void>;
   ArchiveJobs(days: number): Promise<string>;
   GetPublicPromptCatalog?(sourceID: string): Promise<string>;
   GetSnapshot(): Promise<Snapshot>;
@@ -53,6 +59,36 @@ function unavailable(): never {
 }
 export const client = {
   takeMigrationWarning,
+  async probeDLSS5(): Promise<DLSS5Probe> {
+    const desktop = host();
+    if (!desktop?.ProbeDLSS5) return { available: false, status: "unsupported_platform", reason: "请使用包含内置视频增强引擎的新版 XAI 桌面应用。" };
+    return desktop.ProbeDLSS5();
+  },
+  async previewDLSS5(request: DLSS5PreviewRequest): Promise<DLSS5PreviewResult> {
+    const desktop = host();
+    if (!desktop?.PreviewDLSS5) throw Error("当前环境无法运行 DLSS5 本地预览。");
+    return desktop.PreviewDLSS5(request);
+  },
+  async cancelDLSS5Preview(id: string): Promise<void> {
+    const desktop = host();
+    if (!desktop?.CancelDLSS5Preview) throw Error("当前环境无法取消 DLSS5 预览。");
+    await desktop.CancelDLSS5Preview(id);
+  },
+  async retryDLSS5(id: string): Promise<void> {
+    const desktop = host();
+    if (!desktop?.RetryDLSS5) throw Error("当前环境无法重试 DLSS5 增强。");
+    await desktop.RetryDLSS5(id);
+  },
+  async applyDLSS5(id: string, options: DLSS5Options): Promise<void> {
+    const desktop = host();
+    if (!desktop?.ApplyDLSS5) throw Error("当前环境无法导出 DLSS5 增强视频。");
+    await desktop.ApplyDLSS5(id, options);
+  },
+  async cancelDLSS5(id: string): Promise<void> {
+    const desktop = host();
+    if (!desktop?.CancelDLSS5) throw Error("当前环境无法取消 DLSS5 增强。");
+    await desktop.CancelDLSS5(id);
+  },
   async libraryAction(action: LibraryAction, id: string) {
     const desktop = host();
     if (!desktop) return unavailable();

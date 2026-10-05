@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 interface ImportPayload {
   prompt?: { zh?: string; en?: string };
@@ -26,6 +27,7 @@ export function StudioPromptImport({ onApply, report }: {
 }) {
   const [payload, setPayload] = useState<ImportedStudioPrompt | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  const titleID = useId();
   const handlers = useRef({ onApply, report });
   handlers.current = { onApply, report };
   const next = useRef<() => void>(() => undefined);
@@ -86,13 +88,29 @@ export function StudioPromptImport({ onApply, report }: {
     return () => dialog.current?.close();
   }, [payload]);
   if (!payload) return null;
-  return <dialog ref={dialog} className="studio-dialog" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <header><h2>导入提示词</h2><button type="button" onClick={close} aria-label="关闭">×</button></header>
-    <p>来源：Image-Prompts。确认后替换创作表单的提示词、反向提示词与尺寸，再由你检查并点击生成。</p>
-    <label>提示词<textarea readOnly rows={7} value={payload.prompt} /></label>
-    {payload.negativePrompt && <label>反向提示词<textarea readOnly rows={3} value={payload.negativePrompt} /></label>}
-    <p>尺寸：{payload.size}。反向提示词仅在上游明确支持且开启中转扩展时发送。</p>
-    <footer><button type="button" onClick={close}>取消</button>
-      <button type="button" className="studio-primary" onClick={() => { handlers.current.onApply(payload); close(); }}>导入到创作表单</button></footer>
-  </dialog>;
+  return (
+    <dialog
+      ref={dialog}
+      className="studio-dialog studio-dialog--structured studio-dialog--standard"
+      aria-labelledby={titleID}
+      onCancel={(event) => { event.preventDefault(); close(); }}
+    >
+      <header className="studio-dialog-header">
+        <h2 id={titleID}>导入提示词</h2>
+        <button type="button" className="studio-dialog-close" onClick={close} aria-label="关闭提示词导入">
+          <X size={20} />
+        </button>
+      </header>
+      <div className="studio-dialog-body">
+        <p className="studio-muted">来源：Image-Prompts。确认后替换创作表单的提示词、反向提示词与尺寸，再由你检查并点击生成。</p>
+        <label>提示词<textarea readOnly rows={7} value={payload.prompt} /></label>
+        {payload.negativePrompt && <label>反向提示词<textarea readOnly rows={3} value={payload.negativePrompt} /></label>}
+        <p className="studio-field-tip">尺寸：{payload.size}。反向提示词仅在上游明确支持且开启中转扩展时发送。</p>
+      </div>
+      <footer className="studio-dialog-footer">
+        <button type="button" className="studio-secondary" onClick={close}>取消</button>
+        <button type="button" className="studio-primary" onClick={() => { handlers.current.onApply(payload); close(); }}>导入到创作表单</button>
+      </footer>
+    </dialog>
+  );
 }

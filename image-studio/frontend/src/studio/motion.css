@@ -1,0 +1,99 @@
+/* Short, reversible feedback. Never animate canvas positioning or layout. */
+:is(.studio-app, .studio-dialog) :is(button, summary, a, input, select, textarea),
+.studio-app :is(.studio-search, .pc-search) {
+  transition:
+    color var(--studio-duration) var(--studio-ease),
+    background-color var(--studio-duration) var(--studio-ease),
+    border-color var(--studio-duration) var(--studio-ease),
+    box-shadow var(--studio-duration) var(--studio-ease),
+    opacity var(--studio-duration) var(--studio-ease),
+    transform var(--studio-duration) var(--studio-ease);
+}
+:is(.studio-app, .studio-dialog) button { touch-action: manipulation; }
+:is(.studio-app, .studio-dialog) :is(button, summary, a, [tabindex]):focus-visible {
+  outline: 2px solid #3773c5;
+  outline-offset: 3px;
+}
+:is(.studio-app, .studio-dialog) :is(button, .studio-primary, .studio-secondary):not(:disabled):active {
+  transform: translateY(1px) scale(0.98);
+  transition-duration: 90ms;
+}
+:is(.studio-app, .studio-dialog) :is(input, select, textarea):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+:is(.studio-app, .studio-dialog) button:disabled {
+  transform: none;
+  filter: none;
+}
+.studio-app :is(.studio-sidebar button.active, .studio-tabs button.active,
+  .pc-tabs button[aria-selected="true"]) {
+  box-shadow: inset 0 0 0 1px #a9c7eb, 0 2px 5px #3863990a;
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.studio-app, .studio-dialog) :is(.studio-primary, .studio-secondary):not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 12px #38639920;
+    filter: none;
+  }
+  .studio-app :is(.studio-quick-grid > button, .studio-project-card, .studio-project-new, .studio-asset-tile):not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 18px #38639920;
+    border-color: #9ab9df !important;
+  }
+  .studio-app :is(.studio-sidebar button, .studio-tabs button, .pc-tabs button,
+    .studio-filter button, .studio-canvas-toolbar button, .studio-zoom button):not(:disabled):hover,
+  .studio-dialog .studio-dialog-close:hover {
+    background-color: #e1edfc;
+    color: #285f9e;
+  }
+  :is(.studio-app, .studio-dialog) :is(button, .studio-primary, .studio-secondary):not(:disabled):active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: none;
+  }
+}
+.studio-dialog[open] {
+  animation: studio-dialog-enter 220ms var(--studio-ease) both;
+}
+.studio-dialog[open]::backdrop {
+  animation: studio-backdrop-enter 200ms ease-out both;
+}
+.studio-app .pc-drawer {
+  animation: studio-drawer-enter 220ms var(--studio-ease) both;
+}
+.studio-app .studio-toast {
+  animation: studio-notice-enter 180ms var(--studio-ease) both;
+}
+@supports (appearance: base-select) {
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select::picker-icon {
+    transition: rotate var(--studio-duration) var(--studio-ease);
+  }
+}
+@keyframes studio-dialog-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes studio-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes studio-drawer-enter {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes studio-notice-enter { from { opacity: 0; margin-bottom: -5px; } to { opacity: 1; margin-bottom: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  :is(.studio-app, .studio-dialog),
+  :is(.studio-app, .studio-dialog) *,
+  :is(.studio-app, .studio-dialog) *::before,
+  :is(.studio-app, .studio-dialog) *::after,
+  .studio-dialog::backdrop {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  html:root[data-platform] :is(.studio-app, .studio-dialog) select::picker-icon {
+    transition: none !important;
+  }
+  :is(.studio-app, .studio-dialog) button:is(:hover, :active),
+  .studio-app .pc-cover-button:hover > img {
+    transform: none !important;
+  }
+}

@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   prepare-version:
@@ -66,9 +67,8 @@ jobs:
           - id: windows-amd64
             runner: windows-latest
             goos: windows
-            artifact_suffix: windows-amd64.exe
+            artifact_suffix: windows-amd64.zip
             wails_args: -platform windows/amd64 -clean
-            package_cmd: cp image-studio/build/bin/image-studio.exe "$artifact_path"
           - id: windows-arm64
             runner: windows-11-arm
             goos: windows
@@ -97,6 +97,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up bundle verifier
+        if: matrix.id == 'windows-amd64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Require complete Windows x64 engine
+        if: matrix.id == 'windows-amd64'
+        id: dlss5_bundle
+        uses: ./.github/actions/prepare-dlss5-bundle
+        with:
+          run-id: ${{ vars.XAI_DLSS5_BUNDLE_RUN_ID }}
+          artifact-name: ${{ vars.XAI_DLSS5_BUNDLE_ARTIFACT }}
+          sha256: ${{ vars.XAI_DLSS5_BUNDLE_SHA256 }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -191,15 +206,13 @@ jobs:
         run: |
           echo "::warning::macOS ZIP and DMG contain only an ad-hoc-signed app; they are not Developer ID signed or Apple notarized and Gatekeeper may block them."
 
-      - name: Stage packaged artifact
+      - name: Name packaged artifact
         id: package
         shell: bash
         run: |
           mkdir -p dist
           artifact_name="image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
           artifact_path="dist/${artifact_name}"
-          ${{ matrix.package_cmd }}
-          ls -la dist/
           {
             echo "artifact_name=${artifact_name}"
             echo "artifact_path=${artifact_path}"
@@ -227,13 +240,34 @@ jobs:
           IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
           IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL: ${{ vars.IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL }}
         run: |
-          ./scripts/sign-windows-binary.ps1 -Path "${{ steps.package.outputs.artifact_path }}"
+          ./scripts/sign-windows-binary.ps1 -Path "image-studio/build/bin/image-studio.exe"
 
       - name: Warn on unsigned Windows artifacts
         if: matrix.goos == 'windows' && steps.windows_signing.outputs.available != 'true'
         shell: bash
         run: |
           echo "::warning::Windows artifact is unsigned. Windows 11 Smart App Control / SmartScreen may block it."
+
+      - name: Package base desktop artifact
+        if: matrix.id != 'windows-amd64'
+        shell: bash
+        env:
+          ARTIFACT_PATH: ${{ steps.package.outputs.artifact_path }}
+        run: |
+          artifact_path="$ARTIFACT_PATH"
+          ${{ matrix.package_cmd }}
+
+      - name: Package complete Windows x64 desktop ZIP
+        if: matrix.id == 'windows-amd64'
+        shell: pwsh
+        env:
+          XAI_DLSS5_BUNDLE: ${{ steps.dlss5_bundle.outputs.path }}
+          ARTIFACT_PATH: ${{ steps.package.outputs.artifact_path }}
+        run: |
+          ./scripts/build-windows-engine-zip.ps1 `
+            -BinaryPath 'image-studio/build/bin/image-studio.exe' `
+            -Dlss5BundlePath $env:XAI_DLSS5_BUNDLE `
+            -OutputZipPath $env:ARTIFACT_PATH
 
       - name: Build macOS DMG
         if: matrix.goos == 'darwin'
@@ -289,18 +323,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Windows desktop artifacts
+      - name: Set up bundle verifier
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download complete Windows x64 desktop package
         uses: actions/download-artifact@v4
         with:
-          path: dist
-          pattern: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-*.exe
+          name: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.zip
+          path: dist/amd64
+
+      - name: Download Windows ARM64 base binary
+        uses: actions/download-artifact@v4
+        with:
+          name: image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe
+          path: dist/arm64
 
       - name: Prepare installer inputs
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path image-studio/build/bin | Out-Null
-          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.exe/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.exe" "image-studio/build/bin/image-studio-amd64.exe"
-          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe" "image-studio/build/bin/image-studio-arm64.exe"
+          Expand-Archive -LiteralPath "dist/amd64/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-amd64.zip" -DestinationPath dist/amd64/expanded
+          Copy-Item 'dist/amd64/expanded/image-studio.exe' 'image-studio/build/bin/image-studio-amd64.exe'
+          Copy-Item "dist/arm64/image-studio-${{ needs.prepare-version.outputs.app_version }}-windows-arm64.exe" 'image-studio/build/bin/image-studio-arm64.exe'
+          $bundle = (Resolve-Path -LiteralPath 'dist/amd64/expanded/runtimes/dlss5').Path
+          python image-studio/scripts/dlss5/bundle.py verify $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'Required installer runtime is missing or incomplete.' }
+          "XAI_DLSS5_BUNDLE=$bundle" | Out-File -LiteralPath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Install NSIS
         shell: pwsh
@@ -324,8 +374,10 @@ jobs:
             "/DINFO_COPYRIGHT=Copyright (c) 2026"
             "/DARG_WAILS_AMD64_BINARY=..\..\bin\image-studio-amd64.exe"
             "/DARG_WAILS_ARM64_BINARY=..\..\bin\image-studio-arm64.exe"
+            "/DARG_XAI_DLSS5_BUNDLE=$env:XAI_DLSS5_BUNDLE"
           )
           & makensis @defines project.nsi
+          if ($LASTEXITCODE -ne 0) { throw "NSIS failed with exit code $LASTEXITCODE." }
 
       - name: Stage installer artifact
         id: package
@@ -375,6 +427,7 @@ jobs:
         with:
           name: ${{ steps.package.outputs.artifact_name }}
           path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
           retention-days: 14
 
   build-windows-msix:
@@ -389,7 +442,7 @@ jobs:
         include:
           - id: x64
             artifact_suffix: windows-x64.msix
-            input_artifact: windows-amd64.exe
+            input_artifact: windows-amd64.zip
             input_binary: image-studio-amd64.exe
             package_arch: x64
           - id: arm64
@@ -422,7 +475,18 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path image-studio/build/bin | Out-Null
-          Copy-Item "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}" "image-studio/build/bin/${{ matrix.input_binary }}"
+          $package = "dist/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.input_artifact }}"
+          if ('${{ matrix.package_arch }}' -eq 'x64') {
+            $expanded = Join-Path $env:RUNNER_TEMP 'msix-desktop-input'
+            Expand-Archive -LiteralPath $package -DestinationPath $expanded
+            Copy-Item -LiteralPath (Join-Path $expanded 'image-studio.exe') -Destination 'image-studio/build/bin/${{ matrix.input_binary }}'
+            $bundle = Join-Path $expanded 'runtimes/dlss5'
+            python image-studio/scripts/dlss5/bundle.py verify $bundle
+            if ($LASTEXITCODE -ne 0) { throw 'Required MSIX runtime is missing or incomplete.' }
+            "XAI_DLSS5_BUNDLE=$bundle" | Out-File -LiteralPath $env:GITHUB_ENV -Append -Encoding utf8
+          } else {
+            Copy-Item -LiteralPath $package -Destination 'image-studio/build/bin/${{ matrix.input_binary }}'
+          }
 
       - name: Detect MSIX identity configuration
         id: msix_identity
@@ -453,6 +517,7 @@ jobs:
             -IdentityName "$env:IMAGE_STUDIO_MSIX_IDENTITY_NAME" `
             -PublisherDisplayName "$env:IMAGE_STUDIO_MSIX_PUBLISHER_DISPLAY_NAME" `
             -SourceExe "image-studio/build/bin/${{ matrix.input_binary }}" `
+            -Dlss5BundlePath "$env:XAI_DLSS5_BUNDLE" `
             -OutputPath "dist/msix/image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
 
       - name: Warn on skipped MSIX package

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Copy, ExternalLink, ImagePlus, Plus, RefreshCw, Search, X } from "lucide-react";
 import { CATALOG_SOURCES, safePublicURL, type PublicPrompt } from "./publicCatalog.mjs";
 import { loadCatalog, type CatalogResult } from "./catalogCache";
@@ -53,6 +53,7 @@ function SourceDialog({
   message: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleID = useId();
   useEffect(() => {
     const d = ref.current;
     d?.showModal();
@@ -61,57 +62,63 @@ function SourceDialog({
   return (
     <dialog
       ref={ref}
-      className="studio-dialog pc-dialog"
-      onCancel={onClose}
+      className="studio-dialog pc-dialog studio-dialog--structured studio-dialog--wide"
+      aria-labelledby={titleID}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        const bounds = e.currentTarget.getBoundingClientRect();
+        if (e.clientX < bounds.left || e.clientX > bounds.right ||
+          e.clientY < bounds.top || e.clientY > bounds.bottom) onClose();
       }}
     >
-      <header>
-        <h2>{card.title}</h2>
-        <button aria-label="关闭图库详情" onClick={onClose}>
+      <header className="studio-dialog-header">
+        <h2 id={titleID}>{card.title}</h2>
+        <button type="button" className="studio-dialog-close" aria-label="关闭图库详情" onClick={onClose}>
           <X size={20} />
         </button>
       </header>
-      <div className="pc-detail-preview">
-        <SourcePreview url={card.previewURL} title={card.title} />
-      </div>
-      <div className="pc-detail-meta">
-        <span>{card.category}</span>
-        <span>{card.author || "上游未署名"}</span>
-        <span>{card.imageMode === "edit" ? "图像编辑提示词" : "图像生成提示词"}</span>
-      </div>
-      <label>
-        完整提示词原文
-        <textarea aria-label="图库完整提示词" readOnly rows={8} value={card.prompt} />
-      </label>
-      {Boolean(card.referenceImageURLs?.length) && (
-        <details>
-          <summary>查看原条目的参考图（{card.referenceImageURLs!.length}）</summary>
-          <div className="pc-reference-grid">
-            {card.referenceImageURLs!.map((u) => (
-              <a key={u} href={u} target="_blank" rel="noopener noreferrer">
-                <SourcePreview url={u} title="原条目参考图" />
-              </a>
-            ))}
-          </div>
-        </details>
-      )}
-      <p className="pc-help">
-        保留原作者的正文与图片配对；预览图不是自动生成的参考输入。加入画布不会发起生成，参考图需显式导入。
-        {card.imageModel && `原条目标注模型：${card.imageModel}（不会自动替换你的模型）。`}
-      </p>
-      {card.sourceURL && (
-        <a className="pc-source-link" href={card.sourceURL} target="_blank" rel="noopener noreferrer">
-          查看原始来源 <ExternalLink size={13} />
-        </a>
-      )}
-      {message && (
-        <p role="status" className="pc-notice-inline">
-          {message}
+      <div className="studio-dialog-body">
+        <div className="pc-detail-preview">
+          <SourcePreview url={card.previewURL} title={card.title} />
+        </div>
+        <div className="pc-detail-meta">
+          <span>{card.category}</span>
+          <span>{card.author || "上游未署名"}</span>
+          <span>{card.imageMode === "edit" ? "图像编辑提示词" : "图像生成提示词"}</span>
+        </div>
+        <label>
+          完整提示词原文
+          <textarea aria-label="图库完整提示词" readOnly rows={8} value={card.prompt} />
+        </label>
+        {Boolean(card.referenceImageURLs?.length) && (
+          <details>
+            <summary>查看原条目的参考图（{card.referenceImageURLs!.length}）</summary>
+            <div className="pc-reference-grid">
+              {card.referenceImageURLs!.map((u) => (
+                <a key={u} href={u} target="_blank" rel="noopener noreferrer">
+                  <SourcePreview url={u} title="原条目参考图" />
+                </a>
+              ))}
+            </div>
+          </details>
+        )}
+        <p className="pc-help">
+          保留原作者的正文与图片配对；预览图不是自动生成的参考输入。加入画布不会发起生成，参考图需显式导入。
+          {card.imageModel && `原条目标注模型：${card.imageModel}（不会自动替换你的模型）。`}
         </p>
-      )}
-      <div className="pc-detail-actions">
+        {card.sourceURL && (
+          <a className="pc-source-link" href={card.sourceURL} target="_blank" rel="noopener noreferrer">
+            查看原始来源 <ExternalLink size={13} />
+          </a>
+        )}
+        {message && (
+          <p role="status" className="pc-notice-inline">
+            {message}
+          </p>
+        )}
+      </div>
+      <footer className="studio-dialog-footer">
         <button className="studio-primary" disabled={busy} onClick={onCopy}>
           <Copy size={15} />
           复制完整提示词
@@ -124,7 +131,7 @@ function SourceDialog({
           <Plus size={15} />
           加入当前画布
         </button>
-      </div>
+      </footer>
     </dialog>
   );
 }

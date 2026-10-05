@@ -1,0 +1,166 @@
+.dlss5-panel {
+  border: 1px solid var(--studio-line, #cbdced);
+  border-radius: var(--studio-radius-card, 16px);
+  padding: 16px;
+  background: #f7faff;
+  font-family: var(--studio-font);
+  min-width: 0;
+  color: var(--studio-ink);
+}
+.dlss5-toggle-row, .dlss5-toggle-row > span, .dlss5-job-heading, .dlss5-slider > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.studio-generation-form .dlss5-toggle-row label { margin: 0; font-size: var(--studio-text-body); font-weight: 600; }
+.studio-generation-form .dlss5-toggle-row input { width: 34px; height: 20px; margin: 0; accent-color: #3e78d2; flex: none; cursor: pointer; }
+.dlss5-panel .dlss5-tip, .dlss5-job .dlss5-tip, .dlss5-panel small {
+  margin: 6px 0 0; color: var(--studio-muted-ink); font-size: var(--studio-text-meta); line-height: 1.65;
+}
+.dlss5-expanded { display: grid; gap: 16px; margin-top: 18px; animation: dlss5-expand 220ms var(--studio-ease, ease-out); }
+@keyframes dlss5-expand { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.dlss5-panel label { gap: 7px; font-size: var(--studio-text-small); min-width: 0; }
+.dlss5-panel input, .dlss5-panel select, .dlss5-panel button { font-family: var(--studio-font); font-size: var(--studio-text-body); }
+.dlss5-panel input:not([type="range"]):not([type="checkbox"]), .dlss5-panel select { min-width: 0; width: 100%; border-radius: var(--studio-radius-control); box-sizing: border-box; }
+.dlss5-sliders { display: grid; gap: 13px; }
+.studio-generation-form .dlss5-slider { gap: 2px; margin: 0; }
+.dlss5-slider output { font-variant-numeric: tabular-nums; font-size: var(--studio-text-meta); color: #3e65a7; }
+.studio-generation-form .dlss5-slider input[type="range"] { width: 100%; height: 24px; padding: 0; background: transparent; border: 0; box-shadow: none; accent-color: #4f80d4; cursor: pointer; }
+.studio-generation-form .dlss5-check { display: flex; align-items: center; gap: 8px; }
+.studio-generation-form .dlss5-check input { width: 17px; height: 17px; margin: 0; accent-color: #4f80d4; }
+.dlss5-panel details { min-width: 0; }
+.dlss5-panel summary { cursor: pointer; font-size: var(--studio-text-small); line-height: 1.6; font-weight: 500; }
+.dlss5-panel summary > span { display: block; font-size: var(--studio-text-meta); font-weight: 400; color: var(--studio-muted-ink); }
+.dlss5-flow summary svg { vertical-align: middle; margin-left: 5px; }
+.dlss5-config-fields { display: grid; gap: 12px; margin-top: 12px; }
+.dlss5-two-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dlss5-resolution { min-width: 0; border: 1px solid var(--studio-line); border-radius: var(--studio-radius-control); padding: 12px; margin: 0; display: grid; gap: 10px; }
+.dlss5-resolution legend { font-size: var(--studio-text-small); font-weight: 500; padding: 0 5px; }
+.dlss5-engine { display: grid; gap: 6px; padding-top: 15px; border-top: 1px solid var(--studio-line); }
+.dlss5-engine-status { display: flex; align-items: flex-start; gap: 7px; font-size: var(--studio-text-meta); line-height: 1.65; overflow-wrap: anywhere; }
+.dlss5-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #a18349; margin-top: 6px; flex: none; }
+.dlss5-engine-status.ready .dlss5-status-dot { background: #468666; }
+.dlss5-path-field { display: flex; gap: 6px; min-width: 0; }
+.dlss5-path-field input { flex: 1; }
+.dlss5-path-field button { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 36px; border: 1px solid var(--studio-line); border-radius: var(--studio-radius-control); background: #fff; color: var(--studio-ink); cursor: pointer; }
+.dlss5-preview { display: grid; gap: 12px; border-top: 1px solid var(--studio-line); padding-top: 16px; min-width: 0; }
+.dlss5-preview h4 { margin: 0; font-size: var(--studio-text-body); font-weight: 600; }
+.dlss5-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.dlss5-actions .studio-secondary, .dlss5-panel .studio-secondary { min-height: 36px; padding: 8px 11px; font-size: var(--studio-text-small); }
+.dlss5-compare { overflow: hidden; border-radius: var(--studio-radius-control); padding: 8px; background: #eaf0f7; min-width: 0; }
+.dlss5-compare video { display: block; width: 100%; max-height: 300px; background: #101820; margin: 8px 0; border-radius: 8px; }
+.dlss5-compare-tabs { display: flex; gap: 6px; }
+.dlss5-compare-tabs button { border: 1px solid transparent; background: transparent; border-radius: 9px; padding: 7px 10px; color: var(--studio-muted-ink); cursor: pointer; font-size: var(--studio-text-small); }
+.dlss5-compare-tabs button[aria-pressed="true"] { background: #fff; border-color: var(--studio-line); color: #285ca4; }
+.dlss5-preview-status { margin: 0; font-size: var(--studio-text-meta); line-height: 1.6; color: var(--studio-muted-ink); overflow-wrap: anywhere; }
+.studio-generation-form .dlss5-error, .dlss5-job .dlss5-error { margin: 0; font-size: var(--studio-text-meta); line-height: 1.6; color: #a54444; overflow-wrap: anywhere; }
+.dlss5-job { margin-top: 12px; padding: 12px; border: 1px solid var(--studio-line); border-radius: var(--studio-radius-control); background: #f5f9fe; }
+.dlss5-job-heading { flex-wrap: wrap; font-size: var(--studio-text-small); }
+.dlss5-job-heading strong { font-weight: 500; }
+.dlss5-job-heading > span { font-size: var(--studio-text-meta); color: var(--studio-muted-ink); }
+.dlss5-job .dlss5-actions { margin-top: 8px; }
+.dlss5-panel button:disabled, .dlss5-job button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 460px) { .dlss5-panel { padding: 12px; } .dlss5-two-columns { gap: 7px; } .dlss5-actions > button { flex: 1; } }
+@media (prefers-reduced-motion: reduce) { .dlss5-expanded { animation: none; } }
+.dlss5-percent { display: flex; align-items: center; gap: 4px; font-size: var(--studio-text-meta); color: var(--studio-muted-ink); }
+.studio-generation-form .dlss5-percent input[type="number"] { width: 64px; height: 30px; min-height: 30px; padding: 4px 6px; font-size: var(--studio-text-meta); font-variant-numeric: tabular-nums; }
+
+/* Keep the inline panel compact inside the shared generation form. */
+.studio-app .studio-generation-form .dlss5-panel label {
+  margin: 0;
+  gap: 7px;
+}
+.studio-app .studio-generation-form .dlss5-panel .dlss5-slider { gap: 2px; }
+.studio-app .studio-generation-form .dlss5-panel .dlss5-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.studio-app .studio-generation-form .dlss5-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  list-style: none;
+}
+.studio-app .studio-generation-form .dlss5-panel summary::marker { content: ""; }
+.studio-app .studio-generation-form .dlss5-panel summary::-webkit-details-marker { display: none; }
+.dlss5-flow summary svg {
+  flex: none;
+  margin: 0 0 0 auto;
+  transition: transform var(--studio-duration, 180ms) var(--studio-ease, ease);
+}
+.dlss5-flow[open] > summary svg { transform: rotate(180deg); }
+.dlss5-engine summary > span { margin-left: auto; text-align: right; }
+.dlss5-engine summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform var(--studio-duration, 180ms) var(--studio-ease, ease);
+}
+.dlss5-engine details[open] > summary::after { transform: rotate(225deg) translate(-1px, -1px); }
+html:root[data-platform] .studio-app .studio-generation-form .dlss5-panel .dlss5-toggle-row input[role="switch"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 44px;
+  width: 44px !important;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #aebfd3;
+  box-shadow: inset 0 1px 2px #294c741a;
+  cursor: pointer;
+  transition: background-color var(--studio-duration, 180ms) var(--studio-ease, ease);
+}
+html:root[data-platform] .studio-app .studio-generation-form .dlss5-panel .dlss5-toggle-row input[role="switch"]::before {
+  content: "";
+  position: absolute;
+  inset: 3px auto auto 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px #203d6033;
+  transition: transform var(--studio-duration, 180ms) var(--studio-ease, ease);
+}
+html:root[data-platform] .studio-app .studio-generation-form .dlss5-panel .dlss5-toggle-row input[role="switch"]:checked { background: #4178ca; }
+html:root[data-platform] .studio-app .studio-generation-form .dlss5-panel .dlss5-toggle-row input[role="switch"]:checked::before { transform: translateX(20px); }
+html:root[data-platform] .studio-app .studio-generation-form .dlss5-panel .dlss5-percent input[type="number"] {
+  height: 30px;
+  min-height: 30px;
+  padding: 3px 6px;
+  font-size: var(--studio-text-meta);
+  line-height: 1.4;
+}
+.studio-app .studio-generation-form .dlss5-panel :is(input, summary):focus-visible {
+  outline: 2px solid #4276c9;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-app .studio-generation-form .dlss5-panel input[role="switch"],
+  .studio-app .studio-generation-form .dlss5-panel input[role="switch"]::before,
+  .studio-app .studio-generation-form .dlss5-panel summary::after,
+  .studio-app .studio-generation-form .dlss5-panel summary svg { transition: none !important; }
+}
+.dlss5-slider.is-disabled > span { color: var(--studio-muted-ink); }
+.dlss5-slider.is-disabled input { opacity: .5; cursor: not-allowed; }
+.dlss5-engine-info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; margin: 0; font-size: var(--studio-text-meta); line-height: 1.6; }
+.dlss5-engine-info dt { color: var(--studio-muted-ink); }
+.dlss5-engine-info dd { margin: 0; overflow-wrap: anywhere; }
+.dlss5-engine-status strong { font-weight: 500; }
+.dlss5-panel .dlss5-engine > .studio-secondary { justify-self: start; width: auto; min-height: 32px; padding: 6px 10px; }
+.dlss5-engine-detail .dlss5-tip { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dlss5-expanded > .dlss5-engine:first-child { padding-top: 0; border-top: 0; }
+.dlss5-advanced { padding: 12px; background: #eef4fc80; border-radius: var(--studio-radius-control); border: 1px solid var(--studio-line); }

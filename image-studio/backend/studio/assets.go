@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -22,6 +23,7 @@ import (
 
 const (
 	maxMediaBytes     = 160 * 1024 * 1024
+	maxVideoBytes     = int64(16 * 1024 * 1024 * 1024)
 	maxReferenceBytes = 20 * 1024 * 1024
 )
 
@@ -65,8 +67,12 @@ func (e *Engine) storeAsset(output Output, name, kind string) (Asset, error) {
 	} else {
 		head, size = output.Data, int64(len(output.Data))
 	}
-	if size == 0 || size > maxMediaBytes {
-		return Asset{}, errors.New("素材为空或超过 160 MB")
+	limit := int64(maxMediaBytes)
+	if kind == "video" && output.Path != "" {
+		limit = maxVideoBytes
+	}
+	if size == 0 || size > limit {
+		return Asset{}, fmt.Errorf("素材为空或超过 %d MB", limit/(1024*1024))
 	}
 	mime := http.DetectContentType(head)
 	ext, ok := mediaExtensions[mime]

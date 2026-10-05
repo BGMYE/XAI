@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   prepare-version:
@@ -65,6 +66,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up bundle verifier
+        if: matrix.portable_arch == 'x64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Require complete Windows x64 engine
+        if: matrix.portable_arch == 'x64'
+        id: dlss5_bundle
+        uses: ./.github/actions/prepare-dlss5-bundle
+        with:
+          run-id: ${{ vars.XAI_DLSS5_BUNDLE_RUN_ID }}
+          artifact-name: ${{ vars.XAI_DLSS5_BUNDLE_ARTIFACT }}
+          sha256: ${{ vars.XAI_DLSS5_BUNDLE_SHA256 }}
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -106,9 +122,24 @@ jobs:
           wails build ${{ matrix.wails_args }} \
             -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ needs.prepare-version.outputs.app_version }}"
 
+      - name: Sign portable executable before packaging when configured
+        shell: pwsh
+        env:
+          IMAGE_STUDIO_WINDOWS_CERT_BASE64: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_BASE64 }}
+          IMAGE_STUDIO_WINDOWS_CERT_PASSWORD: ${{ secrets.IMAGE_STUDIO_WINDOWS_CERT_PASSWORD }}
+          IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL: ${{ vars.IMAGE_STUDIO_WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if ($env:IMAGE_STUDIO_WINDOWS_CERT_BASE64 -and $env:IMAGE_STUDIO_WINDOWS_CERT_PASSWORD) {
+            ./scripts/sign-windows-binary.ps1 -Path 'image-studio/build/bin/image-studio.exe'
+          } else {
+            Write-Warning 'Portable executable is unsigned; Windows SmartScreen / Smart App Control may block it.'
+          }
+
       - name: Build portable fixed-webview zip
         id: package
         shell: pwsh
+        env:
+          XAI_DLSS5_BUNDLE: ${{ steps.dlss5_bundle.outputs.path }}
         run: |
           $artifactName = "image-studio-${{ needs.prepare-version.outputs.app_version }}-${{ matrix.artifact_suffix }}"
           $artifactPath = "dist/$artifactName"
@@ -125,4 +156,5 @@ jobs:
         with:
           name: ${{ steps.package.outputs.artifact_name }}
           path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
           retention-days: 14

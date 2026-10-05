@@ -25,7 +25,8 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 - **macOS**：Wails 桌面端可构建 universal app。未使用有效 Apple Developer ID 签名并完成公证的包，可能被 Gatekeeper 阻止；仓库中的本地自签不等于 Apple 公证。
 - **外部上游**：应用只是客户端，不附送模型额度或代理服务。`BaseURL` 必须与所选 Responses API / Images API 形态兼容，API Key 也必须具备相应模型权限；连接成功不代表每个扩展参数都被上游实现。
 - **无限画布**：桌面端使用持久化世界坐标保存图片与视频节点，支持平移、以指针为中心缩放、节点选择/拖拽/删除、适配全部，以及按工作区保存节点与视口。可导入参考图并将成品用于下一轮编辑；旧版 Konva 标注与目录批处理不再提供经典入口。视频节点可直接预览。
-- **外部视频**：上游配置可填写独立且显式的 `videoModelID`。桌面端通过当前 profile 的 `BaseURL + API Key + videoModelID` 提交 `/v1/videos`，轮询 `/v1/videos/{id}`，接受 URL 或 `b64_json` 结果，并把结果追加到无限画布。应用不会把视频模型静默替换成图像模型，也不内置本地视频模型、剪辑或转码。
+- **外部视频**：上游配置可填写独立且显式的 `videoModelID`。桌面端通过当前 profile 的 `BaseURL + API Key + videoModelID` 提交 `/v1/videos`，轮询 `/v1/videos/{id}`，接受 URL 或 `b64_json` 结果，并把结果追加到无限画布。应用不会把视频模型静默替换成图像模型，也不内置本地视频生成模型。
+- **DLSS5 视频增强**：在同一生成视频表单中开启，使用 XAI 预设及高级调节，预览和导出可分别指定尺寸。完整 Windows x64 发行包携带私有引擎，终端用户无需安装 Python 或配置 DLSS5Tool；发布者需提供可分发的运行资产并完成目标显卡验收。见 [功能与发行说明](./docs/dlss5-video-enhancement.md)。
 - **配置能力**：提供 sub2api 预设、接口选择 TIPS、按模型和协议确认的能力记录，以及 Responses 精确执行 / 创作辅助模式。保存设置和模型发现不会暗中生成收费图片。
 
 当前没有独立部署的在线 Web 版。仓库里的浏览器预览主要用于前端调试和 target platform 预览，不等同于可直接对外提供服务的 SaaS Web 端。
@@ -65,6 +66,7 @@ Image Studio 面向 OpenAI 兼容图像上游，重点解决长时间图像推�
 | 应用展示、界面截图、能力概览 | [docs/showcase.md](./docs/showcase.md) |
 | 安装包下载、平台差异、产物选择 | [docs/packages.md](./docs/packages.md) |
 | 功能清单、平台能力、快捷键 | [docs/features.md](./docs/features.md) |
+| 生成视频内嵌 DLSS5 增强、独立预览与导出尺寸 | [docs/dlss5-video-enhancement.md](./docs/dlss5-video-enhancement.md) |
 | sub2api 预设、协议 TIPS 与真实部署验收 | [docs/sub2api.md](./docs/sub2api.md) |
 | 当前 issue 处理进展与待验证项 | [docs/issue-progress.md](./docs/issue-progress.md) |
 | 可直接复用的 issue 关单评论模板 | [docs/issue-close-comments.md](./docs/issue-close-comments.md) |

@@ -1,6 +1,6 @@
 /** Preserve legacy first-result IDs while surfacing every returned final asset. */
 export function resultAssetIDs(job) {
-  return [...new Set([job.resultAssetId, ...(job.resultAssetIds ?? []), ...(job.resultImages ?? []).map((image) => image.assetId)].filter(Boolean))];
+  return [...new Set([job.dlss5?.resultAssetId, job.resultAssetId, ...(job.resultAssetIds ?? []), ...(job.resultImages ?? []).map((image) => image.assetId)].filter(Boolean))];
 }
 
 export function buildAssetPromptIndex(jobs) {

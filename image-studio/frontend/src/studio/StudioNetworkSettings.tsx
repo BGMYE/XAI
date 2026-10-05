@@ -27,9 +27,9 @@ export function StudioNetworkSettings({ disabled }: { disabled: boolean }) {
     }
   };
   return (
-    <section className="studio-settings-note">
+    <section className="studio-settings-note studio-network-settings">
       <h3>网络代理</h3>
-      <p>沿用已有代理配置；切换网络时可在这里调整。</p>
+      <p className="studio-muted">沿用已有代理配置；切换网络时可在这里调整。</p>
       <label>连接方式
         <select disabled={disabled || saving} value={config.mode}
           onChange={(e) => { setConfig({ ...config, mode: e.target.value as ProxyConfig["mode"] }); setMessage(""); }}>
@@ -39,14 +39,16 @@ export function StudioNetworkSettings({ disabled }: { disabled: boolean }) {
         </select>
       </label>
       {config.mode === "custom" && <label>代理地址
-        <input disabled={disabled || saving} value={config.url} placeholder="http://127.0.0.1:7890"
+        <input disabled={disabled || saving} value={config.url} placeholder="例如：http://127.0.0.1:7890"
           onChange={(e) => { setConfig({ ...config, url: e.target.value }); setMessage(""); }} />
       </label>}
-      <p>支持 HTTP 和 HTTPS 代理。代理地址用于网络转发，API 根地址仍在上游配置中填写。</p>
-      <button type="button" disabled={disabled || saving} onClick={() => void save()}>
+      <p className="studio-field-tip">支持 HTTP 和 HTTPS 代理。代理地址用于网络转发，API 根地址仍在上游配置中填写。</p>
+      <div className="studio-form-actions">
+      <button type="button" className="studio-secondary" disabled={disabled || saving} onClick={() => void save()}>
         {saving ? "保存中…" : "保存网络设置"}
       </button>
-      {message && <p role="status">{message}</p>}
+      </div>
+      {message && <p className="studio-field-tip studio-network-status" role="status">{message}</p>}
     </section>
   );
 }

@@ -34,6 +34,10 @@ func assetReferences(d document) map[string]int {
 	}
 	for _, j := range d.Jobs {
 		ids := append([]string{j.ResultAssetID, j.Request.ReferenceAssetID, j.Request.MaskAssetID}, j.Request.ReferenceAssetIDs...)
+		if j.DLSS5 != nil {
+			ids = append(ids, j.DLSS5.SourceAssetID, j.DLSS5.ResultAssetID)
+			ids = append(ids, j.DLSS5.ResultAssetIDs...)
+		}
 		ids = append(ids, j.ResultAssetIDs...)
 		ids = append(ids, j.ParentAssetIDs...)
 		for _, id := range ids {
@@ -79,6 +83,9 @@ func canDeleteJob(d document, id string) error {
 	if !terminal(j.State) {
 		return errors.New("只能删除已结束的任务")
 	}
+	if activeDLSS5(j) {
+		return errors.New("本地视频增强仍在执行，请先等待或取消")
+	}
 	for _, other := range d.Jobs {
 		if !terminal(other.State) {
 			for _, dep := range other.DependsOn {
@@ -100,6 +107,9 @@ func (e *Engine) DeleteJobs(ids []string) error {
 		for _, id := range ids {
 			if _, exists := t.doc.Jobs[id]; !exists {
 				continue
+			}
+			if e.dlss.runs[id] != nil {
+				return errors.New("本地视频处理器尚未退出，请稍后删除")
 			}
 			if err := canDeleteJob(t.doc, id); err != nil {
 				return err
@@ -134,7 +144,7 @@ func (e *Engine) ArchiveJobs(before time.Time) (string, int, error) {
 		jobs := []Job{}
 		for id, j := range t.doc.Jobs {
 			at, err := time.Parse(time.RFC3339Nano, j.UpdatedAt)
-			if err == nil && at.Before(before) && canDeleteJob(t.doc, id) == nil {
+			if err == nil && at.Before(before) && e.dlss.runs[id] == nil && canDeleteJob(t.doc, id) == nil {
 				jobs = append(jobs, cloneJob(j))
 			}
 		}
@@ -174,7 +184,7 @@ func (e *Engine) setProjectTrash(id string, deleted bool) error {
 		}
 		if deleted {
 			for _, j := range t.doc.Jobs {
-				if j.Request.ProjectID == id && !terminal(j.State) {
+				if j.Request.ProjectID == id && (!terminal(j.State) || activeDLSS5(j) || e.dlss.runs[j.ID] != nil) {
 					return errors.New("画布仍有未结束任务，请先取消或完成")
 				}
 			}
@@ -198,6 +208,11 @@ func (e *Engine) setAssetTrash(id string, deleted bool) error {
 			return errors.New("素材不存在")
 		}
 		if deleted {
+			for _, p := range e.dlss.previews {
+				if !p.ready && p.sourceAssetID == id {
+					return errors.New("素材正在用于本地视频预览，请先取消预览")
+				}
+			}
 			if n := assetReferences(t.doc)[id]; n > 0 {
 				return fmt.Errorf("素材仍有 %d 处画布或任务引用，请先移除引用", n)
 			}

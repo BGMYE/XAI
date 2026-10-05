@@ -34,6 +34,18 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
+# Every installer that supports AMD64 must carry the complete checked engine.
+# ARM64 installation remains a base edition and never receives the x64 runtime.
+!ifdef SUPPORTS_AMD64
+    !ifndef ARG_XAI_DLSS5_BUNDLE
+        !define ARG_XAI_DLSS5_BUNDLE "$%XAI_DLSS5_BUNDLE%"
+    !endif
+    !if "${ARG_XAI_DLSS5_BUNDLE}" == ""
+        !error "AMD64 installer requires ARG_XAI_DLSS5_BUNDLE or XAI_DLSS5_BUNDLE."
+    !endif
+    !system 'python "..\..\..\scripts\dlss5\bundle.py" verify "${ARG_XAI_DLSS5_BUNDLE}"' = 0
+!endif
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -79,14 +91,199 @@ Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
+!ifdef SUPPORTS_AMD64
+Var XaiInstallStage
+Var XaiOldAppMoved
+Var XaiOldEngineMoved
+Var XaiNewEngineMoved
+Var XaiRollbackFailed
+Var XaiInstallFailure
+Var XaiAppGuard
+Var XaiWorkerGuard
+Var XaiHostGuard
+Var XaiModelGuard
+Var XaiFFmpegGuard
+Var XaiFFprobeGuard
+Var XaiGuidanceGuard
+
+# Hold write-capable handles until commit/rollback. Active image mappings deny
+# GENERIC_WRITE; denying read/write sharing also prevents a new process launch.
+# FILE_SHARE_DELETE permits our same-volume Rename while the guards stay open.
+!macro xai.guardExistingFile PATH HANDLE
+    ${If} ${FileExists} "${PATH}"
+        System::Call 'kernel32::CreateFileW(w "${PATH}", i 0xC0000000, i 4, p 0, i 3, i 0x80, p 0) p .s'
+        Pop ${HANDLE}
+        ${If} ${HANDLE} == -1
+            StrCpy $XaiInstallFailure "Cannot reserve ${PATH}. Close Image Studio and its DLSS5 workers, and check installation permissions before retrying."
+            Goto xai_prepare_failed
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+!macro xai.closeGuard HANDLE
+    ${If} ${HANDLE} != -1
+        System::Call 'kernel32::CloseHandle(p ${HANDLE})'
+        StrCpy ${HANDLE} -1
+    ${EndIf}
+!macroend
+
+Function xai.closeUpgradeGuards
+    !insertmacro xai.closeGuard $XaiAppGuard
+    !insertmacro xai.closeGuard $XaiWorkerGuard
+    !insertmacro xai.closeGuard $XaiHostGuard
+    !insertmacro xai.closeGuard $XaiModelGuard
+    !insertmacro xai.closeGuard $XaiFFmpegGuard
+    !insertmacro xai.closeGuard $XaiFFprobeGuard
+    !insertmacro xai.closeGuard $XaiGuidanceGuard
+FunctionEnd
+
+Function xai.installAmd64Transaction
+    StrCpy $XaiInstallStage ""
+    StrCpy $XaiOldAppMoved 0
+    StrCpy $XaiOldEngineMoved 0
+    StrCpy $XaiNewEngineMoved 0
+    StrCpy $XaiRollbackFailed 0
+    StrCpy $XaiAppGuard -1
+    StrCpy $XaiWorkerGuard -1
+    StrCpy $XaiHostGuard -1
+    StrCpy $XaiModelGuard -1
+    StrCpy $XaiFFmpegGuard -1
+    StrCpy $XaiFFprobeGuard -1
+    StrCpy $XaiGuidanceGuard -1
+    StrCpy $XaiInstallFailure "Unable to prepare the complete new installation. The previous installation has not been replaced."
+
+    # Stage and backup share the installation volume and stay outside the
+    # manifest-checked dlss5 root. Nothing is written over the old app yet.
+    ClearErrors
+    CreateDirectory "$INSTDIR"
+    IfErrors xai_prepare_failed
+    GetTempFileName $XaiInstallStage "$INSTDIR"
+    IfErrors xai_prepare_failed
+    Delete "$XaiInstallStage"
+    IfErrors xai_prepare_failed
+    CreateDirectory "$XaiInstallStage\old"
+    IfErrors xai_prepare_failed
+    SetOutPath "$XaiInstallStage\new-app"
+    IfErrors xai_prepare_failed
+    File "/oname=${PRODUCT_EXECUTABLE}" "${ARG_WAILS_AMD64_BINARY}"
+    IfErrors xai_prepare_failed
+    SetOutPath "$XaiInstallStage\new-engine"
+    IfErrors xai_prepare_failed
+    File /r "${ARG_XAI_DLSS5_BUNDLE}\*"
+    IfErrors xai_prepare_failed
+    SetOutPath "$INSTDIR"
+    IfFileExists "$XaiInstallStage\new-app\${PRODUCT_EXECUTABLE}" 0 xai_prepare_failed
+    IfFileExists "$XaiInstallStage\new-engine\manifest.json" 0 xai_prepare_failed
+
+    !insertmacro xai.guardExistingFile "$INSTDIR\${PRODUCT_EXECUTABLE}" $XaiAppGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\worker\xai-video-engine.exe" $XaiWorkerGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\runtime\dlssnr_host_v2.dll" $XaiHostGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\runtime\nvngx_dlssnr.dll" $XaiModelGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\runtime\ffmpeg.exe" $XaiFFmpegGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\runtime\ffprobe.exe" $XaiFFprobeGuard
+    !insertmacro xai.guardExistingFile "$INSTDIR\runtimes\dlss5\runtime\mods\enhancement\guidance_worker.exe" $XaiGuidanceGuard
+
+    StrCpy $XaiInstallFailure "Unable to switch to the prepared installation."
+    ClearErrors
+    CreateDirectory "$INSTDIR\runtimes"
+    IfErrors xai_prepare_failed
+    IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 xai_backup_engine
+    ClearErrors
+    Rename "$INSTDIR\${PRODUCT_EXECUTABLE}" "$XaiInstallStage\old\${PRODUCT_EXECUTABLE}"
+    IfErrors xai_rollback
+    StrCpy $XaiOldAppMoved 1
+
+    xai_backup_engine:
+    IfFileExists "$INSTDIR\runtimes\dlss5\*.*" 0 xai_activate_engine
+    ClearErrors
+    Rename "$INSTDIR\runtimes\dlss5" "$XaiInstallStage\old\dlss5"
+    IfErrors xai_rollback
+    StrCpy $XaiOldEngineMoved 1
+
+    xai_activate_engine:
+    ClearErrors
+    Rename "$XaiInstallStage\new-engine" "$INSTDIR\runtimes\dlss5"
+    IfErrors xai_rollback
+    StrCpy $XaiNewEngineMoved 1
+    ClearErrors
+    Rename "$XaiInstallStage\new-app\${PRODUCT_EXECUTABLE}" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    IfErrors xai_rollback
+
+    # Both switches succeeded. Cleanup targets only the unique backup/staging
+    # directory; a cleanup failure never removes the new active installation.
+    Call xai.closeUpgradeGuards
+    ClearErrors
+    RMDir /r "$XaiInstallStage"
+    ${If} ${Errors}
+        DetailPrint "Installation succeeded; previous-version files remain at $XaiInstallStage."
+    ${EndIf}
+    Return
+
+    xai_rollback:
+    ${If} $XaiNewEngineMoved == 1
+        ClearErrors
+        Rename "$INSTDIR\runtimes\dlss5" "$XaiInstallStage\new-engine"
+        ${If} ${Errors}
+            StrCpy $XaiRollbackFailed 1
+        ${EndIf}
+    ${EndIf}
+    ${If} $XaiOldEngineMoved == 1
+        ClearErrors
+        Rename "$XaiInstallStage\old\dlss5" "$INSTDIR\runtimes\dlss5"
+        ${If} ${Errors}
+            StrCpy $XaiRollbackFailed 1
+        ${EndIf}
+    ${EndIf}
+    # Restore the old entry point only after its runtime has been restored;
+    # otherwise keep it in backup rather than expose a mixed-version pair.
+    ${If} $XaiOldAppMoved == 1
+    ${AndIf} $XaiRollbackFailed == 0
+        ClearErrors
+        Rename "$XaiInstallStage\old\${PRODUCT_EXECUTABLE}" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+        ${If} ${Errors}
+            StrCpy $XaiRollbackFailed 1
+        ${EndIf}
+    ${EndIf}
+    ${If} $XaiRollbackFailed == 1
+        Call xai.closeUpgradeGuards
+        DetailPrint "Rollback incomplete. Keep all recovery files at $XaiInstallStage."
+        MessageBox MB_OK|MB_ICONSTOP "Upgrade could not be completed or fully restored. Keep $XaiInstallStage, including its old directory, for recovery. No backup files have been deleted." /SD IDOK
+        SetErrorLevel 1
+        Abort
+    ${EndIf}
+    StrCpy $XaiInstallFailure "Upgrade could not be completed. The previous installation has been restored. Close Image Studio and its workers before retrying."
+
+    xai_prepare_failed:
+    SetOutPath "$INSTDIR"
+    Call xai.closeUpgradeGuards
+    # No old files remain in staging after successful rollback. Never take
+    # this cleanup path when restoration was incomplete.
+    ${If} $XaiInstallStage != ""
+        RMDir /r "$XaiInstallStage"
+    ${EndIf}
+    DetailPrint "$XaiInstallFailure"
+    MessageBox MB_OK|MB_ICONSTOP "$XaiInstallFailure" /SD IDOK
+    SetErrorLevel 1
+    Abort
+FunctionEnd
+!endif
+
 Section
     !insertmacro wails.setShellContext
 
     !insertmacro wails.webview2runtime
 
-    SetOutPath $INSTDIR
-
-    !insertmacro wails.files
+    !ifdef SUPPORTS_AMD64
+        ${If} ${IsNativeAMD64}
+            Call xai.installAmd64Transaction
+        ${Else}
+            SetOutPath $INSTDIR
+            !insertmacro wails.files
+        ${EndIf}
+    !else
+        SetOutPath $INSTDIR
+        !insertmacro wails.files
+    !endif
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

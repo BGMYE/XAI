@@ -285,7 +285,7 @@ func (s *StudioV2) ImportImage(dataURL, name string) (studio.Asset, error) {
 }
 func (s *StudioV2) MediaHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/studio-media/") {
+		if !strings.HasPrefix(r.URL.Path, "/studio-media/") && !strings.HasPrefix(r.URL.Path, "/studio-dlss5-preview/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -294,7 +294,7 @@ func (s *StudioV2) MediaHandler(next http.Handler) http.Handler {
 			http.Error(w, "Studio unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		e.MediaHandler(next).ServeHTTP(w, r)
+		e.DLSS5PreviewHandler(e.MediaHandler(next)).ServeHTTP(w, r)
 	})
 }
 func (s *StudioV2) SaveAsset(id string) (bool, error) {

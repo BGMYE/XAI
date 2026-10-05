@@ -1,0 +1,7 @@
+# Installed only in the dedicated XAI DLSS5 virtual environment.
+# NVIDIA runtimes and the optional guidance worker are supplied by toolRoot.
+numpy>=1.24,<3
+opencv-python>=4.8,<5
+imageio-ffmpeg>=0.4.9,<1
+Pillow>=10.0
+av==18.1.0

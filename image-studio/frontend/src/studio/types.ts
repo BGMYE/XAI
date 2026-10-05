@@ -1,5 +1,52 @@
 export type Kind = "image" | "video";
+export interface DLSS5Resolution {
+  mode: "source" | "custom";
+  width: number;
+  height: number;
+}
+export interface DLSS5Options {
+  enabled: boolean;
+  style: 0 | 1 | 2;
+  intensity: number;
+  localTone: number;
+  localStructure: number;
+  skinStructure: number;
+  autoMask: boolean;
+  outputMix: number;
+  flowBackend: "off" | "raft" | "nvofa";
+  flowWidth: number;
+  flowIterations: number;
+  previewResolution: DLSS5Resolution;
+  exportResolution: DLSS5Resolution;
+}
+export interface DLSS5Probe {
+  available: boolean;
+  status?: "ready" | "missing_runtime" | "unsupported_platform" | "incompatible_runtime" | "error";
+  bundleVersion?: string;
+  reason?: string;
+  engineVersion?: string;
+  gpu?: string;
+  supportsFlow?: string[];
+}
+export interface DLSS5PreviewRequest {
+  id: string;
+  sourceAssetId: string;
+  options: DLSS5Options;
+  positionSeconds: number;
+  durationSeconds: number;
+}
+export interface DLSS5PreviewResult { id: string; url: string; sourceUrl: string; width: number; height: number }
+export interface DLSS5Job {
+  state: "idle" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  stage?: string;
+  progress: number;
+  error?: string;
+  sourceAssetId?: string;
+  resultAssetId?: string;
+  options?: DLSS5Options;
+}
 export interface Parameters {
+  dlss5?: DLSS5Options;
   promptMode?: "verbatim" | "assisted";
   outputFormat?: string;
   inputFidelity?: string;
@@ -144,6 +191,7 @@ export interface ResultImage {
 }
 export type JobState = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled" | "uncertain";
 export interface Job {
+  dlss5?: DLSS5Job;
   id: string;
   request: Generation;
   profile: Profile;

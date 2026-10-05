@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image-studio/backend/dlss5"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,12 +12,13 @@ import (
 )
 
 type document struct {
-	PromptCards map[string]PromptCard `json:"promptCards"`
-	Version     int                   `json:"version"`
-	Profiles    map[string]Profile    `json:"profiles"`
-	Projects    map[string]Project    `json:"projects"`
-	Assets      map[string]Asset      `json:"assets"`
-	Jobs        map[string]Job        `json:"jobs"`
+	DLSS5Settings dlss5.Settings        `json:"dlss5Settings,omitzero"`
+	PromptCards   map[string]PromptCard `json:"promptCards"`
+	Version       int                   `json:"version"`
+	Profiles      map[string]Profile    `json:"profiles"`
+	Projects      map[string]Project    `json:"projects"`
+	Assets        map[string]Asset      `json:"assets"`
+	Jobs          map[string]Job        `json:"jobs"`
 	// Network is the proxy setting shared with the classic editor.
 	Network NetworkSettings `json:"network,omitzero"`
 	// RetiredProfileIDs lists recently deleted upstreams, so an import from
@@ -42,6 +44,13 @@ func (r repository) removeStaleTemporaries() {
 		matches, _ := filepath.Glob(pattern)
 		for _, m := range matches {
 			_ = os.Remove(m)
+		}
+	}
+	// These names are private per-run work directories, never published assets.
+	for _, pattern := range []string{".dlss5-preview-*", ".dlss5-export-*"} {
+		paths, _ := filepath.Glob(filepath.Join(r.mediaDir(), pattern))
+		for _, path := range paths {
+			_ = os.RemoveAll(path)
 		}
 	}
 }
@@ -103,6 +112,9 @@ func (r repository) read() (document, error) {
 		d.Profiles[id] = p
 	}
 	if err := d.Network.Validate(); err != nil {
+		return document{}, err
+	}
+	if err := d.DLSS5Settings.Validate(); err != nil {
 		return document{}, err
 	}
 	for id, a := range d.Assets {

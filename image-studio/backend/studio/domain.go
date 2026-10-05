@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"image-studio/backend/dlss5"
 )
 
 const SchemaVersion = 2
@@ -234,15 +236,16 @@ type Viewport struct {
 	Zoom float64 `json:"zoom"`
 }
 type Parameters struct {
-	PromptMode    string `json:"promptMode,omitempty"`
-	OutputFormat  string `json:"outputFormat,omitempty"`
-	InputFidelity string `json:"inputFidelity,omitempty"`
-	Quality       string `json:"quality,omitempty"`
-	EndpointPath  string `json:"endpointPath,omitempty"`
-	Size          string `json:"size,omitempty"`
-	Seconds       int    `json:"seconds,omitempty"`
-	AspectRatio   string `json:"aspectRatio,omitempty"`
-	Resolution    string `json:"resolution,omitempty"`
+	DLSS5         *dlss5.Options `json:"dlss5,omitempty"`
+	PromptMode    string         `json:"promptMode,omitempty"`
+	OutputFormat  string         `json:"outputFormat,omitempty"`
+	InputFidelity string         `json:"inputFidelity,omitempty"`
+	Quality       string         `json:"quality,omitempty"`
+	EndpointPath  string         `json:"endpointPath,omitempty"`
+	Size          string         `json:"size,omitempty"`
+	Seconds       int            `json:"seconds,omitempty"`
+	AspectRatio   string         `json:"aspectRatio,omitempty"`
+	Resolution    string         `json:"resolution,omitempty"`
 }
 type Node struct {
 	ID         string     `json:"id"`
@@ -395,6 +398,15 @@ type ImageParameters struct {
 }
 
 func (r Request) Validate(p Profile) error {
+	if r.Parameters.DLSS5 != nil && r.Parameters.DLSS5.Enabled {
+		if r.Kind != "video" {
+			return errors.New("DLSS5 仅支持视频生成")
+		}
+		options := *r.Parameters.DLSS5
+		if err := options.Validate(); err != nil {
+			return err
+		}
+	}
 	if r.Parameters.PromptMode != "" && r.Parameters.PromptMode != "verbatim" && r.Parameters.PromptMode != "assisted" {
 		return errors.New("提示词模式只能是精确执行或创作辅助")
 	}
@@ -482,6 +494,7 @@ type Asset struct {
 func (a Asset) URL() string { return "/studio-media/" + a.ID }
 
 type Job struct {
+	DLSS5           *DLSS5Job      `json:"dlss5,omitempty"`
 	OriginalPrompt  string         `json:"originalPrompt,omitempty"`
 	ConfirmedPrompt string         `json:"confirmedPrompt,omitempty"`
 	SentPrompt      string         `json:"sentPrompt,omitempty"`

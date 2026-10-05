@@ -4,6 +4,20 @@
   --studio-font:
     "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI",
     system-ui, sans-serif;
+  --studio-text-meta: 12px;
+  --studio-text-small: 13px;
+  --studio-text-body: 14px;
+  --studio-text-section: 16px;
+  --studio-text-title: 22px;
+  --studio-text-display: 32px;
+  --studio-ink: #253b58;
+  --studio-muted-ink: #5d7390;
+  --studio-line: #cbdced;
+  --studio-radius-control: 12px;
+  --studio-radius-card: 16px;
+  --studio-radius-panel: 20px;
+  --studio-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --studio-duration: 180ms;
 }
 
 :is(.studio-app, .studio-dialog) {
@@ -159,7 +173,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 
 .studio-protocol-help {
   color: #607e9e;
-  font-size: 11px;
+  font-size: var(--studio-text-meta);
   line-height: 1.8;
 }
 
@@ -179,7 +193,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 
 .studio-generation-form :is(input, select, textarea),
 .studio-dialog :is(input, select, textarea) {
-  font-size: 13px;
+  font-size: var(--studio-text-body);
   line-height: 1.7;
 }
 
@@ -200,7 +214,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 
 .studio-generation-form > small {
   color: #6e87a6;
-  font-size: 11px;
+  font-size: var(--studio-text-meta);
 }
 
 .studio-tabs button {
@@ -214,13 +228,12 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 
 .studio-page-heading.compact .studio-form-actions {
   flex: 0 0 auto;
-  flex-wrap: nowrap;
-  width: auto;
+  flex-wrap: wrap;
 }
 
 .studio-page-heading.compact select {
   flex: 0 1 180px;
-  width: 180px;
+  width: min(180px, 100%);
 }
 
 .studio-page-heading.compact .studio-muted {
@@ -258,7 +271,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
   background: #edf5ff;
   border: 1px solid #c7def8;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--studio-text-small);
   line-height: 1.8;
 }
 .studio-protocol-tips > strong {
@@ -271,7 +284,7 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
 .studio-field-tip {
   margin: -5px 0 14px;
   color: #536e92;
-  font-size: 12px;
+  font-size: var(--studio-text-small);
   line-height: 1.8;
 }
 .studio-capability-editor {
@@ -285,11 +298,145 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
   color: #375e90;
   font-weight: 600;
 }
-.studio-capability-model { display: block; overflow-wrap: anywhere; font-size: 12px; }
-.studio-job-prompts { margin: 10px 0; font-size: 12px; }
+.studio-capability-model { display: block; overflow-wrap: anywhere; font-size: var(--studio-text-small); }
+.studio-job-prompts { margin: 10px 0; font-size: var(--studio-text-small); }
 .studio-job-prompts dt { font-weight: 600; margin-top: 10px; }
 .studio-job-prompts dd { margin: 3px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .studio-generation-form .studio-field-tip { font-weight: 400; }
-.studio-reference-item { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 12px; margin: 7px 0; }
+.studio-reference-item { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: var(--studio-text-small); margin: 7px 0; }
 .studio-reference-item span { overflow-wrap: anywhere; }
 .studio-reference-item button { white-space: nowrap; color: #286bc0; }
+
+/* One type and surface system for pages, drawers and top-layer dialogs. */
+:is(.studio-app, .studio-dialog, .studio-loading) {
+  font-family: var(--studio-font);
+  font-size: var(--studio-text-body);
+  line-height: 1.65;
+  color: var(--studio-ink);
+  text-rendering: optimizeLegibility;
+}
+:is(.studio-app, .studio-dialog) :is(button, input, select, textarea) {
+  letter-spacing: normal;
+}
+:is(.studio-app, .studio-dialog) :is(h1, h2, h3) {
+  text-wrap: balance;
+  font-weight: 600;
+}
+:is(.studio-app, .studio-dialog) :is(p, label, small) {
+  overflow-wrap: anywhere;
+}
+:is(.studio-app, .studio-dialog) label {
+  font-size: var(--studio-text-small);
+  line-height: 1.6;
+}
+.studio-app .studio-eyebrow {
+  font-size: var(--studio-text-meta);
+  letter-spacing: 0.12em;
+  color: var(--studio-muted-ink);
+}
+.studio-app .studio-ambient { opacity: 0.55; }
+.studio-app .studio-mode-switch button.active {
+  color: #245fae;
+  background: #f9fcff;
+  box-shadow: 0 2px 6px #38639918, inset 0 0 0 1px #adc9e9;
+}
+.studio-app .studio-sidebar-bottom footer { padding-inline: 8px; }
+.studio-app :is(.studio-main, .studio-sidebar) {
+  border-color: #d5e3f2;
+  border-radius: var(--studio-radius-panel);
+}
+.studio-app :is(.studio-mode-card, .studio-generation-form, .studio-generation-results,
+  .studio-settings-note, .studio-provider-card, .studio-job, .studio-inspector, .pc-card) {
+  border-color: var(--studio-line);
+  border-radius: var(--studio-radius-card);
+  box-shadow: 0 4px 16px #33577a08, inset 0 1px 0 #ffffffc9;
+}
+.studio-app :is(.studio-asset-tile, .studio-project-card, .studio-quick-grid > button) {
+  border-color: var(--studio-line) !important;
+  border-radius: var(--studio-radius-card);
+}
+:is(.studio-app, .studio-dialog) :is(.studio-primary, .studio-secondary) {
+  min-height: 40px;
+  padding: 9px 16px;
+  border-radius: var(--studio-radius-control);
+  font-size: var(--studio-text-small);
+  font-weight: 600;
+  line-height: 1.5;
+}
+:is(.studio-app, .studio-dialog) .studio-primary {
+  background: linear-gradient(180deg, #326ed2, #2460bd);
+  border-color: #2865c3;
+  box-shadow: 0 3px 9px #2865c324, inset 0 1px 0 #ffffff24;
+}
+:is(.studio-app, .studio-dialog) .studio-secondary {
+  border-color: var(--studio-line);
+  color: #2e64a9;
+  background: #f8fbff;
+  box-shadow: 0 2px 5px #33577a06;
+}
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, select, textarea) {
+  font-size: var(--studio-text-body);
+  line-height: 1.6;
+  border-radius: var(--studio-radius-control);
+}
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select) {
+  min-height: 42px;
+}
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input[type="checkbox"], input[type="radio"]) {
+  appearance: auto;
+  flex: 0 0 18px;
+  width: 18px !important;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  margin: 2px 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::placeholder {
+  font-size: inherit;
+  font-weight: 400;
+  color: #6a7f99;
+}
+.studio-app :is(.studio-search, .pc-search) {
+  border-color: var(--studio-line);
+}
+.studio-app :is(.studio-search, .pc-search) input {
+  border-radius: 0;
+}
+.studio-app :is(.studio-muted, .studio-local-note, .studio-welcome p,
+  .studio-mode-copy p, .studio-empty-works p,
+  .studio-job-detail > small, .studio-provider-card p,
+  .studio-provider-card small, .studio-project-card p, .studio-project-card small,
+  .studio-inspector-bottom small, .pc-footnote, .pc-help, .pc-category, .pc-count span),
+.studio-dialog :is(.studio-muted, .studio-field-tip, .pc-help, .pc-parameters) {
+  color: var(--studio-muted-ink);
+}
+.studio-app :is(.studio-status, .studio-zoom, .pc-count) {
+  font-variant-numeric: tabular-nums;
+}
+.studio-app :is(.studio-notifications, .studio-window-controls button, .pc-drawer-header button,
+  .studio-zoom button, .studio-canvas-toolbar button, .studio-section-title > button) {
+  min-width: 32px;
+  min-height: 32px;
+}
+.studio-app .studio-node-body textarea {
+  /* Canvas nodes keep their independent zoom/drag geometry. */
+  line-height: 1.55;
+}
+.studio-app .pc-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+}
+.studio-app .pc-tabs { flex-wrap: wrap; }
+.studio-app .pc-tags { height: auto; min-height: 32px; flex-wrap: wrap; padding-block: 5px; }
+.studio-app .pc-card-actions { flex-wrap: wrap; gap: 6px; }
+.studio-app .pc-card-actions button { min-height: 34px; }
+.studio-app .pc-filters select { max-width: 100%; }
+.studio-app .pc-drawer .pc-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) {
+  .studio-app .studio-sidebar-bottom footer span { display: none; }
+}
+@media (max-width: 760px) {
+  .studio-app .pc-drawer .pc-card-grid { grid-template-columns: 1fr; }
+  .studio-app .pc-filters label { flex-wrap: wrap; }
+}

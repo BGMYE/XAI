@@ -72,13 +72,13 @@ export function CapabilitiesEditor({ profile, onChange }: {
         <>
           <strong className="studio-capability-model">模型：{model} · {api === "images" ? "Images" : "Responses"}</strong>
           <div className="studio-form-row">
-            {list("qualities", "已确认的质量档位", "例如 low, medium, high")}
-            {list("sizes", "已确认的原生尺寸", "例如 1024x1024")}
-            {list("formats", "已确认的文件格式", "例如 png, jpeg, webp")}
+            {list("qualities", "已确认的质量档位", "例如：low, medium, high")}
+            {list("sizes", "已确认的原生尺寸", "例如：1024x1024")}
+            {list("formats", "已确认的文件格式", "例如：png, jpeg, webp")}
           </div>
           <div className="studio-form-row">
             <label>参考图数量上限
-              <input type="number" min={0} max={16} value={rule.maxInputImages ?? ""} placeholder="未知"
+              <input type="number" min={0} max={16} value={rule.maxInputImages ?? ""} placeholder="未确认"
                 onChange={(e) => patchRule({ maxInputImages: e.target.value === "" ? undefined : Number(e.target.value) })} />
             </label>
             <KnownFlag label="蒙版编辑" value={rule.supportsMask}
@@ -89,7 +89,7 @@ export function CapabilitiesEditor({ profile, onChange }: {
           {rule.supportsInputFidelity === true && <label>已确认的输入保真档位
             <input defaultValue={rule.inputFidelityValues?.join(", ") ?? ""}
               key={`${model}:${api}:fidelity:${rule.inputFidelityValues?.join(",") ?? ""}`}
-              placeholder="例如 low, high"
+              placeholder="例如：low, high"
               onBlur={(e) => {
                 const values = e.target.value.split(/[,，\s]+/).map((value) => value.trim()).filter(Boolean);
                 patchRule({ inputFidelityValues: values.length ? [...new Set(values)] : undefined });

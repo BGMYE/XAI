@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -430,20 +431,26 @@ type mediaStatusError struct{ status int }
 func (e *mediaStatusError) Error() string { return (&ResumeError{}).Error() }
 func (e *mediaStatusError) Unwrap() error { return &ResumeError{} }
 
-type mediaTooLargeError struct{}
+type mediaTooLargeError struct{ limit int64 }
 
-func (*mediaTooLargeError) Error() string { return "媒体文件超过 160 MB" }
+func (e *mediaTooLargeError) Error() string {
+	limit := e.limit
+	if limit == 0 {
+		limit = maxMediaBytes
+	}
+	return fmt.Sprintf("媒体文件超过 %d MB", limit/(1024*1024))
+}
 
 func (p *HTTPProvider) readMedia(response *http.Response) (Output, error) {
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
 		return Output{}, &mediaStatusError{status: response.StatusCode}
 	}
-	if response.ContentLength > maxMediaBytes {
-		return Output{}, &mediaTooLargeError{}
-	}
 	mime := response.Header.Get("Content-Type")
 	if p.MediaDir == "" {
+		if response.ContentLength > maxMediaBytes {
+			return Output{}, &mediaTooLargeError{}
+		}
 		b, err := io.ReadAll(io.LimitReader(response.Body, maxMediaBytes+1))
 		if err != nil {
 			return Output{}, &ResumeError{}
@@ -453,7 +460,18 @@ func (p *HTTPProvider) readMedia(response *http.Response) (Output, error) {
 		}
 		return Output{Data: b, MIME: mime}, nil
 	}
-	out, err := p.writeTemp(response.Body)
+	// Recognized video is streamed to disk with a separate bounded budget.
+	// A Content-Type header alone cannot bypass the ordinary media limit.
+	reader := bufio.NewReader(response.Body)
+	head, _ := reader.Peek(512)
+	limit := int64(maxMediaBytes)
+	if strings.HasPrefix(http.DetectContentType(head), "video/") {
+		limit = maxVideoBytes
+	}
+	if response.ContentLength > limit {
+		return Output{}, &mediaTooLargeError{limit: limit}
+	}
+	out, err := p.writeTempLimit(reader, limit)
 	if err != nil {
 		var tooLarge *mediaTooLargeError
 		if errors.As(err, &tooLarge) {
@@ -468,14 +486,18 @@ func (p *HTTPProvider) readMedia(response *http.Response) (Output, error) {
 // writeTemp streams r into a synced temporary file in the media directory.
 // The engine renames it into place, so results never pass through memory.
 func (p *HTTPProvider) writeTemp(r io.Reader) (Output, error) {
+	return p.writeTempLimit(r, maxMediaBytes)
+}
+
+func (p *HTTPProvider) writeTempLimit(r io.Reader, limit int64) (Output, error) {
 	f, err := os.CreateTemp(p.MediaDir, ".incoming-*")
 	if err != nil {
 		return Output{}, err
 	}
 	name := f.Name()
-	n, err := io.Copy(f, io.LimitReader(r, maxMediaBytes+1))
-	if err == nil && n > maxMediaBytes {
-		err = &mediaTooLargeError{}
+	n, err := io.Copy(f, io.LimitReader(r, limit+1))
+	if err == nil && n > limit {
+		err = &mediaTooLargeError{limit: limit}
 	}
 	if err == nil {
 		err = f.Chmod(0600)
