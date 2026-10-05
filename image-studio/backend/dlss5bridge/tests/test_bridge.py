@@ -8,9 +8,11 @@ import io
 import json
 import os
 from pathlib import Path
+import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from fractions import Fraction
 from types import SimpleNamespace
@@ -464,6 +466,60 @@ class RenderBoundaryTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
+    def open_control_worker(self, body):
+        script = (
+            "import importlib.util,sys\n"
+            f"spec=importlib.util.spec_from_file_location('bridge', {str(BRIDGE_PATH)!r})\n"
+            "bridge=importlib.util.module_from_spec(spec); spec.loader.exec_module(bridge)\n"
+            "def execute(request, cancel, emit):\n" + body + "\n"
+            "bridge.execute=execute\n"
+            "raise SystemExit(bridge.main())\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-u", "-c", script], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+        )
+        def cleanup():
+            process.stdin.close()
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+            process.stdout.close()
+            process.stderr.close()
+        self.addCleanup(cleanup)
+        events = queue.Queue()
+        def read():
+            for line in process.stdout:
+                events.put(json.loads(line))
+        threading.Thread(target=read, daemon=True).start()
+        process.stdin.write(json.dumps({"version": 1, "id": "open-pipe", "op": "probe", "toolRoot": "."}) + "\n")
+        process.stdin.flush()
+        return process, events
+
+    @unittest.skipUnless(importlib.util.find_spec("numpy"), "NumPy is required for the native-import regression")
+    def test_native_import_completes_while_cancellation_pipe_stays_open(self):
+        process, events = self.open_control_worker(
+            "    import numpy\n"
+            "    return {'available': True}\n"
+        )
+        event = events.get(timeout=10)
+        self.assertEqual(event["type"], "result")
+        self.assertTrue(event["available"])
+        self.assertEqual(process.wait(timeout=5), 0)
+
+    def test_open_control_pipe_delivers_cancellation(self):
+        process, events = self.open_control_worker(
+            "    emit(stage='waiting', progress=1)\n"
+            "    if not cancel._event.wait(10): raise RuntimeError('cancel not delivered')\n"
+            "    cancel.check()\n"
+        )
+        self.assertEqual(events.get(timeout=5)["type"], "progress")
+        process.stdin.write(json.dumps({"op": "cancel", "id": "open-pipe"}) + "\n")
+        process.stdin.flush()
+        event = events.get(timeout=5)
+        self.assertEqual((event["type"], event["code"]), ("error", "cancelled"))
+        self.assertEqual(process.wait(timeout=5), 1)
+
     def test_invalid_request_returns_json_error_without_loading_gpu_packages(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

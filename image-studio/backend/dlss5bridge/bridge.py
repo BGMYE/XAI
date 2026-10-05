@@ -605,6 +605,48 @@ def _read_request(stream):
         raise BridgeError('invalid_request', '首行必须是合法 JSON 请求') from None
 
 
+def _read_control_line(stream):
+    if os.name != 'nt':
+        return stream.readline(MAX_LINE_BYTES + 1)
+    # A blocking read locks the synchronous Windows pipe while NumPy's DLL
+    # initialization inspects inherited handles. Poll for available bytes so
+    # an open cancellation channel cannot deadlock native module loading.
+    import ctypes
+    import msvcrt
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    read = kernel.ReadFile
+    read.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+                     ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p]
+    read.restype = ctypes.c_int
+    peek = kernel.PeekNamedPipe
+    peek.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+                     ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p]
+    peek.restype = ctypes.c_int
+    handle = msvcrt.get_osfhandle(stream.fileno())
+    buffer, count = ctypes.create_string_buffer(1), ctypes.c_uint32()
+    line = bytearray()
+    while len(line) <= MAX_LINE_BYTES:
+        if not peek(handle, None, 0, None, ctypes.byref(count), None):
+            error = ctypes.get_last_error()
+            if error in (109, 232):
+                break
+            raise ctypes.WinError(error)
+        if not count.value:
+            time.sleep(.02)
+            continue
+        if not read(handle, buffer, 1, ctypes.byref(count), None):
+            error = ctypes.get_last_error()
+            if error in (109, 232):  # Broken/disconnected pipe: parent closed stdin.
+                break
+            raise ctypes.WinError(error)
+        if not count.value:
+            break
+        line += buffer.raw
+        if buffer.raw == b'\n':
+            break
+    return bytes(line)
+
+
 def main():
     # Keep every native/library stdout write out of the machine-readable channel.
     protocol = os.fdopen(os.dup(sys.stdout.fileno()), 'w', encoding='utf-8', buffering=1)
@@ -629,7 +671,7 @@ def main():
         request = validate_request(raw)
         def control():
             while True:
-                line = control_stream.readline(MAX_LINE_BYTES + 1)
+                line = _read_control_line(control_stream)
                 if not line:
                     return  # EOF after the request is normal.
                 if len(line) > MAX_LINE_BYTES:

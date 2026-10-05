@@ -1,16 +1,16 @@
 .studio-job-thumbnails {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  align-items: start;
   gap: 12px;
   min-width: 0;
   margin: 12px 0;
 }
 .studio-app .studio-job-thumbnail {
   display: flex;
-  flex: 0 1 130px;
   flex-direction: column;
   align-items: stretch;
-  width: 130px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   padding: 0;
@@ -26,17 +26,15 @@
   position: relative;
   display: grid;
   width: 100%;
-  aspect-ratio: 4 / 3;
   place-items: center;
   overflow: hidden;
   background: #e7eff9;
 }
 .studio-job-thumbnail-media :is(img, video) {
-  position: absolute;
-  inset: 0;
   display: block;
   width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: auto;
   min-height: 0;
   object-fit: contain;
   pointer-events: none;
@@ -64,6 +62,7 @@
 }
 .studio-job-thumbnail-unavailable {
   display: grid;
+  min-height: 128px;
   gap: 6px;
   justify-items: center;
   padding: 8px;
@@ -82,5 +81,4 @@
 }
 @media (max-width: 600px) {
   .studio-job-thumbnails { gap: 10px; }
-  .studio-app .studio-job-thumbnail { flex-basis: 114px; width: 114px; }
 }
