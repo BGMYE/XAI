@@ -202,14 +202,42 @@ html:root[data-platform] :is(.studio-app, .studio-dialog) :is(input, textarea)::
   resize: vertical;
 }
 
-.studio-reference-row {
-  align-items: flex-end;
-}
-
-.studio-reference-row > .studio-secondary {
-  min-height: 44px;
+.studio-app .studio-reference-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
   margin-bottom: 15px;
+  border: 1px dashed #99b9df;
   border-radius: 12px;
+  background: #f5faff80;
+  color: #456b97;
+  text-align: left;
+}
+.studio-app .studio-reference-dropzone:is(:hover, .is-dragging) {
+  border-color: #398af0;
+  background: #e5f1ff;
+}
+.studio-reference-dropzone > svg { flex-shrink: 0; }
+.studio-reference-dropzone > img {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.studio-reference-dropzone > span { min-width: 0; }
+.studio-reference-dropzone :is(strong, small, .studio-reference-name) { display: block; }
+.studio-reference-dropzone small {
+  margin-top: 4px;
+  color: var(--studio-muted-ink);
+  font-size: var(--studio-text-meta);
+}
+.studio-reference-name {
+  overflow-wrap: anywhere;
+  font-size: var(--studio-text-small);
 }
 
 .studio-generation-form > small {

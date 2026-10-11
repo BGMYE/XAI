@@ -6,6 +6,7 @@ import { StudioNetworkSettings } from "./StudioNetworkSettings";
 import { StudioPromptImport } from "./StudioPromptImport";
 import { PromptAssistant } from "./PromptAssistant";
 import { JobResultThumbnails } from "./JobResultThumbnails";
+import { ReferenceImageInput } from "./ReferenceImageInput";
 import { DLSS5Panel } from "./DLSS5Panel";
 import { DLSS5JobStatus } from "./DLSS5JobStatus";
 import { generationParameters, validateDLSS5Options } from "./DLSS5Options.mjs";
@@ -601,9 +602,8 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
     importPurpose.current = purpose;
     imageInput.current?.click();
   };
-  const importedImage = async (file: File) => {
-    const target = importTarget.current;
-    const purpose = importPurpose.current;
+  const importedImage = async (file: File, destination = { target: importTarget.current, purpose: importPurpose.current }) => {
+    const { target, purpose } = destination;
     await runAction(async () => {
       if (purpose === "mask" && file.type !== "image/png") throw Error("蒙版必须是包含透明区域的 PNG 文件。");
       const a = await client.importImage(file);
@@ -1297,7 +1297,7 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                     </span>
                   </label>
                 )}
-                <div className="studio-form-row studio-reference-row">
+                <div className="studio-reference-row">
                   <label>
                     参考图片
                     <select value={referenceID} onChange={(e) => {
@@ -1315,10 +1315,13 @@ export function StudioApp({ isMac }: { isMac: boolean }) {
                         ))}
                     </select>
                   </label>
-                  <button type="button" className="studio-secondary" onClick={() => askImage()}>
-                    <Upload size={16} />
-                    导入参考图
-                  </button>
+                  <ReferenceImageInput
+                    asset={studio.snapshot.assets.find((a) => a.id === referenceID && !a.deletedAt)}
+                    disabled={busy}
+                    onChoose={() => askImage()}
+                    onImport={(file) => void importedImage(file, { target: undefined, purpose: "reference" })}
+                    report={studio.report}
+                  />
                 </div>
                 {kind === "image" && profile?.protocol === "openai" && (
                   <details className="studio-capability-editor">
