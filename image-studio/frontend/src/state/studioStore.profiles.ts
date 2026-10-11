@@ -15,44 +15,10 @@ import {
   pickActiveProfile,
   pickAIProfile,
   persistAIProfileId,
-  removeProfile,
 } from "../lib/profiles";
 import { cleanBaseURL } from "../lib/security";
-import {
-  clearRegistryKey,
-  deleteRegistryProfile,
-  duplicateRegistryProfile,
-  readProfileKey,
-  registryActive,
-  desktopRegistry,
-  requireRegistryWritable,
-  registryReadOnly,
-  rememberProfileUse,
-  saveRegistryProfile,
-} from "../lib/upstreamRegistry";
 import { normalizeConcurrencyLimit } from "./workspaceRuntime";
 import { persistActiveProfileId, persistProfiles } from "./studioStore.shared";
-
-/** Reads a profile's key from the shared registry on the desktop, else from the classic keychain entry. */
-export function readAPIKey(id: string): Promise<string> {
-  return readProfileKey(id, (profileId) => GetStoredAPIKey(keyringUserFor(profileId)));
-}
-
-/** Saves the key of a profile; an empty key clears it. */
-export async function storeAPIKey(profile: UpstreamProfile, key: string): Promise<void> {
-  requireRegistryWritable();
-  const trimmed = key.trim();
-  if (!registryActive()) {
-    await SetStoredAPIKey(keyringUserFor(profile.id), trimmed);
-    return;
-  }
-  if (trimmed) await saveRegistryProfile(profile, trimmed);
-  else await clearRegistryKey(profile.id);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 type StateAdapter = {
   getState: () => StudioState;
@@ -78,10 +44,9 @@ export function createProfileActions(store: StateAdapter) {
       apiKey?: string;
       setActive?: boolean;
     }) {
-      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return ""; }
       const list = store.getState().profiles;
       const id = genProfileId();
-      let profile: UpstreamProfile = {
+      const profile: UpstreamProfile = {
         id,
         name: input.name?.trim() || nextDefaultProfileName(list),
         apiMode: input.apiMode,
@@ -99,13 +64,7 @@ export function createProfileActions(store: StateAdapter) {
         fallbackProfileId: undefined,
         createdAt: Date.now(),
       };
-      if (registryActive()) {
-        try { profile = await saveRegistryProfile(profile, input.apiKey ?? ""); }
-        catch (error) {
-          store.getState().pushToast(`上游配置未保存：${errorMessage(error)}`, "error", 6000);
-          return "";
-        }
-      } else if ((input.apiKey ?? "").trim()) {
+      if ((input.apiKey ?? "").trim()) {
         try { await SetStoredAPIKey(keyringUserFor(id), input.apiKey!.trim()); }
         catch {
           store.getState().pushToast("API Key 未能写入系统凭据存储，配置未保存。请使用桌面应用并检查凭据存储权限。", "error", 6000);
@@ -126,12 +85,11 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async updateProfile(id: string, patch: Partial<Omit<UpstreamProfile, "id" | "createdAt">> & { apiKey?: string }) {
-      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return false; }
       const list = store.getState().profiles;
       const index = list.findIndex((profile) => profile.id === id);
       if (index < 0) return false;
       const current = list[index];
-      let next: UpstreamProfile = {
+      const next: UpstreamProfile = {
         ...current,
         name: patch.name !== undefined ? patch.name.trim() : current.name,
         apiMode: patch.apiMode ?? current.apiMode,
@@ -154,17 +112,7 @@ export function createProfileActions(store: StateAdapter) {
         fallbackProfileId: patch.fallbackProfileId !== undefined ? patch.fallbackProfileId || undefined : current.fallbackProfileId,
         lastUsedAt: patch.lastUsedAt ?? current.lastUsedAt,
       };
-      if (registryActive()) {
-        try {
-          // An empty key clears it, as in the classic keychain. Clear first, so
-          // an address change in the same save is not refused for the old key.
-          if (patch.apiKey !== undefined && !patch.apiKey.trim()) await clearRegistryKey(id);
-          next = await saveRegistryProfile(next, patch.apiKey ?? "");
-        } catch (error) {
-          store.getState().pushToast(`上游配置未保存：${errorMessage(error)}`, "error", 6000);
-          return false;
-        }
-      } else if (patch.apiKey !== undefined) {
+      if (patch.apiKey !== undefined) {
         try { await SetStoredAPIKey(keyringUserFor(id), patch.apiKey); }
         catch {
           store.getState().pushToast("API Key 未能写入系统凭据存储，配置未保存。请使用桌面应用并检查凭据存储权限。", "error", 6000);
@@ -179,7 +127,7 @@ export function createProfileActions(store: StateAdapter) {
       }
       store.setState({ profiles: nextList, aiProfileId: aiProfile?.id ?? "" });
       if (id === store.getState().activeProfileId) {
-        const apiKey = desktopRegistry() ? "" : (patch.apiKey !== undefined ? patch.apiKey.trim() : store.getState().apiKey);
+        const apiKey = patch.apiKey !== undefined ? patch.apiKey.trim() : store.getState().apiKey;
         store.setState({
           apiMode: next.apiMode,
           responsesTransport: next.responsesTransport ?? "sse",
@@ -196,23 +144,14 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async deleteProfile(id: string) {
-      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return; }
       const list = store.getState().profiles;
-      if (!list.some((profile) => profile.id === id)) return;
-      const nextList = removeProfile(list, id);
-      if (registryActive()) {
-        try { await deleteRegistryProfile(id); }
-        catch (error) {
-          store.getState().pushToast(`上游配置未删除：${errorMessage(error)}`, "error", 6000);
-          return;
-        }
-        persistProfiles(nextList);
-      } else {
-        persistProfiles(nextList);
-        try { await DeleteStoredAPIKey(keyringUserFor(id)); }
-        catch {
-          store.getState().pushToast("上游配置已删除，但系统凭据清理失败。请在系统凭据管理器中移除对应条目。", "warn", 6000);
-        }
+      const index = list.findIndex((profile) => profile.id === id);
+      if (index < 0) return;
+      const nextList = list.filter((_, i) => i !== index);
+      persistProfiles(nextList);
+      try { await DeleteStoredAPIKey(keyringUserFor(id)); }
+      catch {
+        store.getState().pushToast("上游配置已删除，但系统凭据清理失败。请在系统凭据管理器中移除对应条目。", "warn", 6000);
       }
       const aiProfile = pickAIProfile(nextList, store.getState().aiProfileId === id ? "" : store.getState().aiProfileId, store.getState().activeProfileId);
       persistAIProfileId(aiProfile?.id ?? "");
@@ -244,21 +183,8 @@ export function createProfileActions(store: StateAdapter) {
     },
 
     async duplicateProfile(id: string) {
-      if (registryReadOnly()) { store.getState().pushToast("共享配置不可用，上游设置只读", "warn"); return null; }
       const current = store.getState().profiles.find((profile) => profile.id === id);
       if (!current) return null;
-      if (registryActive()) {
-        try {
-          const copy = await duplicateRegistryProfile(id);
-          const next = [...store.getState().profiles, copy];
-          persistProfiles(next);
-          store.setState({ profiles: next });
-          return copy.id;
-        } catch {
-          store.getState().pushToast("系统凭据复制失败，上游配置未复制。", "error", 6000);
-          return null;
-        }
-      }
       const cloned = cloneProfile(current);
       try {
         const existingKey = await GetStoredAPIKey(keyringUserFor(id));
@@ -279,9 +205,8 @@ export function createProfileActions(store: StateAdapter) {
       const profile = store.getState().profiles.find((p) => p.id === id);
       if (!profile) return;
       persistActiveProfileId(id);
-      const apiKey = await readAPIKey(id).catch(() => "");
+      const apiKey = await GetStoredAPIKey(keyringUserFor(id)).catch(() => "");
       const refreshed: UpstreamProfile = { ...profile, lastUsedAt: Date.now() };
-      if (registryActive()) rememberProfileUse(id, refreshed.lastUsedAt);
       const nextProfiles = store.getState().profiles.map((p) => p.id === id ? refreshed : p);
       persistProfiles(nextProfiles);
       store.setState({

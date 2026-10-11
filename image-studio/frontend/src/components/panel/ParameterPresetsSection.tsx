@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { FolderCog, Plus, Save } from "lucide-react";
 import { findMatchingPresetId, nextDefaultPresetName, normalizeSelectedPresetId, pickPresetStateSnapshot } from "../../lib/presets";
 import { usePlatform } from "../../platform/context";
-import { useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import type { Preset } from "../../types/domain";
 import { PresetManagerModal } from "./PresetManagerModal";
 import { PresetSaveModal } from "./PresetSaveModal";
@@ -23,13 +23,7 @@ export function ParameterPresetsSection({
 }: {
   variant?: "desktop" | "android";
 }) {
-  const state = useStudioState(
-    "presets", "selectedPresetId", "setField", "savePreset", "overwritePreset", "updatePreset", "applyPreset",
-    "deletePreset",
-    // The parameters a preset captures (see pickPresetStateSnapshot).
-    "size", "quality", "outputFormat", "negativePrompt", "background", "outputCompression", "inputFidelity",
-    "imageStyle", "moderation", "batchCount", "styleTag", "editAutoAspectResolution",
-  );
+  const state = useStudioStore();
   const {
     presets,
     selectedPresetId,

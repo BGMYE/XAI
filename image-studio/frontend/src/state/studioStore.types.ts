@@ -48,7 +48,6 @@ export interface ModeConfig {
 }
 
 export interface PromptOptimizeRequest {
-  profileId?: string;
   apiKey: string;
   prompt: string;
   mode: Mode | "describe";

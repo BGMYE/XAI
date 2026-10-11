@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Copy, LayoutGrid, Move, Plus, Redo2, Scissors, Sparkles, Type, Undo2 } from "lucide-react";
-import { useStudioStore, useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import { clampCanvasScale, sourceHistoryItemForCanvasNode } from "../../state/canvasNodes";
 import { historyFullSrc, historyPreviewSrc } from "../../lib/images";
 import { SIZE_OPTIONS, type SizeValue } from "../../types/domain";
@@ -18,15 +18,7 @@ export function XAIProPanels() {
     viewZoom, canvasViewport, setActiveProfile, setField, selectSourceImage, viewSourceOnCanvas,
     selectCanvasNode, removeCanvasNode, setCanvasViewport, applyHistoryParams, reuseAsSource, openResultDetail,
     importMaskImage, resetMask, openHistoryTimeline, undo, redo, submit, pushToast,
-  } = useStudioState(
-    "profiles", "activeProfileId", "imageModelID", "apiMode", "requestPolicy", "size", "quality",
-    "inputFidelity", "outputFormat", "batchCount", "prompt", "isRunning", "jobsCompleted", "jobsTotal",
-    "progress", "sources", "currentImage", "history", "canvasNodes", "selectedNodeId", "tool",
-    "annotationKind", "brushSize", "brushMode", "undoStack", "redoStack", "viewZoom", "canvasViewport",
-    "setActiveProfile", "setField", "selectSourceImage", "viewSourceOnCanvas", "selectCanvasNode",
-    "removeCanvasNode", "setCanvasViewport", "applyHistoryParams", "reuseAsSource", "openResultDetail",
-    "importMaskImage", "resetMask", "openHistoryTimeline", "undo", "redo", "submit", "pushToast",
-  );
+  } = useStudioStore();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ sources: true, operations: true });
   const selectedNode = canvasNodes.find((node) => node.id === selectedNodeId);
   const selectedSourceIndex = sources.findIndex((source) => `source-preview:${source.path}` === selectedNodeId);

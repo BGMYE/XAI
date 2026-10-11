@@ -1,9 +1,8 @@
-import { desktopRegistry, profileHasKey } from "../../lib/upstreamRegistry";
 import { ExternalLink, Film, LoaderCircle, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Cancel, CreateVideo, PollVideo } from "../../platform/runtime/host";
+import { CreateVideo, PollVideo } from "../../platform/runtime/host";
 import { createCanvasNode } from "../../state/canvasNodes";
-import { useStudioStore, useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import type { VideoResultLike } from "../../platform/runtime/hostTypes";
 import { requireExplicitVideoModelID, videoPollingDecision, videoResultError, videoResultSource, cancellableDelay } from "../../lib/videoGeneration";
 
@@ -15,10 +14,10 @@ function errorText(error: unknown): string {
 }
 
 export function VideoGenerationPanel() {
-  const { activeProfileId, profiles, apiKey, addCanvasNodeToWorkspace, canvasNodes } = useStudioState("activeProfileId", "profiles", "apiKey", "addCanvasNodeToWorkspace", "canvasNodes");
+  const { activeProfileId, profiles, apiKey, addCanvasNodeToWorkspace, canvasNodes } = useStudioStore();
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? null;
   const [prompt, setPrompt] = useState("");
-  const [seconds, setSeconds] = useState(4);
+  const [seconds, setSeconds] = useState(5);
   const [size, setSize] = useState("1280x720");
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState("");
@@ -27,33 +26,15 @@ export function VideoGenerationPanel() {
   const runRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const activeVideoRef = useRef<{ id: string; cancelled: boolean } | null>(null);
 
-  async function cancelVideoJob(video: { id: string; cancelled: boolean }) {
-    try {
-      await Cancel(video.id);
-      if (activeVideoRef.current === video) setStatus("已停止本地轮询；上游可能仍执行和计费");
-    } catch (caught) {
-      if (activeVideoRef.current === video) {
-        setStatus("本地任务停止失败");
-        setError(errorText(caught));
-      }
-    }
-  }
-
-  async function cancelPolling() {
+  function cancelPolling() {
     runRef.current += 1;
     abortRef.current?.abort();
     if (timerRef.current !== null) clearTimeout(timerRef.current);
     abortRef.current = null;
     timerRef.current = null;
     setRunning(false);
-    const video = activeVideoRef.current;
-    if (video) {
-      video.cancelled = true;
-      setStatus("正在停止本地任务");
-      if (video.id) await cancelVideoJob(video);
-    }
+    setStatus("已停止本地轮询");
   }
 
   useEffect(() => () => {
@@ -82,7 +63,7 @@ export function VideoGenerationPanel() {
     videoID: string,
     runID: number,
     workspaceId: string,
-    credentials: { profileId?: string; baseURL: string; apiKey: string },
+    credentials: { baseURL: string; apiKey: string },
   ): Promise<void> {
     if (runRef.current !== runID) return;
     const decision = videoPollingDecision(result.status);
@@ -104,7 +85,6 @@ export function VideoGenerationPanel() {
     timerRef.current = null;
     if (runRef.current !== runID) return;
     const next = await PollVideo({
-      profileId: credentials.profileId,
       baseURL: credentials.baseURL,
       apiKey: credentials.apiKey,
       videoID,
@@ -115,8 +95,6 @@ export function VideoGenerationPanel() {
   async function submitVideo() {
     const runID = runRef.current + 1;
     runRef.current = runID;
-    const video = { id: "", cancelled: false };
-    activeVideoRef.current = video;
     const workspaceId = useStudioStore.getState().activeWorkspaceId;
     setError("");
     setVideoURL("");
@@ -124,11 +102,11 @@ export function VideoGenerationPanel() {
     try {
       if (!activeProfile) throw new Error("当前没有启用的上游配置");
       if (!activeProfile.baseURL.trim()) throw new Error("当前上游配置缺少 BASE_URL");
-      if (!profileHasKey(activeProfileId, apiKey)) throw new Error("当前上游配置缺少 API Key");
+      if (!apiKey.trim()) throw new Error("当前上游配置缺少 API Key");
       if (!prompt.trim()) throw new Error("请输入视频 prompt");
       const videoModelID = requireExplicitVideoModelID(activeProfile);
       setRunning(true);
-      const credentials = { profileId: desktopRegistry() ? activeProfileId : undefined, baseURL: activeProfile.baseURL.trim(), apiKey: apiKey.trim() };
+      const credentials = { baseURL: activeProfile.baseURL.trim(), apiKey: apiKey.trim() };
       const created = await CreateVideo({
         ...credentials,
         videoModelID,
@@ -136,11 +114,6 @@ export function VideoGenerationPanel() {
         seconds,
         size: size.trim(),
       });
-      video.id = created.id;
-      if (video.cancelled) {
-        await cancelVideoJob(video);
-        return;
-      }
       await finishOrPoll(created, created.id, runID, workspaceId, credentials);
     } catch (caught) {
       if (runRef.current !== runID) return;

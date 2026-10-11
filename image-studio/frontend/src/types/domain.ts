@@ -18,7 +18,6 @@ export type AutoRetryCountValue = number;
 // Secret Service),用 profile.id 作为 keyring "user" 寻址。JSON 导出 /
 // localStorage 里都不会出现明文 key。
 export interface UpstreamProfile {
-	 hasKey?: boolean;
   id: string;
   name: string;
   apiMode: APIMode;
@@ -198,8 +197,6 @@ export interface BatchProcessConfig {
 }
 
 export interface HistoryItem {
-	assetId?: string;
-	sharedJobId?: string;
   id: string;
   imageId?: string;
   previewUrl?: string;

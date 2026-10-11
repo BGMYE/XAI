@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Edit3, Plus, Save, Trash2 } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import {
   NEW_PROMPT_TEMPLATE_ID,
   nextDefaultPromptTemplateLabel,
@@ -27,10 +27,7 @@ export function PromptTemplateManagerModal({
     updatePromptTemplate,
     deletePromptTemplate,
     pushToast,
-  } = useStudioState(
-    "prompt", "promptTemplates", "addPromptTemplate", "updatePromptTemplate", "deletePromptTemplate",
-    "pushToast",
-  );
+  } = useStudioStore();
   const { usesFluentUI, isAndroidPhone } = usePlatform();
   const [selectedId, setSelectedId] = useState("");
   const [draftLabel, setDraftLabel] = useState("");

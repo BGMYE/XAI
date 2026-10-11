@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Loader2, Search } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { useStudioStore, useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import type { HistoryItem, Mode } from "../../types/domain";
 import { usePlatform } from "../../platform/context";
 import { ContextMenu } from "../common/ContextMenu";
@@ -41,12 +41,7 @@ export function HistoryTimelineModal() {
     regenerateFromHistory,
     openResultDetail,
     pushToast,
-  } = useStudioState(
-    "historyTimelineOpen", "closeHistoryTimeline", "history", "historyHasMore", "historyLoading",
-    "loadMoreHistory", "currentImage", "compareB", "setCompareB", "deleteHistoryItem", "reuseAsSource",
-    "materializeCurrentImage", "setField", "applyHistoryParams", "regenerateFromHistory", "openResultDetail",
-    "pushToast",
-  );
+  } = useStudioStore();
   const { usesFluentUI } = usePlatform();
   const [query, setQuery] = useState("");
   const [modeFilter, setModeFilter] = useState<ModeFilter>("all");

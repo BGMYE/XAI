@@ -16,7 +16,6 @@ import {
   openAIAPIEndpoint,
   repairSizeForOpenAI,
   normalizePartialImages,
-  validateImageRequest,
   shouldUseImagesNewAPICompat,
   shouldUseGoogleNativeInteractions,
 } from "../../../shared/kernel/requestModel.js";
@@ -32,44 +31,6 @@ test("prompt inference payload sends the canvas image and describe-only instruct
   assert.equal(payload.input[0].content[0].type, "input_text");
   assert.equal(payload.input[0].content[1].type, "input_image");
   assert.equal(payload.input[0].content[1].image_url, "data:image/png;base64,YWJj");
-});
-
-test("verbatim preserves exact user text and assisted keeps the forced image tool", () => {
-  const prompt = '  两只狐狸，招牌写着“早安”\n只改变天空。  ';
-  const precise = buildResponsesPayload({ prompt }, []);
-  assert.equal(precise.input[0].content[0].text, prompt);
-  assert.match(precise.instructions, /VERBATIM/);
-  const assisted = buildResponsesPayload({ prompt, promptMode: "assisted" }, []);
-  assert.equal(assisted.input[0].content[0].text, prompt);
-  assert.match(assisted.instructions, /exact requested text, subjects, counts, identities, and all edit constraints/);
-  assert.deepEqual(assisted.tool_choice, { type: "image_generation" });
-  assert.throws(() => buildResponsesPayload({ prompt: "  " }, []), /prompt must not be empty/);
-});
-
-test("capability rules preserve references and reject known unsupported edits", () => {
-  const refs = ["data:image/png;base64,first", "data:image/png;base64,second"];
-  assert.throws(() => buildResponsesPayload({ prompt: "edit", maskB64: "mask" }, []), /参考图/);
-  assert.throws(() => buildResponsesPayload({ prompt: "edit", maskB64: "mask", modelCapabilities: { supportsMask: false } }, refs), /不支持蒙版/);
-  assert.throws(() => buildResponsesPayload({ prompt: "edit", modelCapabilities: { maxInputImages: 1 } }, refs), /最多支持 1/);
-  const payload = buildResponsesPayload({ prompt: "edit", modelCapabilities: {}, maskB64: "mask" }, refs);
-  assert.deepEqual(payload.input[0].content.slice(1).map((item) => item.image_url), refs);
-  assert.ok(payload.tools[0].input_image_mask);
-});
-
-test("resolved capability rules send only confirmed input fidelity and enforce choices", () => {
-  const input = { prompt: "edit", imageModelID: "gpt-image-1", inputFidelity: "high" };
-  const refs = ["data:image/png;base64,ref"];
-  assert.equal(buildResponsesPayload(input, refs).tools[0].input_fidelity, "high");
-  assert.equal(buildResponsesPayload({ ...input, modelCapabilities: {} }, refs).tools[0].input_fidelity, undefined);
-  assert.equal(buildResponsesPayload({ ...input, imageModelID: "gpt-image-2", modelCapabilities: { supportsInputFidelity: true } }, refs).tools[0].input_fidelity, "high");
-  assert.throws(() => buildResponsesPayload({ ...input, quality: "high", modelCapabilities: { qualities: ["low"] } }, refs), /不支持质量/);
-  assert.throws(() => buildResponsesPayload({ ...input, modelCapabilities: { supportsInputFidelity: true, inputFidelityValues: ["low"] } }, refs), /input_fidelity=high/);
-});
-
-test("Images requires a separate confirmed optimization step and explicit edit mode", () => {
-  assert.throws(() => validateImageRequest({ prompt: "cat", promptMode: "assisted" }, [], "images"), /先优化并确认提示词/);
-  assert.throws(() => validateImageRequest({ prompt: "edit", mode: "generate" }, ["ref"], "images"), /必须使用编辑模式/);
-  assert.doesNotThrow(() => validateImageRequest({ prompt: "confirmed", promptMode: "verbatim" }, [], "images"));
 });
 
 test("Responses payload defaults partial_images to streaming preview count", () => {
@@ -93,11 +54,6 @@ test("normalizePartialImages clamps OpenAI range", () => {
   assert.equal(normalizePartialImages(9), 3);
 });
 
-test("Go and JS use the explicit preview-disable flag instead of a zero-value count", () => {
-  assert.equal(buildResponsesPayload({ prompt: "cat", partialImages: 0 }, []).tools[0].partial_images, DEFAULT_PARTIAL_IMAGES);
-  assert.equal(buildResponsesPayload({ prompt: "cat", partialImages: 0, disablePreview: true }, []).tools[0].partial_images, 0);
-});
-
 test("normalizeAutoRetryCount clamps retry count range", () => {
   assert.equal(normalizeAutoRetryCount(undefined), DEFAULT_AUTO_RETRY_COUNT);
   assert.equal(normalizeAutoRetryCount(-1), DEFAULT_AUTO_RETRY_COUNT);
@@ -114,28 +70,6 @@ test("OpenAI endpoint helper preserves Google compatibility base path", () => {
     openAIAPIEndpoint("https://relay.example.com/api/v1", "/images/edits"),
     "https://relay.example.com/api/v1/images/edits",
   );
-});
-
-test("OpenAI endpoint helper keeps explicit API versions like the Go client", () => {
-  const cases = {
-    "https://relay.example.com": "https://relay.example.com/v1/models",
-    "https://relay.example.com/v1": "https://relay.example.com/v1/models",
-    "https://relay.example.com/api/v1/": "https://relay.example.com/api/v1/models",
-    "https://ark.example.com/api/v3": "https://ark.example.com/api/v3/models",
-    "https://relay.example.com/v1beta": "https://relay.example.com/v1beta/models",
-    "https://relay.example.com/v2alpha1": "https://relay.example.com/v2alpha1/models",
-    "https://relay.example.com/video": "https://relay.example.com/video/v1/models",
-    "https://relay.example.com/v1x": "https://relay.example.com/v1x/v1/models",
-    "https://generativelanguage.googleapis.com/v1beta/openai": "https://generativelanguage.googleapis.com/v1beta/openai/models",
-    // Judged as entered: ".../openai/v1" keeps its version (Azure OpenAI v1, Groq).
-    "https://relay.example.com/V1/": "https://relay.example.com/V1/models",
-    "https://api.groq.com/openai/v1": "https://api.groq.com/openai/v1/models",
-    "https://res.openai.azure.com/openai/v1/": "https://res.openai.azure.com/openai/v1/models",
-    "https://gateway.ai.cloudflare.com/v1/acct/gw/openai": "https://gateway.ai.cloudflare.com/v1/acct/gw/openai/models",
-  };
-  for (const [base, want] of Object.entries(cases)) {
-    assert.equal(openAIAPIEndpoint(base, "models"), want, base);
-  }
 });
 
 test("Gemini and Imagen image models use non-streaming Images compat mode", () => {

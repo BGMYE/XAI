@@ -44,14 +44,11 @@ func (t *NativeTransport) Stream(ctx context.Context, req Request, rawSink io.Wr
 		}
 	}
 
-	resp, err := doGeneration(cli, httpReq)
+	resp, err := cli.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("post: %w", err)
 	}
 	defer resp.Body.Close()
-	if receiver, ok := rawSink.(interface{ setResponseHeaders(http.Header) }); ok {
-		receiver.setResponseHeaders(resp.Header)
-	}
 
 	scanner := NewSSEScanner(resp.Body)
 	for scanner.Scan() {
@@ -78,7 +75,7 @@ func (t *NativeTransport) Stream(ctx context.Context, req Request, rawSink io.Wr
 	// If the response code wasn't 2xx and body was empty/non-SSE, surface it.
 	if resp.StatusCode >= 400 {
 		// We've already streamed whatever body came through; signal upstream failure.
-		return statusError(resp.StatusCode, "upstream HTTP %d", resp.StatusCode)
+		return fmt.Errorf("upstream HTTP %d", resp.StatusCode)
 	}
 	return nil
 }

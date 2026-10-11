@@ -1,4 +1,3 @@
-import type { ImageModelCapabilities, PromptMode } from "../../../../../../shared/kernel/requestModel.js";
 import type { RequestPolicy } from "../../../types/domain";
 
 export type KernelImageSource = {
@@ -13,8 +12,6 @@ export type RemoteGeneratePayload = {
   apiKey: string;
   mode: string;
   prompt: string;
-  promptMode?: PromptMode;
-  modelCapabilities?: ImageModelCapabilities;
   size: string;
   quality: string;
   outputFormat: string;
@@ -39,7 +36,6 @@ export type RemoteGeneratePayload = {
   responsesTransport?: string;
   requestPolicy: RequestPolicy;
   imagesNewAPICompat?: boolean;
-  disableImageStreaming?: boolean;
   allowInsecureConnection?: boolean;
   noPromptRevision: boolean;
   concurrencyLimit?: number;

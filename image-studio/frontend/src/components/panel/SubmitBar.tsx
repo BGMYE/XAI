@@ -1,5 +1,3 @@
-import { profileHasKey } from "../../lib/upstreamRegistry";
-import { useStudioState } from "../../state/studioStore";
 import { Settings } from "lucide-react";
 import { usePlatform } from "../../platform/context";
 
@@ -22,12 +20,10 @@ export function SubmitBar({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const { activeProfileId } = useStudioState("activeProfileId");
-  const hasKey = profileHasKey(activeProfileId, apiKey);
   const { isMac, usesFluentUI } = usePlatform();
   return (
     <div className={`sticky bottom-0 mt-auto bg-gradient-to-t from-[var(--sidebar)] via-[color:var(--sidebar)]/96 to-transparent ${isMac ? "-mx-6 px-6 pb-5 pt-3" : "-mx-4 px-4 pb-4 pt-2"}`}>
-      {(!hasKey || !baseURL) && (
+      {(!apiKey || !baseURL) && (
         <div className={`mb-2 border border-[color:var(--accent)]/18 bg-[var(--accent-soft)] px-3 py-2.5 text-center text-[11px] leading-relaxed text-[var(--accent)] ${usesFluentUI ? "rounded-[10px]" : "rounded-[16px]"}`}>
           <div className="font-medium">还没有可用上游配置</div>
           <div className="mt-1 opacity-90">
@@ -42,7 +38,7 @@ export function SubmitBar({
           </button>
         </div>
       )}
-      {!hasKey || !baseURL ? (
+      {!apiKey || !baseURL ? (
         <button
           type="button"
           onClick={onOpenUpstreamConfig}
@@ -60,7 +56,7 @@ export function SubmitBar({
       ) : (
         <button
           onClick={onSubmit}
-          disabled={!hasKey || !prompt}
+          disabled={!apiKey || !prompt}
           className={`liquid-primary-button w-full bg-[var(--accent)] py-3 font-semibold text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 dark:disabled:bg-zinc-800 ${usesFluentUI ? "rounded-[10px]" : "rounded-full"}`}
         >
           {submitLabel}

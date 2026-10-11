@@ -3,7 +3,6 @@ package client
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -158,19 +157,15 @@ func extractGoogleInteractionImage(raw []byte, statusCode int) (googleInteractio
 	var parsed googleInteractionResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		if statusCode/100 != 2 {
-			return googleInteractionImage{}, statusError(statusCode, "Google Interactions 返回 HTTP %d: %s", statusCode, strings.TrimSpace(string(raw)))
+			return googleInteractionImage{}, fmt.Errorf("Google Interactions 返回 HTTP %d: %s", statusCode, strings.TrimSpace(string(raw)))
 		}
 		return googleInteractionImage{}, fmt.Errorf("解析 Google Interactions 响应失败:%w", err)
 	}
 	if statusCode/100 != 2 || parsed.Error != nil {
-		message := fmt.Sprintf("Google Interactions 返回 HTTP %d", statusCode)
 		if parsed.Error != nil && strings.TrimSpace(parsed.Error.Message) != "" {
-			message = "Google Interactions 返回错误:" + parsed.Error.Message
+			return googleInteractionImage{}, fmt.Errorf("Google Interactions 返回错误:%s", parsed.Error.Message)
 		}
-		if statusCode/100 != 2 {
-			return googleInteractionImage{}, &HTTPStatusError{StatusCode: statusCode, Message: message}
-		}
-		return googleInteractionImage{}, errors.New(message)
+		return googleInteractionImage{}, fmt.Errorf("Google Interactions 返回 HTTP %d", statusCode)
 	}
 	candidates := make([]googleInteractionImage, 0, 4)
 	if parsed.OutputImage != nil {

@@ -43,7 +43,7 @@ export function normalizeBaseURL(raw: string): string {
 }
 
 export function validateRemoteBaseURL(raw: string, allowInsecureConnection: boolean): string {
-  const normalized = raw.trim().replace(/\/+$/, "");
+  const normalized = normalizeBaseURL(raw);
   let parsed: URL;
   try {
     parsed = new URL(normalized);

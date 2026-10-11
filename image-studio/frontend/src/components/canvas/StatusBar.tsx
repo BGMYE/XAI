@@ -1,6 +1,6 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useStudioState } from "../../state/studioStore";
+import { useStudioStore } from "../../state/studioStore";
 import { usePlatform } from "../../platform/context";
 import { HistoryMetaBadges } from "../history/HistoryMetaBadges";
 import { qualityLabel, sizeLabel } from "../history/historyLabels";
@@ -13,10 +13,7 @@ function fmtBytes(b: number): string {
 }
 
 export function StatusBar() {
-  const { isRunning, progress, currentImage, streamPreview, lastLogLine, viewZoom, recentDurations, jobsTotal, jobsCompleted, runningJobs } = useStudioState(
-    "isRunning", "progress", "currentImage", "streamPreview", "lastLogLine", "viewZoom", "recentDurations",
-    "jobsTotal", "jobsCompleted", "runningJobs",
-  );
+  const { isRunning, progress, currentImage, streamPreview, lastLogLine, viewZoom, recentDurations, jobsTotal, jobsCompleted, runningJobs } = useStudioStore();
   const { isAndroidPhone, isMac, isWindows, usesFluentUI, usesAppleUI } = usePlatform();
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [progressAnchor, setProgressAnchor] = useState(() => ({ elapsed: 0, at: Date.now() }));
