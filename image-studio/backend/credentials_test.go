@@ -1,21 +1,31 @@
 package backend
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 type memoryAPIKeyStore struct {
+	mu     sync.Mutex
 	values map[string]string
 }
 
 func (m *memoryAPIKeyStore) Get(mode string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.values[mode], nil
 }
 
 func (m *memoryAPIKeyStore) Set(mode, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.values[mode] = value
 	return nil
 }
 
 func (m *memoryAPIKeyStore) Delete(mode string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.values, mode)
 	return nil
 }

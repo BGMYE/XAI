@@ -72,15 +72,15 @@ func TestPromptRevisionsAndDiskFailure(t *testing.T) {
 	if err = e.DeletePromptCard(p.ID, old.Revision); !errors.Is(err, ErrPromptConflict) {
 		t.Fatal("stale delete accepted", err)
 	}
-	e.mu.Lock()
+	e.writeMu.Lock()
 	root := e.repo.root
 	e.repo.root = filepath.Join(root, "missing")
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	p.Prompt = "must not publish"
 	_, err = e.SavePromptCard(p)
-	e.mu.Lock()
+	e.writeMu.Lock()
 	e.repo.root = root
-	e.mu.Unlock()
+	e.writeMu.Unlock()
 	if err == nil {
 		t.Fatal("ignored disk failure")
 	}
@@ -244,5 +244,22 @@ func TestPromptGeneratedSourceDeduplicatesWithoutNewRequests(t *testing.T) {
 	s, _ := e.Snapshot()
 	if len(s.Assets) != 1 || len(s.Jobs) != 1 || s.Jobs[0].State != "succeeded" {
 		t.Fatal("source was lost")
+	}
+}
+
+func TestPromptReferencesAcceptAnyFinalImage(t *testing.T) {
+	d := emptyDocument()
+	d.Assets["first"] = Asset{ID: "first", Kind: "image"}
+	d.Assets["second"] = Asset{ID: "second", Kind: "image"}
+	d.Assets["unrelated"] = Asset{ID: "unrelated", Kind: "image"}
+	d.Jobs["source"] = Job{ID: "source", State: "succeeded", ResultAssetID: "first", ResultAssetIDs: []string{"first", "second"}, Request: Request{Kind: "image"}}
+	p := samplePrompt()
+	p.SourceJobID, p.PreviewAssetID = "source", "second"
+	if err := validatePromptReferences(&d, p); err != nil {
+		t.Fatal("second final image rejected", err)
+	}
+	p.PreviewAssetID = "unrelated"
+	if err := validatePromptReferences(&d, p); err == nil {
+		t.Fatal("unrelated image accepted as a result")
 	}
 }

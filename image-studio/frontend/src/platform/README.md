@@ -20,7 +20,7 @@
 - 宿主能力桥接
   - `android/bridge.ts`
   - `android/nativeInvoke.ts`
-  - `android/wailsShim.ts`
+  - `android/wailsShim.ts`（仅 Android 目标在启动时按需加载）
 
 - 宿主运行时能力
   - `runtime/host.ts`

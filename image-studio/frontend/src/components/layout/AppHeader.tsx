@@ -1,5 +1,5 @@
 import { Github, Monitor, Moon, Plus, Settings, Star, Sun } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioState } from "../../state/studioStore";
 import { OpenExternalURL } from "../../platform/runtime/host";
 import { usePlatform } from "../../platform/context";
 import { openExternalURLForPlatform } from "../../platform/android/bridge";
@@ -9,7 +9,9 @@ import { HeaderIconBtn, HeaderToggleBtn } from "./headerPrimitives";
 const REPO_URL = "https://github.com/BGMYE/XAI";
 
 export function AppHeader({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const { fullscreen, theme, setTheme, pushToast, workspaces, newWorkspace, openStarPrompt } = useStudioStore();
+  const { fullscreen, theme, setTheme, pushToast, workspaces, newWorkspace, openStarPrompt } = useStudioState(
+    "fullscreen", "theme", "setTheme", "pushToast", "workspaces", "newWorkspace", "openStarPrompt",
+  );
   const { isAndroid, isAndroidPhone, isAndroidPad, isMac, usesFluentUI, usesAndroidUI, usesAppleUI } = usePlatform();
   if (fullscreen) return null;
 

@@ -10,7 +10,9 @@ param(
   [string]$BinaryPath,
 
   [Parameter(Mandatory = $true)]
-  [string]$OutputZipPath
+  [string]$OutputZipPath,
+
+  [string]$Dlss5BundlePath = $env:XAI_DLSS5_BUNDLE
 )
 
 $ErrorActionPreference = "Stop"
@@ -113,8 +115,28 @@ function Grant-WebView2RuntimeAcl {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$bundleVerifier = Join-Path $repoRoot "image-studio/scripts/dlss5/bundle.py"
+if ($Architecture -eq "x64") {
+  if ([string]::IsNullOrWhiteSpace($Dlss5BundlePath)) {
+    throw "Windows x64 packages require the complete DLSS5 bundle. Set -Dlss5BundlePath or XAI_DLSS5_BUNDLE."
+  }
+  $Dlss5BundlePath = (Resolve-Path -LiteralPath $Dlss5BundlePath).Path
+  & python $bundleVerifier verify $Dlss5BundlePath
+  if ($LASTEXITCODE -ne 0) { throw "DLSS5 bundle verification failed; refusing to build the enhanced portable package." }
+} elseif (-not [string]::IsNullOrWhiteSpace($Dlss5BundlePath)) {
+  throw "The DLSS5 bundle supports Windows x64 only. ARM64 packages must not include this runtime."
+}
 $stageRoot = Join-Path $repoRoot "dist\portable-fixed-webview\$Architecture"
 $runtimeStage = Join-Path $stageRoot "WebView2FixedRuntime"
+$tempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+if ($Architecture -eq "x64") {
+  $sourcePrefix = $Dlss5BundlePath.TrimEnd([char[]]@('\', '/')) + '\'
+  $stagePrefix = [IO.Path]::GetFullPath($stageRoot).TrimEnd([char[]]@('\', '/')) + '\'
+  if ($sourcePrefix.StartsWith($stagePrefix, [StringComparison]::OrdinalIgnoreCase) -or
+      $stagePrefix.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Dlss5BundlePath must not overlap the disposable portable staging directory."
+  }
+}
 
 if (Test-Path $stageRoot) {
   Remove-Item -Recurse -Force $stageRoot
@@ -122,7 +144,7 @@ if (Test-Path $stageRoot) {
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
 $downloadInfo = Get-WebView2DownloadInfo -RequestedArchitecture $Architecture
-$cabPath = Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.$($downloadInfo.Version).$Architecture.cab"
+$cabPath = Join-Path $tempBase "Microsoft.WebView2.FixedVersionRuntime.$($downloadInfo.Version).$Architecture.cab"
 
 Invoke-WebRequest -UseBasicParsing -Uri $downloadInfo.Url -OutFile $cabPath
 Expand-CabToDirectory -CabPath $cabPath -Destination $runtimeStage
@@ -130,7 +152,7 @@ Expand-CabToDirectory -CabPath $cabPath -Destination $runtimeStage
 $resolvedRuntimeDir = Resolve-WebView2RuntimeDir -Root $runtimeStage
 $resolvedRuntimeDirItem = Get-Item -LiteralPath $resolvedRuntimeDir
 if ($resolvedRuntimeDirItem.FullName -ne (Get-Item -LiteralPath $runtimeStage).FullName) {
-  $tempRoot = Join-Path $env:RUNNER_TEMP ("webview2-fixed-" + [guid]::NewGuid().ToString("N"))
+  $tempRoot = Join-Path $tempBase ("webview2-fixed-" + [guid]::NewGuid().ToString("N"))
   if (Test-Path $tempRoot) {
     Remove-Item -Recurse -Force $tempRoot
   }
@@ -140,8 +162,20 @@ if ($resolvedRuntimeDirItem.FullName -ne (Get-Item -LiteralPath $runtimeStage).F
 }
 
 Copy-Item -LiteralPath $BinaryPath -Destination (Join-Path $stageRoot "image-studio.exe")
+if ($Architecture -eq "x64") {
+  $bundleStage = Join-Path $stageRoot "runtimes\dlss5"
+  New-Item -ItemType Directory -Force -Path $bundleStage | Out-Null
+  Get-ChildItem -LiteralPath $Dlss5BundlePath -Force | Copy-Item -Destination $bundleStage -Recurse -Force
+  & python $bundleVerifier verify $bundleStage
+  if ($LASTEXITCODE -ne 0) { throw "Staged DLSS5 bundle is incomplete; refusing to build the enhanced portable package." }
+}
 Grant-WebView2RuntimeAcl -RuntimeRoot $runtimeStage
 
+$engineNote = if ($Architecture -eq "x64") {
+  "- This x64 edition includes the complete runtimes/dlss5 engine. Keep its entire directory tree beside image-studio.exe. Compatible NVIDIA hardware and drivers are still required."
+} else {
+  "- This ARM64 edition does not include the x64-only DLSS5 engine."
+}
 $readme = @"
 Image Studio portable package with bundled Fixed Version WebView2 Runtime.
 
@@ -151,10 +185,11 @@ Architecture: $Architecture
 
 Usage:
 1. Extract the entire zip to a local folder.
-2. Keep image-studio.exe and the WebView2FixedRuntime folder together.
+2. Keep image-studio.exe, WebView2FixedRuntime, and all runtimes folders together.
 3. Launch image-studio.exe directly.
 
 Notes:
+$engineNote
 - This package is for users who run the portable exe directly on machines without a stable system WebView2 runtime.
 - Do not run it from a network share or UNC path.
 - If you replace the bundled runtime manually, keep the folder structure intact and preserve msedgewebview2.exe inside WebView2FixedRuntime.
@@ -166,4 +201,7 @@ New-Item -ItemType Directory -Force -Path $zipParent | Out-Null
 if (Test-Path $OutputZipPath) {
   Remove-Item -Force $OutputZipPath
 }
-Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $OutputZipPath
+# ZipFile retains hidden files and supports large engine entries; Compress-Archive
+# can omit hidden files and has a per-file size limit.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[IO.Compression.ZipFile]::CreateFromDirectory($stageRoot, [IO.Path]::GetFullPath($OutputZipPath))

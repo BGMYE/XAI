@@ -1,3 +1,4 @@
+import "./styles";
 import type { ReactElement } from "react";
 import { History, Image as ImageIcon, SlidersHorizontal } from "lucide-react";
 import { ControlPanel } from "../../components/panel/ControlPanel";

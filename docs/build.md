@@ -80,13 +80,13 @@ cd image-studio
 wails build -platform windows/amd64 -clean
 ```
 
-如果你要生成“用户直接解压双击 `exe` 也能运行”的 Windows 便携包，不要复用普通 release 的裸 `exe`。仓库提供了独立 workflow：
+上述 Wails 命令只生成开发用主程序。x64 正式发行使用含 `runtimes/dlss5/` 完整引擎的 `windows-amd64.zip`、NSIS 或 MSIX，不发布缺少引擎的裸 `exe`。如果还需随包提供 WebView2，仓库提供独立 workflow：
 
 - GitHub Actions 工作流：`Windows Portable Fixed WebView2`
 - 触发方式：手动 `workflow_dispatch`
 - 产物：`image-studio-<version>-windows-amd64-portable-fixed-webview.zip` 与 `image-studio-<version>-windows-arm64-portable-fixed-webview.zip`
 
-这两个 zip 会把 `image-studio.exe` 和微软 Fixed Version WebView2 Runtime 一起打包，并在应用启动时优先使用同目录下的 `WebView2FixedRuntime/`。
+这两个 ZIP 会把 `image-studio.exe` 和微软 Fixed Version WebView2 Runtime 一起打包，并在应用启动时优先使用同目录下的 `WebView2FixedRuntime/`。x64 包还必须包含 `runtimes/dlss5/` 完整树；ARM64 为不含此 x64 引擎的基础版。运行包制作与构建输入见下文「Windows x64 内置引擎发行输入」。
 
 Linux Ubuntu 24.04 / Debian 新版本：
 
@@ -338,10 +338,27 @@ worker 端口等环境指纹，并列出每条 parity check 的通过/失败情�
 当前发布链路在 `.github/workflows/release.yml`：
 
 - 并行构建 Windows、macOS、Linux Wails 桌面产物。
-- Windows 额外产出单个自适应架构的 NSIS installer `image-studio-<version>-windows-installer.exe`，内部同时包含 amd64 与 arm64 二进制，供正式安装分发或 Microsoft Store Win32 提交使用。
+- Windows x64 桌面产物为 `image-studio-<version>-windows-amd64.zip`，完整保留 `image-studio.exe` 与 `runtimes/dlss5/`；不是裸 EXE。
+- Windows 额外产出单个自适应架构的 NSIS installer `image-studio-<version>-windows-installer.exe`，内含 amd64 与 arm64 主程序，仅在 x64 安装完整 DLSS5 引擎。
 - Windows 额外产出 `image-studio-<version>-windows-x64.msix`、`image-studio-<version>-windows-arm64.msix` 与 `image-studio-<version>-windows.msixbundle`，供 Microsoft Store / 企业分发使用。
 - tag 为 `v*` 时将所有产物附加到 GitHub Release。
 - macOS 额外产出 `image-studio-<version>-macos-universal.dmg`；DMG 内含 `/Applications` 快捷方式，用户可直接拖拽安装。
+
+### Windows x64 内置引擎发行输入
+
+维护者须提供有权分发的完整引擎包；本次代码不附 NVIDIA 资产，也不会自动从外部网站补齐。手动生产入口为 [build-dlss5-engine.yml](../.github/workflows/build-dlss5-engine.yml)：仅在默认分支与发布者自托管 Windows x64 RTX runner 上执行，运行库来源是 runner 的 `XAI_DLSS5_RUNTIME_SOURCE`，实际 NR probe 返回 `available: true` 后才上传 bundle。维护者将成功摘要的三项一起配置为仓库 Actions variables，供发布与固定 WebView2 便携 workflow 消费：
+
+| 变量 | 用途 |
+| --- | --- |
+| `XAI_DLSS5_BUNDLE_RUN_ID` | 本仓库成功的可信 `push` / `workflow_dispatch` 构建 run ID。 |
+| `XAI_DLSS5_BUNDLE_ARTIFACT` | 该 run 内准确的 artifact 名称。 |
+| `XAI_DLSS5_BUNDLE_SHA256` | artifact 中唯一文件 `dlss5-bundle.zip` 的 SHA-256。 |
+
+ZIP 须以完整 `dlss5/` 目录为根。流程固定从当前仓库读取指定 artifact，拒绝 fork/PR run，先核对 ZIP 摘要再解压，并调用 `python image-studio/scripts/dlss5/bundle.py verify <bundle-root>` 校验清单、文件哈希和架构。SHA-256 仅验证与维护者选定输入一致，不代替签名或许可授权。输入缺失、过期、摘要不符或运行树不完整时，x64 发行直接失败；当前没有随代码提供的默认运行包。
+
+本地用 `scripts/build-windows-engine-zip.ps1 -BinaryPath <x64-exe> -Dlss5BundlePath <bundle> -OutputZipPath <new-zip>` 制作普通完整 ZIP（依赖系统 WebView2）。调用 `scripts/build-msix.ps1` 或 `scripts/build-windows-portable-fixed-webview.ps1` 时，也通过 `-Dlss5BundlePath` 或 `XAI_DLSS5_BUNDLE` 指向已校验的 `dlss5` 根目录。这些脚本都会递归复制到主程序旁的 `runtimes/dlss5/`，复制后再次校验。NSIS 编译接受 `/DARG_XAI_DLSS5_BUNDLE=<绝对路径>` 或同一环境变量，编译时校验并完整收录运行树。ARM64 不接受此 x64 运行包。
+
+运行包准备见 [DLSS5 构建说明](../image-studio/scripts/dlss5/README.md)。PR 的 `verify-desktop-packaging` 只提供不带引擎的编译检查产物，不能当作 x64 增强发行包。
 
 ### macOS 签名与公证
 
@@ -360,8 +377,8 @@ release workflow 会先对 `.app` 做 Developer ID 签名、公证与 staple，�
 
 Windows 11 的 Smart App Control / SmartScreen 会重点拦截无法验证发布者的 `exe`。仓库里的 release workflow 现在约定：
 
-- 如果配置了 Windows 签名证书，workflow 会自动对 Windows `exe` 做 Authenticode 签名并校验。
-- 如果没有配置签名证书，workflow 仍然继续产出 Windows artifact，但会在日志里明确警告这些 `exe` 可能被 Win11 拦截。
+- 如果配置了 Windows 签名证书，workflow 会先对 Windows 主程序 `exe` 做 Authenticode 签名并校验，再制作 ZIP、NSIS 和 MSIX；NSIS 安装器另行签名，不对 ZIP 调用 EXE 签名工具。
+- 如果没有配置签名证书，但必需的运行包输入完整，workflow 仍会产出 Windows artifact，并明确警告未签名程序可能被 Win11 拦截。
 
 需要配置的 GitHub Actions secrets：
 
@@ -380,7 +397,7 @@ Windows 11 的 Smart App Control / SmartScreen 会重点拦截无法验证发布
 
 ### Microsoft Store MSIX 身份
 
-MSIX / MSIXBundle 打包内置了当前 Microsoft Store 产品 `9P9DTWG1G93N` 的公开身份值，因此首次发布不需要额外配置 GitHub Actions variables：
+MSIX / MSIXBundle 打包内置了当前 Microsoft Store 产品 `9P9DTWG1G93N` 的公开身份值，因此这些身份字段默认不需另配 variables；x64 引擎发行输入仍须按上文配置：
 
 | 字段 | 当前值 |
 |---|---|
@@ -400,7 +417,7 @@ MSIX / MSIXBundle 打包内置了当前 Microsoft Store 产品 `9P9DTWG1G93N` �
 注意：
 
 - `IMAGE_STUDIO_MSIX_PUBLISHER` 不能自行猜测，必须直接使用 Partner Center / Store association 给出的值。
-- 当前内置身份值会让 release workflow 直接产出 `x64.msix`、`arm64.msix` 和 `windows.msixbundle`；只有在内置值被清空或覆盖为不完整配置时，MSIX 相关 job 才会跳过。
+- 当前内置身份值启用 `x64.msix`、`arm64.msix` 和 `windows.msixbundle` 打包；x64 仍须通过完整引擎校验。身份配置不完整时对应步骤会跳过，运行包缺失则阻断 x64 构建而非跳过校验。
 - 面向 Microsoft Store 提交时可以保持未签名，由商店在提交后重新签名；如果你要本地侧载测试，则还需要额外签一个测试证书。
 
 平台内核验证 workflow：

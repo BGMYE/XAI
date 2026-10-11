@@ -1,5 +1,5 @@
 import { Folder, Github, MessageSquare } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioState } from "../../state/studioStore";
 import { OpenExternalURL, OpenOutputDir } from "../../platform/runtime/host";
 import { androidTarget, openExternalURLForPlatform, openOutputLocationForPlatform } from "../../platform/android/bridge";
 import { appVersion } from "../../lib/version";
@@ -9,7 +9,7 @@ const REPO_URL = "https://github.com/BGMYE/XAI";
 const ISSUES_URL = "https://github.com/BGMYE/XAI/issues";
 
 export function FooterBar() {
-  const { fullscreen, history, runningJobs, isRunning, workspaces, pushToast } = useStudioStore();
+  const { fullscreen, history, runningJobs, isRunning, workspaces, pushToast } = useStudioState("fullscreen", "history", "runningJobs", "isRunning", "workspaces", "pushToast");
   const { isAndroid, isMac, isWindows, usesFluentUI, usesAppleUI } = usePlatform();
   if (fullscreen) return null;
   if (isAndroid) return null;

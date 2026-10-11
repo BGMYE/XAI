@@ -21,8 +21,8 @@ import (
 // non-empty, it is embedded as the tool's "input_image_mask.image_url"
 // parameter using a base64 data URL.
 func BuildPayload(opts Options) ([]byte, error) {
-	if strings.TrimSpace(opts.Prompt) == "" {
-		return nil, ErrEmptyPrompt
+	if err := ValidateImageRequest(opts); err != nil {
+		return nil, err
 	}
 	size := opts.Size
 	if size == "" {
@@ -78,7 +78,7 @@ func BuildPayload(opts Options) ([]byte, error) {
 	if supportsOutputCompression(imgModel, outputFormat) {
 		tool["output_compression"] = outputCompression
 	}
-	if supportsInputFidelity(imgModel) && len(imageURLs) > 0 && inputFidelity != DefaultInputFidelity {
+	if supportsConfiguredInputFidelity(opts) && len(imageURLs) > 0 && inputFidelity != DefaultInputFidelity {
 		tool["input_fidelity"] = inputFidelity
 	}
 	if supportsImageModeration(imgModel) {
@@ -115,9 +115,9 @@ func BuildPayload(opts Options) ([]byte, error) {
 		"store":       false,
 		"stream":      true,
 	}
-	// 实测此条 instructions 能让 gpt-5.5 把用户 prompt 字字传给 image_generation,
-	// 而不是惯常的「改写润色再生」流程。改 wording 可能失效 —— 经验值。
-	payload["instructions"] = "You are a tool runner. Pass the user prompt to image_generation VERBATIM. DO NOT rewrite, expand, polish, or revise it in any way. Use the exact text the user gave."
+	// Instructions express the user's selected intent; they are not a protocol
+	// guarantee that the upstream model passes the text through byte-for-byte.
+	payload["instructions"] = promptModeInstructions(opts.PromptMode)
 	if userIdentifier != "" {
 		payload["safety_identifier"] = userIdentifier
 	}

@@ -1,0 +1,93 @@
+name: Prepare required Windows x64 DLSS5 bundle
+description: Retrieve a maintainer-selected same-repository artifact and verify its complete runtime tree.
+inputs:
+  run-id:
+    description: Successful trusted workflow run in this repository.
+    required: true
+  artifact-name:
+    description: Artifact containing exactly one dlss5-bundle.zip file.
+    required: true
+  sha256:
+    description: Maintainer-pinned SHA-256 of dlss5-bundle.zip (integrity, not a signature).
+    required: true
+outputs:
+  path:
+    description: Absolute path to the verified dlss5 directory.
+    value: ${{ steps.unpack.outputs.path }}
+runs:
+  using: composite
+  steps:
+    - name: Require a trusted same-repository source
+      uses: actions/github-script@v7
+      env:
+        DLSS5_RUN_ID: ${{ inputs.run-id }}
+        DLSS5_ARTIFACT: ${{ inputs.artifact-name }}
+        DLSS5_SHA256: ${{ inputs.sha256 }}
+      with:
+        script: |
+          const runId = process.env.DLSS5_RUN_ID || '';
+          const artifactName = process.env.DLSS5_ARTIFACT || '';
+          const sha256 = process.env.DLSS5_SHA256 || '';
+          if (!/^[1-9][0-9]*$/.test(runId) || !Number.isSafeInteger(Number(runId)) ||
+              !artifactName.trim() || !/^[a-fA-F0-9]{64}$/.test(sha256)) {
+            throw new Error('Configure XAI_DLSS5_BUNDLE_RUN_ID, XAI_DLSS5_BUNDLE_ARTIFACT and XAI_DLSS5_BUNDLE_SHA256. Windows x64 releases require a complete reviewed bundle; no fallback is published.');
+          }
+          const {data: run} = await github.rest.actions.getWorkflowRun({
+            ...context.repo, run_id: Number(runId)
+          });
+          const repository = `${context.repo.owner}/${context.repo.repo}`;
+          if (run.status !== 'completed' || run.conclusion !== 'success' ||
+              run.head_repository?.full_name?.toLowerCase() !== repository.toLowerCase() ||
+              !['workflow_dispatch', 'push'].includes(run.event)) {
+            throw new Error('Bundle source must be a successful trusted push/manual run from this repository, not a fork or pull request run.');
+          }
+          const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+            ...context.repo, run_id: Number(runId), per_page: 100
+          });
+          const matches = artifacts.filter(artifact => artifact.name === artifactName && !artifact.expired);
+          if (matches.length !== 1) throw new Error('The configured bundle artifact is missing, expired or ambiguous.');
+
+    - name: Download only the selected repository artifact
+      uses: actions/download-artifact@v4
+      with:
+        repository: ${{ github.repository }}
+        run-id: ${{ inputs.run-id }}
+        name: ${{ inputs.artifact-name }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/xai-dlss5-bundle-input
+
+    - name: Check archive integrity and full runtime manifest
+      id: unpack
+      shell: pwsh
+      env:
+        DLSS5_EXPECTED_SHA256: ${{ inputs.sha256 }}
+        DLSS5_INPUT: ${{ runner.temp }}/xai-dlss5-bundle-input
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $files = @(Get-ChildItem -LiteralPath $env:DLSS5_INPUT -Force)
+        if ($files.Count -ne 1 -or $files[0].PSIsContainer -or $files[0].Name -cne 'dlss5-bundle.zip') {
+          throw 'The selected artifact must contain only dlss5-bundle.zip.'
+        }
+        $zip = $files[0].FullName
+        $actualHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+        if ($actualHash -ine $env:DLSS5_EXPECTED_SHA256) { throw 'DLSS5 bundle archive SHA-256 mismatch.' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+        try {
+          $entries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+          foreach ($entry in $archive.Entries) {
+            $name = $entry.FullName.Replace('\', '/')
+            $parts = $name.Split('/')
+            if ($name -notmatch '^dlss5/' -or $parts -contains '..' -or $parts -contains '.' -or
+                $name.Contains(':') -or $name.Contains('//') -or -not $entries.Add($name) -or
+                (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000) {
+              throw "Unsupported or unsafe bundle archive entry: $name"
+            }
+          }
+        } finally { $archive.Dispose() }
+        $destination = Join-Path $env:RUNNER_TEMP ('xai-dlss5-verified-' + [guid]::NewGuid().ToString('N'))
+        Expand-Archive -LiteralPath $zip -DestinationPath $destination
+        $bundlePath = Join-Path $destination 'dlss5'
+        & python (Join-Path $env:GITHUB_WORKSPACE 'image-studio/scripts/dlss5/bundle.py') verify $bundlePath
+        if ($LASTEXITCODE -ne 0) { throw 'Required DLSS5 runtime bundle verification failed.' }
+        "path=$bundlePath" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8

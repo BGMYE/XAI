@@ -1,6 +1,8 @@
 name: Verify release desktop packaging
 
 # Exercise the same Wails CLI and macOS packaging script used by release.yml.
+# Windows outputs here are compile-check binaries, not enhanced release packages:
+# PR CI deliberately has no access to the publisher-selected proprietary bundle.
 # This is a secret-free PR check: it does not sign, notarize, tag or publish.
 on:
   pull_request:
@@ -12,6 +14,7 @@ on:
       - 'scripts/**'
       - 'go.work*'
       - '.github/workflows/release.yml'
+      - '.github/actions/prepare-dlss5-bundle/**'
       - '.github/workflows/verify-desktop-packaging.yml'
   # Direct pushes to main must exercise native Windows/macOS filesystems too.
   # Cross-compiling Go on Linux does not catch frontend resolver case collisions.
@@ -24,6 +27,7 @@ on:
       - 'scripts/**'
       - 'go.work*'
       - '.github/workflows/release.yml'
+      - '.github/actions/prepare-dlss5-bundle/**'
       - '.github/workflows/verify-desktop-packaging.yml'
   workflow_dispatch:
 permissions:
@@ -120,7 +124,7 @@ jobs:
             wails build ${{ matrix.wails_args }} \
               -ldflags "-X github.com/yuanhua/image-gptcodex/pkg/client.Version=${{ steps.version.outputs.app_version }}"
           fi
-      - name: Package unsigned validation artifact
+      - name: Collect unsigned compile-check artifacts (not release packages)
         run: |
           # upload-artifact excludes dot-prefixed directories by default.
           # Stage only built binaries in this visible directory; keep that safety default.
@@ -128,6 +132,7 @@ jobs:
           case "${{ matrix.goos }}" in
             windows)
               cp image-studio/build/bin/image-studio.exe "release-ci/image-studio-${{ matrix.id }}.exe"
+              printf '%s\n' 'BUILD CHECK ONLY: this executable has no bundled DLSS5 runtime and is not an enhanced release package.' > release-ci/BUILD-ONLY.txt
               ;;
             linux)
               tar -C image-studio/build/bin -czf "release-ci/image-studio-${{ matrix.id }}.tar.gz" image-studio

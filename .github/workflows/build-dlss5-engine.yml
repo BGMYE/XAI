@@ -1,0 +1,92 @@
+name: Build publisher-managed DLSS5 engine
+
+# The self-hosted publisher machine supplies legally redistributable assets.
+# This workflow accepts no runtime URL and never runs on pull requests.
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_version:
+        description: 'Version label for the complete built-in Windows AMD64 engine.'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: publisher-dlss5-engine
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64, xai-dlss5-builder]
+    environment: dlss5-publisher
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Require default-branch publisher invocation
+        env:
+          SOURCE_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          BUNDLE_VERSION: ${{ inputs.bundle_version }}
+        run: |
+          if ($env:SOURCE_REF -cne ('refs/heads/' + $env:DEFAULT_BRANCH)) { throw 'Run this publisher workflow from the default branch only.' }
+          if ($env:BUNDLE_VERSION -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$') { throw 'Invalid bundle version.' }
+          if ([string]::IsNullOrWhiteSpace($env:XAI_DLSS5_RUNTIME_SOURCE) -or
+              -not (Test-Path -LiteralPath $env:XAI_DLSS5_RUNTIME_SOURCE -PathType Container)) {
+            throw 'The trusted runner must define XAI_DLSS5_RUNTIME_SOURCE with its curated authorized native assets.'
+          }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build bundled Python worker and engine archive
+        id: build
+        env:
+          BUNDLE_VERSION: ${{ inputs.bundle_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $jobRoot = Join-Path $env:RUNNER_TEMP ('xai-engine-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $jobRoot | Out-Null
+          $environmentRoot = Join-Path $jobRoot 'developer-environment'
+          $output = Join-Path $jobRoot 'output'
+          $prepare = @{ToolRoot=$env:XAI_DLSS5_RUNTIME_SOURCE; EnvironmentRoot=$environmentRoot}
+          if (-not [string]::IsNullOrWhiteSpace($env:XAI_DLSS5_BUILD_PYTHON)) { $prepare.Python = $env:XAI_DLSS5_BUILD_PYTHON }
+          ./image-studio/scripts/dlss5/prepare.ps1 @prepare | Out-Host
+          ./image-studio/scripts/dlss5/build.ps1 -EnvironmentRoot $environmentRoot `
+            -RuntimeSource $env:XAI_DLSS5_RUNTIME_SOURCE -OutputDirectory $output -BundleVersion $env:BUNDLE_VERSION | Out-Host
+          "output=$output" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "python=$environmentRoot\venv\Scripts\python.exe" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Require a real bundled NR probe before upload
+        env:
+          ENGINE_OUTPUT: ${{ steps.build.outputs.output }}
+          BUILD_PYTHON: ${{ steps.build.outputs.python }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:ENGINE_OUTPUT 'bundle\dlss5'
+          $worker = Join-Path $bundle 'worker\xai-video-engine.exe'
+          $request = @{version=1; id='publisher-probe'; op='probe'; toolRoot=(Join-Path $bundle 'runtime'); runtimePath=(Join-Path $bundle 'runtime\nvngx_dlssnr.dll')} | ConvertTo-Json -Compress
+          $diagnostic = Join-Path $env:ENGINE_OUTPUT 'nr-probe-stderr.log'
+          $events = @($request | & $worker 2> $diagnostic)
+          $exitCode = $LASTEXITCODE
+          $parsed = @($events | ForEach-Object { $_ | ConvertFrom-Json })
+          $results = @($parsed | Where-Object { $_.type -eq 'result' })
+          if ($exitCode -ne 0 -or $results.Count -ne 1 -or $results[0].available -ne $true) {
+            throw 'Bundled NR probe did not return available:true. No engine artifact will be uploaded; stderr remains on the private runner.'
+          }
+          & $env:BUILD_PYTHON -I image-studio/scripts/dlss5/bundle.py verify $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'The probe changed or invalidated the read-only runtime bundle.' }
+          # Report only public build identifiers and the archive hash, never env/tokens.
+          $hash = (Get-FileHash -LiteralPath (Join-Path $env:ENGINE_OUTPUT 'dlss5-bundle.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            '### Built-in engine artifact'
+            "XAI_DLSS5_BUNDLE_RUN_ID=$env:GITHUB_RUN_ID"
+            "XAI_DLSS5_BUNDLE_ARTIFACT=xai-dlss5-engine-$env:GITHUB_RUN_ID"
+            "XAI_DLSS5_BUNDLE_SHA256=$hash"
+            'Real NR probe passed on the publisher runner. Clean Windows installation acceptance is still required.'
+          ) | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      - name: Upload only the verified complete archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: xai-dlss5-engine-${{ github.run_id }}
+          path: ${{ steps.build.outputs.output }}/dlss5-bundle.zip
+          if-no-files-found: error
+          retention-days: 90

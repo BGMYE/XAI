@@ -4,7 +4,7 @@ import {
   Gauge, Image as ImageIcon, MoreHorizontal, Plus, Settings, Sparkles,
   SlidersHorizontal, Sparkles as Stars, Wand2, X,
 } from "lucide-react";
-import { useStudioStore } from "../../state/studioStore";
+import { useStudioState } from "../../state/studioStore";
 import { VideoGenerationPanel } from "../panel/VideoGenerationPanel";
 import { XAIProPanels } from "./XAIProPanels";
 import { handleWindowTitleBarDoubleClick, XAIWindowControls } from "./XAIWindowControls";
@@ -119,7 +119,14 @@ function SimpleWorkspace({ tab, setTab, setView }: { tab: MediaTab; setTab: (t: 
     outputFormat, background, seed, apiMode, requestPolicy, customAspectRatios, errorMessage,
     openHistoryTimeline, closeHistoryTimeline, openSettings, openResultDetail,
     regenerateFromHistory, deleteHistoryItem, pushToast, apiKey, baseURL,
-  } = useStudioStore();
+  } = useStudioState(
+    "prompt", "setField", "submit", "isRunning", "jobsCompleted", "jobsTotal", "progress", "sources",
+    "selectSourceImage", "removeSource", "history", "imageModelID", "profiles", "activeProfileId",
+    "setActiveProfile", "size", "batchCount", "quality", "outputFormat", "background", "seed", "apiMode",
+    "requestPolicy", "customAspectRatios", "errorMessage", "openHistoryTimeline", "closeHistoryTimeline",
+    "openSettings", "openResultDetail", "regenerateFromHistory", "deleteHistoryItem", "pushToast", "apiKey",
+    "baseURL",
+  );
   const [filter, setFilter] = useState("全部");
   const [parametersOpen, setParametersOpen] = useState(false);
   const capabilityInput = { apiMode, requestPolicy, imageModelID };
@@ -169,7 +176,7 @@ function SimpleWorkspace({ tab, setTab, setView }: { tab: MediaTab; setTab: (t: 
 }
 
 function ProWorkspace({ setView, onOpenSettings }: { setView: (v: StudioView) => void; onOpenSettings: () => void }) {
-  const { openHistoryTimeline, pushToast, apiKey, baseURL } = useStudioStore();
+  const { openHistoryTimeline, pushToast, apiKey, baseURL } = useStudioState("openHistoryTimeline", "pushToast", "apiKey", "baseURL");
   return <div className="xai-window pro-window"><div className="xai-window-bar drag-region" onDoubleClick={(event) => handleWindowTitleBarDoubleClick(event, () => pushToast("窗口控制请在桌面应用中使用。", "info"))}><XAIWindowControls onUnavailable={() => pushToast("窗口控制请在桌面应用中使用。", "info")} /><span className="xai-window-title">XAI</span><ModeSwitch view="pro" setView={setView} /><div className="xai-connected"><i />{apiKey && baseURL ? "已配置" : "未配置"}</div></div><div className="xai-window-body"><SideNav onCreate={() => setView("simple")} onHistory={openHistoryTimeline} onSettings={onOpenSettings} onHint={(label) => pushToast(`${label}功能尚未开放，当前可继续使用创作与作品历史`, "info")} /><XAIProPanels /></div></div>;
 }
 export function XAIWorkspace({ onOpenSettings }: { onOpenSettings: () => void }) {

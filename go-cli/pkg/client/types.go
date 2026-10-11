@@ -1,6 +1,9 @@
 package client
 
-import "errors"
+import (
+	"errors"
+	"net/http"
+)
 
 const (
 	BaseURL                  = "" // 不再内置默认上游;调用方必须显式提供 Options.BaseURL
@@ -132,11 +135,16 @@ const (
 
 // Options drives a single image request.
 type Options struct {
-	APIKey  string
-	Prompt  string
-	Mode    Mode
-	Size    string
-	Quality string
+	APIKey string
+	Prompt string
+	// PromptMode is "verbatim" (default) or "assisted" for Responses.
+	PromptMode string
+	// ModelCapabilities contains confirmed rules for this exact model and API.
+	// Nil retains the built-in compatibility rules; unknown fields stay unknown.
+	ModelCapabilities *ImageModelCapabilities
+	Mode              Mode
+	Size              string
+	Quality           string
 
 	// OutputFormat:"png" | "jpeg" | "webp"。空时回退到 OutputFormat 常量。
 	// Responses API 会把它放进 image_generation 工具的 output_format 参数;
@@ -175,6 +183,9 @@ type Options struct {
 	// force response_format=b64_json and do not send stream/partial_images.
 	// This is useful for some NewAPI-style relays that reject streaming fields.
 	ImagesNewAPICompat bool
+	// DisableImageStreaming omits stream/partial_images for a confirmed JSON-only
+	// Images endpoint without adding compatibility-only response_format fields.
+	DisableImageStreaming bool
 
 	// AllowInsecureConnection permits remote HTTP and disables HTTPS/WSS
 	// certificate verification for this upstream. It must remain opt-in.
@@ -243,6 +254,16 @@ type Options struct {
 	// AutoRetryCount controls how many extra retry attempts should be issued
 	// after the initial request. Values <= 0 fall back to DefaultAutoRetryCount.
 	AutoRetryCount int
+
+	// HTTPClient, when set, sends Images API and Google Interactions requests
+	// (and URL downloads) instead of a client built from Proxy and
+	// AllowInsecureConnection. Callers use it to apply their own network policy.
+	HTTPClient *http.Client
+
+	// DeferURLDownload returns an image delivered as a URL in ImageResult.URL
+	// instead of downloading it, so the caller can persist the link first and
+	// download it with its own policy.
+	DeferURLDownload bool
 }
 
 // EffectiveImageDataURLs returns the merged list, deduplicating empty entries.
@@ -259,11 +280,35 @@ func (o Options) EffectiveImageDataURLs() []string {
 	return urls
 }
 
-// ImageResult is the extracted image payload.
+// GeneratedImage is one complete upstream image. Preview frames are delivered
+// through PartialImage callbacks and never appear in this collection.
+type GeneratedImage struct {
+	ItemID        string `json:"itemId,omitempty"`
+	OutputIndex   *int   `json:"outputIndex,omitempty"`
+	ImageB64      string `json:"imageB64,omitempty"`
+	URL           string `json:"url,omitempty"`
+	Format        string `json:"format,omitempty"`
+	Width         int    `json:"width,omitempty"`
+	Height        int    `json:"height,omitempty"`
+	RevisedPrompt string `json:"revisedPrompt,omitempty"`
+	Source        string `json:"source"` // final; partial frames are never results
+}
+
+// ImageResult contains every final image and response metadata. The legacy
+// single-image fields mirror Images[0] for callers that have not migrated yet.
+// A final image can be retained with Status uncertain if the stream disconnects
+// before a terminal event; this must never trigger another generation request.
 type ImageResult struct {
 	ImageB64      string
 	RevisedPrompt string
-	SourceEvent   string // "final" | "partial" | "json" | "images_api"
+	SourceEvent   string // "final" | "json" | "images_api" | "images_api_url"
+	URL           string
+	Images        []GeneratedImage
+	ResponseID    string
+	RequestID     string
+	Status        string // "completed" | "failed" | "incomplete" | "uncertain"
+	Usage         map[string]any
+	Error         string
 }
 
 type PartialImage struct {

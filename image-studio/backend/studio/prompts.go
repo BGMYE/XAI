@@ -2,6 +2,7 @@ package studio
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -100,13 +101,14 @@ func validatePromptReferences(d *document, p PromptCard) error {
 	}
 	if p.PreviewAssetID != "" {
 		a, ok := d.Assets[p.PreviewAssetID]
-		if !ok || (a.Kind != "image" && a.Kind != "video") {
+		if !ok || a.DeletedAt != "" || (a.Kind != "image" && a.Kind != "video") {
 			return errors.New("预览素材不存在，请先导入图片")
 		}
 	}
 	if p.SourceJobID != "" {
 		j, ok := d.Jobs[p.SourceJobID]
-		if !ok || j.State != "succeeded" || j.ResultAssetID == "" || j.ResultAssetID != p.PreviewAssetID || j.Request.Kind != p.Kind {
+		matchesResult := p.PreviewAssetID != "" && (j.ResultAssetID == p.PreviewAssetID || slices.Contains(j.ResultAssetIDs, p.PreviewAssetID))
+		if !ok || j.State != "succeeded" || !matchesResult || j.Request.Kind != p.Kind {
 			return errors.New("来源不是匹配的已完成生成任务")
 		}
 		for _, other := range d.PromptCards {
@@ -125,20 +127,15 @@ func (e *Engine) SavePromptCard(p PromptCard) (PromptCard, error) {
 	if err := p.normalize(); err != nil {
 		return PromptCard{}, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return PromptCard{}, err
-	}
-	err := e.mutate(func(d *document) error {
-		old, exists := d.PromptCards[p.ID]
+	err := e.update(func(t *tx) error {
+		old, exists := t.doc.PromptCards[p.ID]
 		if (exists && old.Revision != p.Revision) || (!exists && p.Revision != 0) {
 			return ErrPromptConflict
 		}
-		if !exists && len(d.PromptCards) >= MaxPromptCards {
+		if !exists && len(t.doc.PromptCards) >= MaxPromptCards {
 			return errors.New("提示词数量达到 5000 条上限")
 		}
-		if err := validatePromptReferences(d, p); err != nil {
+		if err := validatePromptReferences(&t.doc, p); err != nil {
 			return err
 		}
 		p.CreatedAt = old.CreatedAt
@@ -147,7 +144,7 @@ func (e *Engine) SavePromptCard(p PromptCard) (PromptCard, error) {
 		}
 		p.UpdatedAt = now()
 		p.Revision++
-		d.PromptCards[p.ID] = p
+		t.putPromptCard(p)
 		return nil
 	})
 	if err != nil {
@@ -161,20 +158,15 @@ func (e *Engine) DeletePromptCard(id string, revision int64) error {
 	if checkID(id) != nil {
 		return errors.New("提示词标识无效")
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return err
-	}
-	return e.mutate(func(d *document) error {
-		p, ok := d.PromptCards[id]
+	return e.update(func(t *tx) error {
+		p, ok := t.doc.PromptCards[id]
 		if !ok {
 			return errors.New("提示词不存在")
 		}
 		if p.Revision != revision {
 			return ErrPromptConflict
 		}
-		delete(d.PromptCards, id)
+		t.deletePromptCard(id)
 		return nil
 	})
 }
@@ -193,17 +185,12 @@ func (e *Engine) ImportPromptCards(input []PromptCard) ([]PromptCard, error) {
 		}
 		cards = append(cards, p)
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return nil, err
-	}
-	err := e.mutate(func(d *document) error {
-		if len(d.PromptCards)+len(cards) > MaxPromptCards {
+	err := e.update(func(t *tx) error {
+		if len(t.doc.PromptCards)+len(cards) > MaxPromptCards {
 			return errors.New("导入后将超过 5000 条提示词上限")
 		}
 		for _, p := range cards {
-			d.PromptCards[p.ID] = p
+			t.putPromptCard(p)
 		}
 		return nil
 	})

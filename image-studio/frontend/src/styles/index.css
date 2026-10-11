@@ -6,12 +6,6 @@
 @import "./fluent/_shared-controls.css";
 @import "./_layout.css";
 @import "./_advanced-floating-panel.css";
-@import "./_android-phone-advanced.css";
-@import "./_android-settings.css";
-@import "./_android-upstream.css";
-@import "./_android-parameters.css";
-@import "./_android-history.css";
-@import "./_android-canvas.css";
 @import "./_apple-overflow.css";
 @import "./_panel.css";
 @import "./_canvas.css";

@@ -25,6 +25,7 @@ var catalogImageHosts = map[string]bool{
 }
 var catalogSuffix = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,120}$`)
 var publicDNSName = regexp.MustCompile(`^[a-zA-Z0-9.-]+$`)
+var publicTLD = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 func catalogAddress(id string) (string, error) {
 	if !catalogSources[id] {
@@ -42,7 +43,7 @@ func validatePublicLink(raw string, image bool) error {
 	}
 	h := strings.ToLower(u.Hostname())
 	last := strings.LastIndex(h, ".")
-	if !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(h[last+1:]) {
+	if !publicTLD.MatchString(h[last+1:]) {
 		return errors.New("来源需使用公开域名")
 	}
 	for _, suffix := range []string{"localhost", "local", "internal", "test", "invalid"} {

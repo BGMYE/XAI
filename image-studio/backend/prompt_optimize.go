@@ -150,7 +150,7 @@ func optimizePromptWithLLM(
 		textModelID = client.TextModel
 	}
 
-	instruction := "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Keep the meaning, preserve the requested subject, and only return the improved prompt text. Do not add explanations, labels, markdown, or quotes."
+	instruction := "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Preserve the user's exact requested text, subjects, counts, identities, and all edit constraints. Never translate or reword text intended to appear in the image. Do not add or remove subjects or alter areas the user asked to preserve. Only return the improved prompt text. Do not add explanations, labels, markdown, or quotes."
 	inputText := fmt.Sprintf("Original prompt:\n%s", strings.TrimSpace(prompt))
 	if isDescribe {
 		instruction = "Analyze the attached image and reconstruct a detailed image-generation prompt that could reproduce it. Describe the subject, composition, perspective, lighting, colors, materials, environment, and visual style. Return the prompt in Simplified Chinese. Only return the prompt text; do not add explanations, labels, markdown, or quotes."
@@ -194,7 +194,7 @@ func optimizePromptWithLLM(
 		return "", fmt.Errorf("marshal prompt optimization payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/v1/responses", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.OpenAIAPIEndpoint(baseURL, "responses"), bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +207,9 @@ func optimizePromptWithLLM(
 	if err != nil {
 		return "", err
 	}
-	httpClient := &http.Client{Timeout: 3 * time.Minute, Transport: transport}
+	httpClient := &http.Client{Timeout: 3 * time.Minute, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err

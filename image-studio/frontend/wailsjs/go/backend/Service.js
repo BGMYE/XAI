@@ -46,6 +46,10 @@ export function CropImage(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['backend']['Service']['CropImage'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function DeleteGenerationHistory(arg1) {
+  return window['go']['backend']['Service']['DeleteGenerationHistory'](arg1);
+}
+
 export function DeleteStoredAPIKey(arg1) {
   return window['go']['backend']['Service']['DeleteStoredAPIKey'](arg1);
 }
@@ -70,6 +74,10 @@ export function Generate(arg1) {
   return window['go']['backend']['Service']['Generate'](arg1);
 }
 
+export function GetGenerationHistory() {
+  return window['go']['backend']['Service']['GetGenerationHistory']();
+}
+
 export function GetImagePromptsBaseURL() {
   return window['go']['backend']['Service']['GetImagePromptsBaseURL']();
 }
@@ -88,6 +96,10 @@ export function HandlePromptImportArgs(arg1) {
 
 export function HandlePromptImportURL(arg1) {
   return window['go']['backend']['Service']['HandlePromptImportURL'](arg1);
+}
+
+export function ImportClassicHistory(arg1) {
+  return window['go']['backend']['Service']['ImportClassicHistory'](arg1);
 }
 
 export function ImportHistoryFromFile() {
@@ -200,6 +212,10 @@ export function SaveImagePathToDir(arg1, arg2, arg3) {
 
 export function SaveImageToDir(arg1, arg2, arg3) {
   return window['go']['backend']['Service']['SaveImageToDir'](arg1, arg2, arg3);
+}
+
+export function SetClassicAssetReferences(arg1) {
+  return window['go']['backend']['Service']['SetClassicAssetReferences'](arg1);
 }
 
 export function SetCleanupPreviewCacheOnExitEnabled(arg1) {

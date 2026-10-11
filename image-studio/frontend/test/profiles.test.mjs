@@ -116,3 +116,14 @@ test("AI profile selection falls back only to Responses profiles", () => {
   assert.equal(profiles.pickAIProfile([firstImage, activeAI], "missing", "responses-active")?.id, "responses-active");
   assert.equal(profiles.pickAIProfile([firstImage], "missing", "image-a"), null);
 });
+
+test("removing a profile clears fallbacks that pointed at it", () => {
+  const main = { ...makeProfile("main"), fallbackProfileId: "backup" };
+  const other = { ...makeProfile("other"), fallbackProfileId: "main" };
+  const backup = makeProfile("backup");
+  const next = profiles.removeProfile([main, other, backup], "backup");
+  assert.deepEqual(next.map((p) => p.id), ["main", "other"]);
+  assert.equal(next[0].fallbackProfileId, undefined);
+  assert.equal(next[1].fallbackProfileId, "main");
+  assert.equal(next[1], other, "untouched profiles keep their identity");
+});

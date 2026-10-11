@@ -19,6 +19,9 @@ test("video results accept URL or base64 media without substituting models", () 
   assert.equal(video.videoResultSource({}), "");
   assert.equal(video.videoResultSource({ url: "javascript:alert(1)" }), "");
   assert.equal(video.videoResultSource({ url: "data:text/html;base64,PHNjcmlwdD4=" }), "");
+  assert.equal(video.videoResultSource({ url: "/studio-media/abc123" }), "/studio-media/abc123");
+  assert.equal(video.videoResultSource({ url: "/studio-media/../private" }), "");
+  assert.equal(video.videoResultSource({ url: "/studio-media/abc?redirect=https://example.com" }), "");
 });
 
 test("video generation requires the profile video model explicitly", () => {

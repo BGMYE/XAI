@@ -11,8 +11,9 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+var windowsRegistryPath = `Software\` + appCompanyName + `\` + appProductName
+
 const (
-	windowsRegistryPath            = `Software\` + appCompanyName + `\` + appProductName
 	windowsRegistryDataRootValue   = "DataRoot"
 	windowsRegistrySchemaValue     = "DataRootSchema"
 	windowsRegistrySchemaVersion   = uint32(1)

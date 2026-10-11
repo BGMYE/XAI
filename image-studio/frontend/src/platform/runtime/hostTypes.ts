@@ -1,6 +1,7 @@
 import type { RequestPolicy } from "../../types/domain";
 
 export type GenerateOptionsLike = {
+  profileId?: string;
   apiKey: string;
   mode: string;
   prompt: string;
@@ -58,6 +59,7 @@ export type GenerateOptionsLike = {
 };
 
 export type PromptOptimizeOptionsLike = {
+  profileId?: string;
   apiKey: string;
   prompt: string;
   mode: string;
@@ -78,6 +80,7 @@ export type PromptOptimizeOptionsLike = {
 };
 
 export type ProbeUpstreamOptionsLike = {
+  profileId?: string;
   apiKey: string;
   baseURL: string;
   proxyMode?: string;
@@ -96,6 +99,7 @@ export type ProbeUpstreamResultLike = {
 };
 
 export type CreateVideoOptionsLike = {
+  profileId?: string;
   baseURL: string;
   apiKey: string;
   videoModelID: string;
@@ -107,6 +111,7 @@ export type CreateVideoOptionsLike = {
 };
 
 export type PollVideoOptionsLike = {
+  profileId?: string;
   baseURL: string;
   apiKey: string;
   videoID: string;

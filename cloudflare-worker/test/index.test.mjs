@@ -56,7 +56,7 @@ async function readBodyBuffer(body) {
   return Buffer.from(await readBodyText(body));
 }
 
-test("responses proxy retries on retryable 524 and returns final SSE body", async () => {
+test("responses proxy preserves an uncertain 524 without replaying generation", async () => {
   const seen = [];
   await withPatchedGlobals(async () => {
     immediateTimers();
@@ -94,9 +94,10 @@ test("responses proxy retries on retryable 524 and returns final SSE body", asyn
       IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example",
     });
     const text = await response.text();
-    assert.equal(response.status, 200);
-    assert.match(text, /image_generation_call/);
-    assert.equal(seen.length, 2);
+    assert.equal(response.status, 524);
+    assert.match(text, /524/);
+    assert.equal(response.headers.get("x-image-studio-generation-status"), "uncertain");
+    assert.equal(seen.length, 1);
     assert.equal(seen[0].url, "https://upstream.example/v1/responses");
   });
 });
@@ -267,5 +268,245 @@ test("kernel generate keeps requestPolicy for shared payload building", async ()
     assert.ok(captured.body.instructions.includes("VERBATIM"));
     assert.equal(captured.body.tools[0].seed, 123);
     assert.equal(captured.body.tools[0].negative_prompt, "avoid blur");
+  });
+});
+
+test("kernel generate carries assisted mode, exact API root, and request ID", async () => {
+  let captured;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (url, init) => {
+      captured = { url: String(url), body: JSON.parse(init.body) };
+      return new Response('data: {"type":"response.completed"}\n\n', {
+        headers: { "content-type": "text/event-stream", "x-request-id": "req-preserved" },
+      });
+    };
+  }, async () => {
+    const response = await worker.fetch(new Request("https://worker.example/kernel/generate", {
+      method: "POST",
+      headers: { authorization: "Bearer test-key", "content-type": "application/json" },
+      body: JSON.stringify({ baseURL: "https://upstream.example/api/v3", prompt: "  原文  ", promptMode: "assisted" }),
+    }), {});
+    assert.equal(captured.url, "https://upstream.example/api/v3/responses");
+    assert.equal(captured.body.input[0].content[0].text, "  原文  ");
+    assert.match(captured.body.instructions, /exact requested text/);
+    assert.deepEqual(captured.body.tool_choice, { type: "image_generation" });
+    assert.equal(response.headers.get("x-request-id"), "req-preserved");
+  });
+});
+
+test("worker never replays a generation after a network failure", async () => {
+  let calls = 0;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async () => { calls++; throw new Error("socket closed after submit"); };
+  }, async () => {
+    const response = await worker.fetch(new Request("https://worker.example/v1/images/generations", {
+      method: "POST",
+      headers: { authorization: "Bearer test-key", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-image-2", prompt: "cat", autoRetryCount: 10 }),
+    }), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+    const body = await response.json();
+    assert.equal(calls, 1);
+    assert.equal(response.status, 502);
+    assert.equal(body.status, "uncertain");
+    assert.equal(body.error.retryable, false);
+  });
+});
+
+test("worker delivers the first SSE chunk before upstream EOF", async () => {
+  let streamController;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async () => new Response(new ReadableStream({
+      start(controller) { streamController = controller; },
+    }), { headers: { "content-type": "text/event-stream" } });
+  }, async () => {
+    const response = await worker.fetch(new Request("https://worker.example/v1/responses", {
+      method: "POST", headers: { authorization: "Bearer test-key" }, body: "{}",
+    }), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+    assert.equal(response.status, 200);
+    streamController.enqueue(new TextEncoder().encode('data: {"type":"response.created"}\n\n'));
+    const reader = response.body.getReader();
+    const first = await reader.read();
+    assert.equal(first.done, false);
+    assert.match(new TextDecoder().decode(first.value), /response.created/);
+    // Upstream remains open throughout the first read.
+    streamController.close();
+    assert.equal((await reader.read()).done, true);
+  });
+});
+
+const proxyRoutes = [
+  { path: "/v1/responses", endpoint: "responses", method: "POST" },
+  { path: "/v1/images/generations", endpoint: "images/generations", method: "POST" },
+  { path: "/v1/images/edits", endpoint: "images/edits", method: "POST" },
+  { path: "/v1/models", endpoint: "models", method: "GET" },
+  { path: "/kernel/generate", endpoint: "responses", method: "POST" },
+  { path: "/kernel/prompt-optimize", endpoint: "responses", method: "POST" },
+];
+
+function proxyRequest(route, options = {}) {
+  return new Request(`https://worker.example${route.path}${options.query || ""}`, {
+    method: route.method,
+    headers: { authorization: "Bearer test-key", "content-type": "application/json", ...options.headers },
+    ...(route.method === "POST" ? { body: JSON.stringify({ prompt: "cat", apiMode: "responses", ...options.body }) } : {}),
+    signal: options.signal,
+  });
+}
+
+test("all Worker routes preserve the configured OpenAI API root", async () => {
+  const roots = [
+    ["", "/v1"], ["/v1", "/v1"], ["/api/v3", "/api/v3"],
+    ["/openai", "/openai"], ["/openai/v1", "/openai/v1"],
+  ];
+  let captured;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (url, init) => {
+      captured = { url: String(url), method: init.method, redirect: init.redirect };
+      return new Response("{}", { headers: { "content-type": "application/json" } });
+    };
+  }, async () => {
+    for (const [inputRoot, outputRoot] of roots) {
+      for (const route of proxyRoutes) {
+        const response = await worker.fetch(proxyRequest(route), {
+          IMAGE_STUDIO_UPSTREAM_BASE_URL: `https://upstream.example${inputRoot}/`,
+        });
+        await response.text();
+        assert.deepEqual(captured, {
+          url: `https://upstream.example${outputRoot}/${route.endpoint}`,
+          method: route.method, redirect: "manual",
+        }, `${inputRoot || "/"} + ${route.path}`);
+      }
+    }
+  });
+});
+
+test("API-root overrides preserve path semantics and never leak baseURL into upstream query", async () => {
+  const seen = [];
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (url) => { seen.push(String(url)); return new Response("{}"); };
+  }, async () => {
+    for (const route of proxyRoutes) {
+      const kernelRoute = route.path.startsWith("/kernel/");
+      const request = kernelRoute
+        ? proxyRequest(route, { body: { baseURL: "https://override.example/openai/v1/" } })
+        : proxyRequest(route, {
+          query: "?baseURL=https%3A%2F%2Fignored.example%2Fv1&trace=kept",
+          headers: { "x-image-studio-upstream-base-url": "https://override.example/openai/v1/" },
+        });
+      await (await worker.fetch(request, { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://ignored.example/api/v3" })).text();
+      const expectedQuery = !kernelRoute && route.method === "POST" ? "?trace=kept" : "";
+      assert.equal(seen.at(-1), `https://override.example/openai/v1/${route.endpoint}${expectedQuery}`);
+    }
+  });
+});
+
+test("all Worker routes preserve upstream request IDs and response headers", async () => {
+  const responseHeaders = {
+    "content-type": "application/json", "cache-control": "no-store", "retry-after": "17",
+    "x-request-id": "x-id", "request-id": "plain-id", "openai-request-id": "openai-id",
+  };
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async () => new Response("{}", { headers: responseHeaders });
+  }, async () => {
+    for (const route of proxyRoutes) {
+      const response = await worker.fetch(proxyRequest(route), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+      for (const [header, value] of Object.entries(responseHeaders)) assert.equal(response.headers.get(header), value, `${route.path} ${header}`);
+      await response.text();
+    }
+  });
+});
+
+test("raw proxy keeps client correlation and native OpenAI request headers", async () => {
+  let captured;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (_url, init) => { captured = init; return new Response("{}"); };
+  }, async () => {
+    const headers = { "x-client-request-id": "client-id", "openai-beta": "responses=v1", accept: "text/event-stream", "user-agent": "image-studio/test" };
+    await (await worker.fetch(proxyRequest(proxyRoutes[0], { headers }), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" })).text();
+    for (const [header, value] of Object.entries(headers)) assert.equal(headerValue(captured, header), value);
+    assert.equal(headerValue(captured, "authorization"), "Bearer test-key");
+  });
+});
+
+test("cancelling a client stream aborts the upstream fetch and reader on every route", async () => {
+  let capturedSignal;
+  let cancellations;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (_url, init) => {
+      capturedSignal = init.signal;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new TextEncoder().encode("first chunk")); },
+        cancel() { cancellations++; },
+      }), { headers: { "content-type": "text/event-stream" } });
+    };
+  }, async () => {
+    for (const route of proxyRoutes) {
+      cancellations = 0;
+      const response = await worker.fetch(proxyRequest(route), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+      const reader = response.body.getReader();
+      assert.equal((await reader.read()).done, false);
+      await reader.cancel("client closed stream");
+      assert.equal(capturedSignal.aborted, true, route.path);
+      assert.equal(cancellations, 1, route.path);
+    }
+  });
+});
+
+test("request abort interrupts a pending upstream read without another submission", async () => {
+  let calls = 0;
+  let cancellations = 0;
+  let capturedSignal;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (_url, init) => {
+      calls++;
+      capturedSignal = init.signal;
+      return new Response(new ReadableStream({ cancel() { cancellations++; } }));
+    };
+  }, async () => {
+    const controller = new AbortController();
+    const response = await worker.fetch(proxyRequest(proxyRoutes[0], { signal: controller.signal }), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+    const read = response.body.getReader().read();
+    controller.abort(new Error("client cancelled"));
+    await assert.rejects(read, /client cancelled/);
+    assert.equal(capturedSignal.aborted, true);
+    assert.equal(cancellations, 1);
+    assert.equal(calls, 1);
+  });
+});
+
+test("already-aborted client requests never reach the upstream", async () => {
+  let calls = 0;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async () => { calls++; return new Response("{}"); };
+  }, async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const response = await worker.fetch(proxyRequest(proxyRoutes[0], { signal: controller.signal }), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+    assert.equal(response.status, 499);
+    assert.equal(calls, 0);
+  });
+});
+
+test("oversized upstream error streams are bounded and cancelled without replay", async () => {
+  let calls = 0;
+  let cancellations = 0;
+  let capturedSignal;
+  await withPatchedGlobals(async () => {
+    globalThis.fetch = async (_url, init) => {
+      calls++;
+      capturedSignal = init.signal;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(128 * 1024).fill(65)); },
+        cancel() { cancellations++; },
+      }), { status: 503, headers: { "content-type": "text/plain", "x-request-id": "large-error" } });
+    };
+  }, async () => {
+    const response = await worker.fetch(proxyRequest(proxyRoutes[0]), { IMAGE_STUDIO_UPSTREAM_BASE_URL: "https://upstream.example" });
+    assert.equal((await response.arrayBuffer()).byteLength, 64 * 1024);
+    assert.equal(response.headers.get("x-image-studio-error-body-limit"), "65536");
+    assert.equal(response.headers.get("x-request-id"), "large-error");
+    assert.equal(response.status, 503);
+    assert.equal(capturedSignal.aborted, true);
+    assert.equal(cancellations, 1);
+    assert.equal(calls, 1);
   });
 });

@@ -284,18 +284,6 @@ func extractOutputTextFromContent(value any) string {
 	return ""
 }
 
-// reqIDRe 匹配 OpenAI 错误消息里的 request ID(UUID 形如 4906b7e4-767b-4d95-8008-cf07260f546d)。
-// 这个 ID 用户做 appeal 时要附给 help.openai.com。
-var reqIDRe = regexp.MustCompile(`request ID[:\s]+([A-Za-z0-9-]{20,})`)
-
-func extractRequestID(s string) string {
-	m := reqIDRe.FindStringSubmatch(s)
-	if len(m) >= 2 {
-		return m[1]
-	}
-	return ""
-}
-
 // describeAPIError 把 SSE / JSON 错误对象翻成中文友好提示。
 // 识别常见的 OpenAI 错误码;不在白名单的回退到「code + message」清单格式,
 // 不再 dump 原始 JSON(原 JSON 转储留在 raw 日志里,前端用查看日志按钮访问)。

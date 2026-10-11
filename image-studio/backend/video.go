@@ -1,29 +1,25 @@
 package backend
 
 import (
-	"context"
 	"errors"
-	"strings"
 
-	"github.com/yuanhua/image-gptcodex/pkg/client"
+	"image-studio/backend/studio"
 )
 
-// CreateVideo starts an external video job. Credentials, base URL, and model
-// are all explicit; no model discovery or substitution is performed.
+// CreateVideo submits a durable shared task using the selected upstream.
 func (s *Service) CreateVideo(opts VideoOptions) (VideoResult, error) {
 	if s.ctx == nil {
 		return VideoResult{}, errors.New("服务未启动")
 	}
-	return s.createVideo(s.ctx, opts)
-}
-
-func (s *Service) createVideo(ctx context.Context, opts VideoOptions) (VideoResult, error) {
-	result, err := client.CreateVideo(ctx, client.VideoOptions{
-		BaseURL: opts.BaseURL, APIKey: opts.APIKey, VideoModelID: opts.VideoModelID,
-		EndpointPath: opts.EndpointPath, Prompt: opts.Prompt, Seconds: opts.Seconds,
-		Size: opts.Size, Quality: opts.Quality,
-	})
-	return videoResult(result), err
+	e, err := s.sharedEngine()
+	if err != nil {
+		return VideoResult{}, err
+	}
+	j, err := e.Submit(studio.Request{ID: studio.NewID(), ProfileID: opts.ProfileID, ProjectID: "classic", Source: "classic", Kind: "video", Prompt: opts.Prompt, Parameters: studio.Parameters{Seconds: opts.Seconds, Size: opts.Size, Quality: opts.Quality, EndpointPath: opts.EndpointPath}})
+	if err != nil {
+		return VideoResult{}, err
+	}
+	return VideoResult{ID: j.ID, Status: "queued"}, nil
 }
 
 // PollVideo performs one status poll. Callers can repeat it until status is
@@ -32,17 +28,29 @@ func (s *Service) PollVideo(opts VideoPollOptions) (VideoResult, error) {
 	if s.ctx == nil {
 		return VideoResult{}, errors.New("服务未启动")
 	}
-	return s.pollVideo(s.ctx, opts)
-}
-
-func (s *Service) pollVideo(ctx context.Context, opts VideoPollOptions) (VideoResult, error) {
-	result, err := client.PollVideo(ctx, client.VideoPollOptions{
-		BaseURL: opts.BaseURL, APIKey: opts.APIKey, VideoID: opts.VideoID,
-		EndpointPath: opts.EndpointPath,
-	})
-	return videoResult(result), err
-}
-
-func videoResult(result client.VideoResult) VideoResult {
-	return VideoResult{ID: result.ID, Status: strings.ToLower(string(result.Status)), URL: result.URL, B64JSON: result.B64JSON, Error: result.Error}
+	e, err := s.sharedEngine()
+	if err != nil {
+		return VideoResult{}, err
+	}
+	j, ok := e.Job(opts.VideoID)
+	if !ok || j.Request.Kind != "video" {
+		return VideoResult{}, errors.New("视频任务不存在")
+	}
+	status := j.State
+	if status == "succeeded" {
+		status = "completed"
+	}
+	if status == "running" {
+		status = "in_progress"
+	}
+	if status == "paused" || status == "uncertain" {
+		status = "failed"
+	}
+	r := VideoResult{ID: j.ID, Status: status, Error: j.Error}
+	if j.ResultAssetID != "" {
+		if a, ok := e.Asset(j.ResultAssetID); ok {
+			r.URL = a.URL()
+		}
+	}
+	return r, nil
 }

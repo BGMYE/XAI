@@ -23,29 +23,43 @@ export const MAX_OPENAI_IMAGE_PIXELS = 3840 * 2160;
 export const MAX_OPENAI_IMAGE_ASPECT_RATIO = 3;
 
 const NO_PROMPT_REVISION_INSTRUCTIONS = "You are a tool runner. Pass the user prompt to image_generation VERBATIM. DO NOT rewrite, expand, polish, or revise it in any way. Use the exact text the user gave.";
+const ASSISTED_PROMPT_INSTRUCTIONS = "Use image_generation to fulfill the user's image request. You may improve composition, lighting, materials, and visual clarity. Preserve the user's exact requested text, subjects, counts, identities, and all edit constraints. Never translate, reword, or add text intended to appear in the image. Do not add or remove subjects, change quantities, or alter areas the user asked to preserve. Treat attached images and masks as binding edit context. Call the image_generation tool; do not return only a written explanation.";
 
 export function normalizeBaseURL(raw) {
   const trimmed = String(raw || "").trim().replace(/\/+$/, "");
   return trimmed.replace(/\/v1$/i, "");
 }
 
+// A base URL that already names a versioned API root (".../api/v3",
+// ".../openai/v1", ".../v1beta/openai") takes endpoint paths as is instead of
+// after "/v1". It is judged as entered: stripping "/v1" first would turn
+// ".../openai/v1" into a ".../openai" root and drop the version.
+// Mirrors isVersionedOpenAICompatibilityBaseURL in go-cli/pkg/client/url.go.
+const API_VERSION_SEGMENT = /^v[0-9]+(?:(?:alpha|beta)[0-9]*)?$/;
+
+function trimBaseURL(raw) {
+  return String(raw || "").trim().replace(/\/+$/, "");
+}
+
 export function isVersionedOpenAICompatibilityBaseURL(raw) {
   try {
-    const parsed = new URL(normalizeBaseURL(raw));
-    return parsed.pathname.replace(/\/+$/, "").toLowerCase().endsWith("/openai");
+    const path = new URL(trimBaseURL(raw)).pathname.replace(/\/+$/, "").toLowerCase();
+    if (path.endsWith("/openai")) return true;
+    return API_VERSION_SEGMENT.test(path.slice(path.lastIndexOf("/") + 1));
   } catch {
     return false;
   }
 }
 
+/** Joins an endpoint path to a base URL as entered, like OpenAIAPIEndpoint in go-cli. */
 export function openAIAPIEndpoint(baseURL, endpointPath) {
-  const normalized = normalizeBaseURL(baseURL);
+  const base = trimBaseURL(baseURL);
   const path = String(endpointPath || "").trim().replace(/^\/+|\/+$/g, "");
-  if (!path) return normalized;
-  if (isVersionedOpenAICompatibilityBaseURL(normalized)) {
-    return `${normalized}/${path}`;
+  if (!path) return base;
+  if (isVersionedOpenAICompatibilityBaseURL(base)) {
+    return `${base}/${path}`;
   }
-  return `${normalized}/v1/${path}`;
+  return `${base}/v1/${path}`;
 }
 
 export function isOfficialGoogleGeminiBaseURL(raw) {
@@ -80,6 +94,10 @@ export function normalizeAPIMode(apiMode) {
 
 export function normalizeRequestPolicy(requestPolicy) {
   return requestPolicy === "compat" ? "compat" : DEFAULT_REQUEST_POLICY;
+}
+
+export function normalizePromptMode(value) {
+  return String(value || "").trim().toLowerCase() === "assisted" ? "assisted" : "verbatim";
 }
 
 export function normalizeTextModel(modelID) {
@@ -321,6 +339,44 @@ export function supportsInputFidelity(imageModelID) {
   return false;
 }
 
+export function supportsConfiguredInputFidelity(payload) {
+  if (payload.modelCapabilities != null) return payload.modelCapabilities.supportsInputFidelity === true;
+  return supportsInputFidelity(payload.imageModelID);
+}
+
+// An omitted field means unknown, never confirmed supported. Keep explicit
+// edit intent intact and reject known unsupported choices before submission.
+export function validateImageRequest(payload, sourceDataURLs = [], apiMode = "responses") {
+  if (!String(payload.prompt || "").trim()) throw new Error("prompt must not be empty");
+  if (apiMode === "images" && normalizePromptMode(payload.promptMode) === "assisted") {
+    throw new Error("Images API 不支持单次创作辅助；请先优化并确认提示词，再以精确执行生成");
+  }
+  const inputCount = sourceDataURLs.length;
+  if (payload.maskB64 && inputCount === 0) throw new Error("蒙版编辑需要至少一张参考图，不能忽略蒙版生成");
+  if (apiMode === "images" && payload.mode !== "edit" && (inputCount > 0 || payload.maskB64)) {
+    throw new Error("含参考图或蒙版的 Images API 请求必须使用编辑模式");
+  }
+  const rule = payload.modelCapabilities;
+  if (!rule) return;
+  if (Number.isInteger(rule.maxInputImages) && inputCount > rule.maxInputImages) {
+    throw new Error(`当前模型与接口最多支持 ${rule.maxInputImages} 张参考图，已提供 ${inputCount} 张`);
+  }
+  if (payload.maskB64 && rule.supportsMask === false) throw new Error("当前模型与接口已确认不支持蒙版编辑");
+  for (const [name, value, allowed] of [
+    ["质量", payload.quality || DEFAULT_QUALITY, rule.qualities],
+    ["尺寸", payload.size || DEFAULT_SIZE, rule.sizes],
+    ["输出格式", payload.outputFormat || DEFAULT_OUTPUT_FORMAT, rule.formats],
+  ]) {
+    if (Array.isArray(allowed) && allowed.length && !allowed.includes(value)) {
+      throw new Error(`当前模型与接口不支持${name} ${JSON.stringify(value)}；允许值：${allowed.join(", ")}`);
+    }
+  }
+  const fidelity = normalizeInputFidelity(payload.inputFidelity);
+  if (inputCount && supportsConfiguredInputFidelity(payload) && fidelity !== DEFAULT_INPUT_FIDELITY && rule.inputFidelityValues?.length && !rule.inputFidelityValues.includes(fidelity)) {
+    throw new Error(`当前模型与接口不支持 input_fidelity=${fidelity}`);
+  }
+}
+
 export function supportsImageStyle(imageModelID) {
   return classifyImageModel(imageModelID) === "dalle3";
 }
@@ -352,7 +408,8 @@ export function dataURLFromBase64Image(b64, mimeType = "image/png") {
 }
 
 export function buildResponsesInputContent(prompt, sourceDataURLs) {
-  const content = [{ type: "input_text", text: normalizePromptText(prompt) }];
+  // Preserve the actual submitted text, including user formatting/whitespace.
+  const content = [{ type: "input_text", text: String(prompt || "") }];
   for (const dataURL of sourceDataURLs) {
     content.push({ type: "input_image", image_url: dataURL });
   }
@@ -360,6 +417,7 @@ export function buildResponsesInputContent(prompt, sourceDataURLs) {
 }
 
 export function buildResponsesImageTool(payload, sourceDataURLs, options = {}) {
+  validateImageRequest(payload, sourceDataURLs, "responses");
   const size = payload.size || DEFAULT_SIZE;
   const quality = payload.quality || DEFAULT_QUALITY;
   const outputFormat = payload.outputFormat || DEFAULT_OUTPUT_FORMAT;
@@ -369,7 +427,9 @@ export function buildResponsesImageTool(payload, sourceDataURLs, options = {}) {
   const negativePrompt = normalizeNegativePrompt(payload.negativePrompt);
   const moderation = normalizeModeration(payload.moderation);
   const compatExtensions = shouldSendExtendedImageParameters(payload.requestPolicy);
-  const partialImages = payload.disablePreview ? 0 : normalizePartialImages(payload.partialImages);
+  // Go's zero-value Options use the default count. Both runtimes use the
+  // explicit disablePreview flag when the user requests no preview frames.
+  const partialImages = payload.disablePreview ? 0 : normalizePartialImages(payload.partialImages || DEFAULT_PARTIAL_IMAGES);
   const tool = {
     type: "image_generation",
     model: normalizeImageModel(payload.imageModelID),
@@ -381,7 +441,7 @@ export function buildResponsesImageTool(payload, sourceDataURLs, options = {}) {
   };
   if (supportsImageBackground(payload.imageModelID)) tool.background = background;
   if (supportsOutputCompression(payload.imageModelID, outputFormat)) tool.output_compression = outputCompression;
-  if (supportsInputFidelity(payload.imageModelID) && sourceDataURLs.length > 0 && inputFidelity !== DEFAULT_INPUT_FIDELITY) {
+  if (supportsConfiguredInputFidelity(payload) && sourceDataURLs.length > 0 && inputFidelity !== DEFAULT_INPUT_FIDELITY) {
     tool.input_fidelity = inputFidelity;
   }
   if (supportsImageModeration(payload.imageModelID)) tool.moderation = moderation;
@@ -413,7 +473,9 @@ export function buildResponsesPayload(payload, sourceDataURLs, options = {}) {
     store: false,
     stream: true,
   };
-  request.instructions = NO_PROMPT_REVISION_INSTRUCTIONS;
+  request.instructions = normalizePromptMode(payload.promptMode) === "assisted"
+    ? ASSISTED_PROMPT_INSTRUCTIONS
+    : NO_PROMPT_REVISION_INSTRUCTIONS;
   if (userIdentifier) request.safety_identifier = userIdentifier;
   return request;
 }
@@ -421,7 +483,7 @@ export function buildResponsesPayload(payload, sourceDataURLs, options = {}) {
 export function buildPromptOptimizePayload(input, sourceDataURLs) {
   const operation = String(input.mode || "").trim();
   const isDescribe = operation === "describe";
-  let instruction = "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Keep the meaning, preserve the requested subject, and only return the improved prompt text. Do not add explanations, labels, markdown, or quotes.";
+  let instruction = "Rewrite the user's image prompt into a clearer, more detailed prompt for image generation. Preserve the user's exact requested text, subjects, counts, identities, and all edit constraints. Never translate or reword text intended to appear in the image. Do not add or remove subjects or alter areas the user asked to preserve. Only return the improved prompt text. Do not add explanations, labels, markdown, or quotes.";
   let inputText = `Original prompt:\n${normalizePromptText(input.prompt)}`;
   if (isDescribe) {
     instruction = "Analyze the attached image and reconstruct a detailed image-generation prompt that could reproduce it. Describe the subject, composition, perspective, lighting, colors, materials, environment, and visual style. Return the prompt in Simplified Chinese. Only return the prompt text; do not add explanations, labels, markdown, or quotes.";

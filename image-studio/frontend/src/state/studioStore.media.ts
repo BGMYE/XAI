@@ -20,7 +20,8 @@ import {
   pickPresetStateSnapshot,
 } from "../lib/presets";
 import { base64ToBlob, orderedNavigationItemsForCurrent } from "../lib/images";
-import { persistHistoryItems } from "../lib/storage";
+import { deleteSharedHistory, readSharedHistory, withSharedHistoryLock } from "./sharedHistory";
+import { loadAllHistory, persistHistoryItems, removeHistoryItem } from "../lib/storage";
 import type { HistoryItem, Preset, Toast } from "../types/domain";
 import type { StudioState } from "./studioStore.types";
 import {
@@ -70,6 +71,8 @@ export function createMediaActions(store: StateAdapter) {
         const item: HistoryItem = withMediaAssetRef({
           ...current,
           id: genId(),
+          sharedJobId: undefined,
+          assetId: undefined,
           imageB64: undefined,
           imageBlob: null,
           previewBlob: null,
@@ -256,31 +259,38 @@ export function createMediaActions(store: StateAdapter) {
     },
 
     async pruneHistoryOlderThanDays(days: number) {
-      await store.getState().loadMoreHistory();
-      const cutoff = Date.now() - days * 24 * 3600 * 1000;
-      const state = store.getState();
-      const kept = state.history.filter((item) => item.createdAt >= cutoff);
-      const removed = state.history.length - kept.length;
-      if (removed <= 0) return 0;
-      const keepIds = new Set(kept.map((item) => item.id));
-      const nextBatchResults = state.batchResults.filter((item) => keepIds.has(item.id));
-      const nextWorkspaces = state.workspaces.map((w) => ({
-        ...w,
-        currentImageId: w.currentImageId && keepIds.has(w.currentImageId) ? w.currentImageId : null,
-        batchResultIds: (w.batchResultIds ?? []).filter((id) => keepIds.has(id)),
-        resultGridOpen: (w.batchResultIds ?? []).filter((id) => keepIds.has(id)).length > 1 ? w.resultGridOpen : false,
-      }));
-      store.setState({
-        history: kept,
-        currentImage: state.currentImage && keepIds.has(state.currentImage.id) ? state.currentImage : null,
-        compareB: state.compareB && keepIds.has(state.compareB.id) ? state.compareB : null,
-        resultDetail: state.resultDetail && keepIds.has(state.resultDetail.id) ? state.resultDetail : null,
-        batchResults: nextBatchResults,
-        resultGridOpen: nextBatchResults.length > 1 && state.resultGridOpen,
-        workspaces: nextWorkspaces,
+      return withSharedHistoryLock(async () => {
+        await store.getState().loadMoreHistory();
+        const cutoff = Date.now() - days * 24 * 3600 * 1000;
+        const all = await readSharedHistory(await loadAllHistory());
+        const expired = all.filter(item => item.createdAt < cutoff);
+        const removed = expired.length;
+        if (removed <= 0) return 0;
+        await deleteSharedHistory(expired);
+        for (const item of expired) await removeHistoryItem(item.id);
+        const state = store.getState();
+        const expiredIDs = new Set(expired.map(item => item.id));
+        const kept = state.history.filter(item => !expiredIDs.has(item.id));
+        const keepIds = new Set(kept.map((item) => item.id));
+        const nextBatchResults = state.batchResults.filter((item) => keepIds.has(item.id));
+        const nextWorkspaces = state.workspaces.map((w) => ({
+          ...w,
+          currentImageId: w.currentImageId && keepIds.has(w.currentImageId) ? w.currentImageId : null,
+          batchResultIds: (w.batchResultIds ?? []).filter((id) => keepIds.has(id)),
+          resultGridOpen: (w.batchResultIds ?? []).filter((id) => keepIds.has(id)).length > 1 ? w.resultGridOpen : false,
+        }));
+        store.setState({
+          history: kept,
+          currentImage: state.currentImage && keepIds.has(state.currentImage.id) ? state.currentImage : null,
+          compareB: state.compareB && keepIds.has(state.compareB.id) ? state.compareB : null,
+          resultDetail: state.resultDetail && keepIds.has(state.resultDetail.id) ? state.resultDetail : null,
+          batchResults: nextBatchResults,
+          resultGridOpen: nextBatchResults.length > 1 && state.resultGridOpen,
+          workspaces: nextWorkspaces,
+        });
+        persistTrimmedHistory(kept);
+        return removed;
       });
-      persistTrimmedHistory(kept);
-      return removed;
     },
 
     async rotateCurrent(degrees: number) {
@@ -489,6 +499,8 @@ async function loadTransformedAsCurrent(store: StateAdapter, path: string) {
     const updated: HistoryItem = current
       ? withMediaAssetRef({
           ...current,
+          id: current.sharedJobId ? genId() : current.id,
+          sharedJobId: undefined, assetId: undefined,
           imageB64: fallbackB64 || undefined,
           imageBlob: null,
           previewBlob: null,

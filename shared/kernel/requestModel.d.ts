@@ -24,6 +24,16 @@ export const MAX_OPENAI_IMAGE_ASPECT_RATIO: number;
 
 export type RequestPolicy = "openai" | "compat";
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type PromptMode = "verbatim" | "assisted";
+export type ImageModelCapabilities = {
+  qualities?: string[];
+  sizes?: string[];
+  formats?: string[];
+  maxInputImages?: number;
+  supportsMask?: boolean;
+  supportsInputFidelity?: boolean;
+  inputFidelityValues?: string[];
+};
 
 export type SharedImageRequestPayload = {
   size?: string;
@@ -35,6 +45,8 @@ export type SharedImageRequestPayload = {
   imageStyle?: string;
   userIdentifier?: string;
   prompt?: string;
+  promptMode?: PromptMode;
+  modelCapabilities?: ImageModelCapabilities;
   imageModelID?: string;
   textModelID?: string;
   negativePrompt?: string;
@@ -47,6 +59,8 @@ export type SharedImageRequestPayload = {
   noPromptRevision?: boolean;
   mode?: string;
   partialImages?: number;
+  disablePreview?: boolean;
+  disableImageStreaming?: boolean;
 };
 
 export function normalizeBaseURL(raw: string): string;
@@ -58,6 +72,7 @@ export function shouldUseGoogleNativeInteractions(baseURL: string, imageModelID:
 export function googleInteractionsEndpoint(baseURL: string): string;
 export function normalizeAPIMode(apiMode: string): "responses" | "images";
 export function normalizeRequestPolicy(requestPolicy: string): RequestPolicy;
+export function normalizePromptMode(value: string): PromptMode;
 export function normalizeTextModel(modelID: string): string;
 export function normalizeImageModel(modelID: string): string;
 export function normalizePromptText(prompt: string): string;
@@ -83,6 +98,8 @@ export function supportsImageModeration(imageModelID: string): boolean;
 export function supportsImageBackground(imageModelID: string): boolean;
 export function supportsOutputCompression(imageModelID: string, outputFormat: string): boolean;
 export function supportsInputFidelity(imageModelID: string): boolean;
+export function supportsConfiguredInputFidelity(payload: SharedImageRequestPayload): boolean;
+export function validateImageRequest(payload: SharedImageRequestPayload, sourceDataURLs?: string[], apiMode?: "responses" | "images"): void;
 export function supportsImageStyle(imageModelID: string): boolean;
 export function isGoogleImageModel(imageModelID: string): boolean;
 export function shouldSendExtendedImageParameters(requestPolicy: string): boolean;

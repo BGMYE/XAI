@@ -88,6 +88,9 @@ func (s *Service) ensureManagedReadablePath(path string, kind managedPathKind) (
 func (s *Service) allowedRoots(kind managedPathKind) []string {
 	roots := make([]string, 0, 8)
 	if kind == managedImageFile {
+		if e, err := s.sharedEngine(); err == nil {
+			roots = append(roots, e.MediaRoot())
+		}
 		if dir, err := importsDir(); err == nil {
 			roots = append(roots, dir, previewsSubdir(dir))
 		}

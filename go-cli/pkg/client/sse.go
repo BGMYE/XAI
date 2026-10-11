@@ -16,117 +16,43 @@ func decodeEvent(payload string, ev *Event) error {
 	return json.Unmarshal([]byte(payload), ev)
 }
 
-// IterEvents returns an iterator over decoded SSE events in raw.
-// Lines that don't start with `data: `, or that hold `[DONE]`/empty, are skipped.
-// Malformed JSON is silently ignored (parity with Python iter_sse_events).
+// IterEvents uses the same SSE frame decoder as live HTTP and WebSocket streams.
 func IterEvents(raw string) iter.Seq[Event] {
 	return func(yield func(Event) bool) {
+		stopped := false
+		decoder := sseFrameDecoder{onEvent: func(ev Event) {
+			if !stopped {
+				stopped = !yield(ev)
+			}
+		}}
 		for line := range strings.SplitSeq(raw, "\n") {
-			line = strings.TrimRight(line, "\r")
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-			payload := strings.TrimSpace(line[6:])
-			if payload == "" || payload == "[DONE]" {
-				continue
-			}
-			var ev Event
-			if err := decodeEvent(payload, &ev); err != nil {
-				continue
-			}
-			if !yield(ev) {
+			if decoder.consumeLine(line) != nil || stopped {
 				return
 			}
 		}
+		decoder.flush()
 	}
 }
 
-// ExtractImageResult parses raw SSE text and returns the image base64.
-// Priority:
-//  1. response.output_item.done with item.type == image_generation_call and item.result
-//  2. JSON walk of the entire body (non-SSE responses)
-//
-// Partial preview frames are intentionally not treated as success. If the
-// stream only delivered partial_image previews but never produced the final
-// image result, callers should retry instead of persisting a blurry preview as
-// if it were the completed image.
+// ExtractImageResult returns every complete image plus legacy first-image
+// fields. Previews never count as final images; terminal failures remain errors.
 func ExtractImageResult(raw string) (ImageResult, error) {
-	for ev := range IterEvents(raw) {
-		evType, _ := ev["type"].(string)
-
-		if evType == "response.image_generation_call.partial_image" {
-			continue
-		}
-
-		if evType != "response.output_item.done" {
-			continue
-		}
-		itemAny, _ := ev["item"]
-		item, ok := itemAny.(map[string]any)
-		if !ok {
-			continue
-		}
-		if t, _ := item["type"].(string); t != "image_generation_call" {
-			continue
-		}
-		if result, _ := item["result"].(string); result != "" {
-			revised, _ := item["revised_prompt"].(string)
-			return ImageResult{
-				ImageB64:      result,
-				RevisedPrompt: revised,
-				SourceEvent:   "final",
-			}, nil
-		}
+	collector := newResponseCollector(nil)
+	if _, err := collector.Write([]byte(raw)); err != nil {
+		return ImageResult{}, err
 	}
-
-	if r, ok := findImageResultInJSON(raw); ok {
-		return r, nil
-	}
-
-	return ImageResult{}, ErrNoImageInResponse
+	return collector.result()
 }
 
 func findImageResultInJSON(raw string) (ImageResult, bool) {
-	var v any
-	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+	var ev Event
+	if decodeEvent(raw, &ev) != nil || ev == nil {
 		return ImageResult{}, false
 	}
-	if found, ok := walkForImageCall(v); ok {
-		result, _ := found["result"].(string)
-		revised, _ := found["revised_prompt"].(string)
-		if result == "" {
-			return ImageResult{}, false
-		}
-		return ImageResult{
-			ImageB64:      result,
-			RevisedPrompt: revised,
-			SourceEvent:   "json",
-		}, true
-	}
-	return ImageResult{}, false
-}
-
-func walkForImageCall(v any) (map[string]any, bool) {
-	switch x := v.(type) {
-	case map[string]any:
-		if t, _ := x["type"].(string); t == "image_generation_call" {
-			if r, _ := x["result"].(string); r != "" {
-				return x, true
-			}
-		}
-		for _, child := range x {
-			if found, ok := walkForImageCall(child); ok {
-				return found, true
-			}
-		}
-	case []any:
-		for _, child := range x {
-			if found, ok := walkForImageCall(child); ok {
-				return found, true
-			}
-		}
-	}
-	return nil, false
+	extractor := streamImageExtractor{}
+	extractor.consumeDocument(ev)
+	res, err := extractor.resultWithError()
+	return res, err == nil
 }
 
 // SummarizeSSELine turns one raw SSE line into a Chinese status string, or "" if not noteworthy.
@@ -139,10 +65,10 @@ func SummarizeSSELine(line string) string {
 	if strings.HasPrefix(stripped, ":") {
 		return "收到接口保活信号"
 	}
-	if !strings.HasPrefix(stripped, "data: ") {
+	if !strings.HasPrefix(stripped, "data:") {
 		return ""
 	}
-	payload := strings.TrimSpace(stripped[6:])
+	payload := strings.TrimSpace(stripped[5:])
 	var ev Event
 	if err := decodeEvent(payload, &ev); err != nil {
 		return ""
@@ -184,8 +110,8 @@ func SummarizeSSELine(line string) string {
 // Default token size is 64KB which truncates partial_image_b64 at 2048x1152 sizes.
 func NewSSEScanner(r io.Reader) *bufio.Scanner {
 	scanner := bufio.NewScanner(r)
-	const initial = 2 << 20 // 2 MB
-	const max = 1 << 30     // 1 GiB upper bound for future very large partial_image_b64 payload lines
+	const initial = 2 << 20      // 2 MB
+	const max = maxSSEFrameBytes // bounded independently of any debug log limit
 	scanner.Buffer(make([]byte, 0, initial), max)
 	return scanner
 }

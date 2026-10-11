@@ -1,3 +1,4 @@
+import { EndpointPreview } from "./EndpointPreview";
 import { CheckCircle2, Eye, EyeOff, HelpCircle, Info, Plug, Plus, RefreshCw } from "lucide-react";
 import {
   REASONING_EFFORT_OPTIONS,
@@ -148,6 +149,7 @@ export function UpstreamProfileEditor({
           className={`focus-ring w-full min-w-0 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${usesFluentUI ? "rounded-[10px]" : "rounded-[14px]"}`}
         />
         {baseURLError ? <Hint>{baseURLError}</Hint> : null}
+        <EndpointPreview baseURL={draft.baseURL} />
         <Hint>
           为中转站填写根地址即可，应用会接好当前 API 路径；Google 官方入口的 Images 入口请填写 <code className="font-mono-token">https://generativelanguage.googleapis.com/v1beta/openai</code>。除这处官方兼容入口外，<strong>不要</strong>附上具体接口路径。
         </Hint>
@@ -190,7 +192,7 @@ export function UpstreamProfileEditor({
             aria-label="API Key"
             type={showKey ? "text" : "password"}
             value={draftKey}
-            placeholder={savedKeyLoaded ? "sk-..." : "(正在取回…)"}
+            placeholder={savedKeyLoaded ? (draft.hasKey ? "已保存；留空保留，输入新密钥可替换" : "sk-...") : "(正在读取状态…)"}
             onChange={(e) => onChangeDraftKey(e.target.value)}
             spellCheck={false}
             autoComplete="off"
